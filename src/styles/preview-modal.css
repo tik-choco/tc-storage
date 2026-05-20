@@ -10,6 +10,10 @@
   touch-action: pan-y;
 }
 
+.preview-modal.zoomable .preview-modal-body {
+  touch-action: none;
+}
+
 .preview-modal-top {
   position: fixed;
   top: 0;

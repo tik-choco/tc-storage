@@ -41,6 +41,12 @@
   object-fit: contain;
 }
 
+.preview-frame.expanded .zoomable-preview-image {
+  transform-origin: center center;
+  transition: transform 120ms ease;
+  will-change: transform;
+}
+
 .preview-frame audio {
   width: calc(100% - 28px);
 }
