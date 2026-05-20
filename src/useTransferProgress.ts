@@ -3,6 +3,8 @@ import type { DownloadProgress } from './appTypes.js'
 import type { FileRecord } from './domain.js'
 import { withoutRecordKey } from './appUtils.js'
 
+type DownloadTarget = Pick<FileRecord, 'id' | 'name'>
+
 export function useTransferProgress() {
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
   const [fileLoadProgress, setFileLoadProgress] = useState<Record<string, number>>({})
@@ -15,7 +17,7 @@ export function useTransferProgress() {
     clearFileLoadTimers()
   }, [])
 
-  function startDownloadProgress(file: FileRecord, cached: boolean): number {
+  function startDownloadProgress(file: DownloadTarget, cached: boolean): number {
     const requestId = downloadRequestRef.current + 1
     downloadRequestRef.current = requestId
     clearDownloadTimer()
@@ -34,7 +36,7 @@ export function useTransferProgress() {
     return requestId
   }
 
-  function updateDownloadProgress(file: FileRecord, percent: number, requestId: number): void {
+  function updateDownloadProgress(file: DownloadTarget, percent: number, requestId: number): void {
     if (downloadRequestRef.current !== requestId) return
     setDownloadProgress((current) => (
       current?.fileId === file.id
@@ -43,7 +45,7 @@ export function useTransferProgress() {
     ))
   }
 
-  function finishDownloadProgress(file: FileRecord, requestId: number): void {
+  function finishDownloadProgress(file: DownloadTarget, requestId: number): void {
     if (downloadRequestRef.current !== requestId) return
     clearDownloadTimer()
     setDownloadProgress({ fileId: file.id, fileName: file.name, percent: 100 })

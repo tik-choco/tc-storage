@@ -56,6 +56,8 @@ export function AppLayout({ controller: c }: AppLayoutProps) {
           onCancelPendingShare={c.cancelPendingShare}
           onConfirmCreateFolder={c.confirmCreateFolder}
           onCreateFolder={c.beginCreateFolder}
+          onDownloadFile={(file) => void c.downloadStoredFile(file)}
+          onDownloadFolder={(folder) => void c.downloadFolderAsZip(folder)}
           onDeleteFolder={c.requestDeleteFolder}
           onDeleteFile={c.requestDeleteFile}
           onDrag={c.handleDrag}
@@ -114,6 +116,7 @@ function renderFolderPanel(c: AppController) {
           shareUrl={c.folderShareUrl}
           syncPeers={c.folderPanelPeers}
           onCopy={c.copyText}
+          onDownloadFolder={(folder) => void c.downloadFolderAsZip(folder)}
           onDeleteFolder={c.deleteCurrentFolder}
           onPatchFolder={c.patchCurrentFolder}
         />

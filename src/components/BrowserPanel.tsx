@@ -1,4 +1,5 @@
 import {
+  Download,
   Folder,
   FolderPlus,
   Info,
@@ -40,6 +41,8 @@ export function BrowserPanel(props: {
   onCancelPendingShare: (share: PendingShare) => void
   onConfirmCreateFolder: () => void
   onCreateFolder: () => void
+  onDownloadFile: (file: FileRecord) => void
+  onDownloadFolder: (folder: FolderRecord) => void
   onDeleteFolder: (folder: FolderRecord) => void
   onDeleteFile: (file: FileRecord) => void
   onDrag: (event: DragEvent) => void
@@ -74,7 +77,7 @@ export function BrowserPanel(props: {
       {props.children}
       <section class="browser-panel">
         <input ref={fileInputRef} class="hidden-input" type="file" multiple onChange={(event) => props.onUploadFiles(event.currentTarget.files)} />
-        <BrowserToolbar busy={props.busy} currentFolder={props.currentFolder} currentFolderId={props.currentFolderId} currentPath={currentPath} query={props.query} selection={selection} viewMode={props.viewMode} onCreateFolder={props.onCreateFolder} onOpenFolderPanel={props.onOpenFolderPanel} onQuery={props.onQuery} onSaveFolder={props.onSaveFolder} onSelectFolder={props.onSelectFolder} onUpload={() => fileInputRef.current?.click()} onViewMode={props.onViewMode} />
+        <BrowserToolbar busy={props.busy} currentFolder={props.currentFolder} currentFolderId={props.currentFolderId} currentPath={currentPath} query={props.query} selection={selection} viewMode={props.viewMode} onCreateFolder={props.onCreateFolder} onDownloadFolder={props.onDownloadFolder} onOpenFolderPanel={props.onOpenFolderPanel} onQuery={props.onQuery} onSaveFolder={props.onSaveFolder} onSelectFolder={props.onSelectFolder} onUpload={() => fileInputRef.current?.click()} onViewMode={props.onViewMode} />
         <FileTable {...props} selection={selection} />
       </section>
     </>
@@ -120,6 +123,7 @@ function Breadcrumbs(props: {
 function BrowserActions(props: {
   busy: string
   currentFolder: FolderRecord | null
+  onDownloadFolder: (folder: FolderRecord) => void
   onOpenFolderPanel: (anchor?: HTMLElement) => void
   onSaveFolder: (shareAfterSave: boolean, anchor?: HTMLElement) => void
 }) {
@@ -127,6 +131,9 @@ function BrowserActions(props: {
 
   return (
     <div class="browser-actions">
+      <button onClick={() => props.onDownloadFolder(props.currentFolder!)} title="Download folder as ZIP">
+        <Download size={17} />
+      </button>
       <button onClick={(event) => props.onOpenFolderPanel(event.currentTarget)} title="Folder details">
         <Info size={17} />
       </button>
@@ -147,6 +154,7 @@ function BrowserToolbar(props: {
   selection: SelectionActions
   viewMode: BrowserViewMode
   onCreateFolder: () => void
+  onDownloadFolder: (folder: FolderRecord) => void
   onOpenFolderPanel: (anchor?: HTMLElement) => void
   onQuery: (value: string) => void
   onSaveFolder: (shareAfterSave: boolean, anchor?: HTMLElement) => void
@@ -175,7 +183,7 @@ function BrowserToolbar(props: {
           <FolderPlus size={17} />
         </button>
       </div>
-      <BrowserActions busy={props.busy} currentFolder={props.currentFolder} onOpenFolderPanel={props.onOpenFolderPanel} onSaveFolder={props.onSaveFolder} />
+      <BrowserActions busy={props.busy} currentFolder={props.currentFolder} onDownloadFolder={props.onDownloadFolder} onOpenFolderPanel={props.onOpenFolderPanel} onSaveFolder={props.onSaveFolder} />
     </div>
   )
 }

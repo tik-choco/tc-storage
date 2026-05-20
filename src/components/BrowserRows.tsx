@@ -1,4 +1,4 @@
-import { Check, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, X } from 'lucide-preact'
+import { Check, Download, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, X } from 'lucide-preact'
 import { selectFromPointerEvent } from '../appSelectionActions.js'
 import type { BrowserDragItem, BrowserReorderTarget, PendingShare } from '../appTypes.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
@@ -41,6 +41,7 @@ export function FolderRow(props: {
   reorderTarget: BrowserReorderTarget | null
   selected: boolean
   onDeleteFolder: (folder: FolderRecord) => void
+  onDownloadFolder: (folder: FolderRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
   onItemDragLeave: (target: BrowserDragItem, event: DragEvent) => void
@@ -82,6 +83,7 @@ export function FolderRow(props: {
       <span>{filesInFolder({ folders: [], files: props.files, activity: [], clock: 0, originNode: '' }, props.folder.id).length} files</span>
       <span>{dateLabel(props.folder.updatedAt)}</span>
       <span class="row-actions">
+        <button onClick={() => props.onDownloadFolder(props.folder)} title="Download folder as ZIP"><Download size={16} /></button>
         <button onClick={(event) => props.onShowFolderDetails(props.folder, event.currentTarget)} title="Details"><Info size={16} /></button>
         <button onClick={() => props.onDeleteFolder(props.folder)} title="Delete folder"><Trash2 size={16} /></button>
       </span>
@@ -121,6 +123,7 @@ export function FileRow(props: {
   reorderTarget: BrowserReorderTarget | null
   selected: boolean
   onDeleteFile: (file: FileRecord) => void
+  onDownloadFile: (file: FileRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
   onItemDragLeave: (target: BrowserDragItem, event: DragEvent) => void
@@ -164,6 +167,7 @@ export function FileRow(props: {
       <span>{formatBytes(props.file.size)}</span>
       <span>{dateLabel(props.file.updatedAt)}</span>
       <span class="row-actions">
+        <button onClick={(event) => { event.stopPropagation(); props.onDownloadFile(props.file) }} title="Download file"><Download size={16} /></button>
         <button onClick={(event) => { event.stopPropagation(); props.onShareFile(props.file) }} disabled={props.busy} title={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
         <button onClick={(event) => { event.stopPropagation(); props.onDeleteFile(props.file) }} title="Delete"><Trash2 size={16} /></button>
       </span>

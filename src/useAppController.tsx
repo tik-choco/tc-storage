@@ -225,6 +225,7 @@ export function useAppController() {
     detailFileWithContent,
     detailFolderPeers,
     downloadProgress: transfer.downloadProgress,
+    downloadFolderAsZip: fileContent.downloadFolderAsZip,
     downloadStoredFile: fileContent.downloadStoredFile,
     draftAvatarUrl,
     dragActive,

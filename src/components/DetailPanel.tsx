@@ -1,4 +1,4 @@
-import { Copy, KeyRound, Trash2, UserRound } from 'lucide-preact'
+import { Copy, Download, KeyRound, Trash2, UserRound } from 'lucide-preact'
 import type { SyncPeer } from '../appTypes.js'
 import type { FolderColor, FolderRecord } from '../domain.js'
 import { dateLabel, shortCid, shortNode } from '../format.js'
@@ -11,6 +11,7 @@ export function FolderPanel(props: {
   shareUrl: string
   syncPeers: SyncPeer[]
   onCopy: (value: string, label: string) => void
+  onDownloadFolder: (folder: FolderRecord) => void
   onDeleteFolder: () => void
   onPatchFolder: (patch: Partial<FolderRecord>) => void
 }) {
@@ -32,6 +33,7 @@ function FolderSettings(props: {
   folder: FolderRecord
   shareUrl: string
   onCopy: (value: string, label: string) => void
+  onDownloadFolder: (folder: FolderRecord) => void
   onDeleteFolder: () => void
   onPatchFolder: (patch: Partial<FolderRecord>) => void
 }) {
@@ -70,6 +72,10 @@ function FolderSettings(props: {
           <ShareQrCode label="Folder share" value={props.shareUrl} />
         </div>
       ) : null}
+      <button class="primary wide" type="button" onClick={() => props.onDownloadFolder(props.folder)}>
+        <Download size={17} />
+        <span>Download ZIP</span>
+      </button>
       <button class="danger wide" type="button" onClick={props.onDeleteFolder}>
         <Trash2 size={17} />
         <span>Delete folder</span>
