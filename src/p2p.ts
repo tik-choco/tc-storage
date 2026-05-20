@@ -178,15 +178,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
           const peers = peerIdsForMistSend(readPeers(mist.get_neighbors()), settingsValue.nodeId)
           const hadPeers = peersRef.current.length > 0
           if (hadPeers && peers.length === 0) {
-            p2pWarn('mist peers dropped to zero; restarting room')
-            clearMistSession(mist)
-            setState((current) => ({
-              ...current,
-              mode: channel ? 'local-gossip' : 'offline',
-              peers: [],
-              lastEvent: 'peer 0 のため mistlib 再接続待機中',
-            }))
-            return
+            p2pWarn('mist peers dropped to zero; keeping room open for peer return')
           }
           const changed = !samePeerList(peersRef.current, peers)
           const previousStablePeers = stablePeersRef.current
