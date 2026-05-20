@@ -32,6 +32,7 @@ export function ExpandedPreview(props: {
   const flowPinchRef = useRef<{ distance: number; zoom: number; center: { x: number; y: number }; scroll: { x: number; y: number } } | null>(null)
   const flowPanRef = useRef<{ x: number; y: number; scroll: { x: number; y: number } } | null>(null)
   const flowMousePanRef = useRef<{ x: number; y: number; scroll: { x: number; y: number } } | null>(null)
+  const singleMousePanRef = useRef<{ x: number; y: number; zoom: { scale: number; x: number; y: number } } | null>(null)
   const pinchRef = useRef<{ distance: number; center: { x: number; y: number }; zoom: { scale: number; x: number; y: number } } | null>(null)
   const panRef = useRef<{ x: number; y: number; zoom: { scale: number; x: number; y: number } } | null>(null)
   const zoomRef = useRef(zoom)
@@ -49,6 +50,7 @@ export function ExpandedPreview(props: {
     touchStartRef.current = null
     pinchRef.current = null
     panRef.current = null
+    singleMousePanRef.current = null
   }, [props.file.id])
 
   useEffect(() => {
@@ -215,6 +217,13 @@ export function ExpandedPreview(props: {
       zoomFlowAtPoint(clamp(flowZoomRef.current * (delta > 0 ? 0.88 : 1.14), 0.6, 3), { x: event.clientX, y: event.clientY })
       return
     }
+    if (canZoom && (event.ctrlKey || event.metaKey)) {
+      const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+      if (Math.abs(delta) < 1) return
+      event.preventDefault()
+      zoomSingleAtPoint(clamp(zoomRef.current.scale * (delta > 0 ? 0.88 : 1.14), 1, 5), { x: event.clientX, y: event.clientY })
+      return
+    }
     if (!canNavigate || flowEnabled || zoomRef.current.scale > 1.02) return
     const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
     if (Math.abs(delta) < 4) return
@@ -229,22 +238,42 @@ export function ExpandedPreview(props: {
     wheelLastNavigateAtRef.current = now
   }
   const handleMouseDown = (event: MouseEvent) => {
-    if (!flowEnabled || event.button !== 0 || isInteractiveFlowTarget(event.target)) return
-    const root = flowBodyRef.current
-    if (!root) return
-    event.preventDefault()
-    flowMousePanRef.current = { x: event.clientX, y: event.clientY, scroll: { x: root.scrollLeft, y: root.scrollTop } }
+    if (event.button !== 0 || isInteractiveFlowTarget(event.target)) return
+    if (flowEnabled) {
+      const root = flowBodyRef.current
+      if (!root) return
+      event.preventDefault()
+      flowMousePanRef.current = { x: event.clientX, y: event.clientY, scroll: { x: root.scrollLeft, y: root.scrollTop } }
+      return
+    }
+    if (canZoom && zoomRef.current.scale > 1.02) {
+      event.preventDefault()
+      singleMousePanRef.current = { x: event.clientX, y: event.clientY, zoom: zoomRef.current }
+    }
   }
   const handleMouseMove = (event: MouseEvent) => {
-    if (!flowEnabled || !flowMousePanRef.current) return
-    const root = flowBodyRef.current
-    if (!root) return
-    event.preventDefault()
-    root.scrollLeft = flowMousePanRef.current.scroll.x - (event.clientX - flowMousePanRef.current.x)
-    root.scrollTop = flowMousePanRef.current.scroll.y - (event.clientY - flowMousePanRef.current.y)
+    if (flowEnabled && flowMousePanRef.current) {
+      const root = flowBodyRef.current
+      if (!root) return
+      event.preventDefault()
+      root.scrollLeft = flowMousePanRef.current.scroll.x - (event.clientX - flowMousePanRef.current.x)
+      root.scrollTop = flowMousePanRef.current.scroll.y - (event.clientY - flowMousePanRef.current.y)
+      return
+    }
+    if (!flowEnabled && singleMousePanRef.current) {
+      event.preventDefault()
+      const next = clampZoom({
+        scale: singleMousePanRef.current.zoom.scale,
+        x: singleMousePanRef.current.zoom.x + event.clientX - singleMousePanRef.current.x,
+        y: singleMousePanRef.current.zoom.y + event.clientY - singleMousePanRef.current.y,
+      })
+      setZoom(next)
+      zoomRef.current = next
+    }
   }
-  const clearFlowMousePan = () => {
+  const clearMousePan = () => {
     flowMousePanRef.current = null
+    singleMousePanRef.current = null
   }
   function zoomFlowAtPoint(nextZoom: number, point: { x: number; y: number }) {
     const root = flowBodyRef.current
@@ -260,6 +289,22 @@ export function ExpandedPreview(props: {
       root.scrollLeft = nextScrollLeft
       root.scrollTop = nextScrollTop
     })
+  }
+  function zoomSingleAtPoint(nextScale: number, point: { x: number; y: number }) {
+    const root = flowBodyRef.current
+    const current = zoomRef.current
+    if (!root || nextScale === current.scale) return
+    const rect = root.getBoundingClientRect()
+    const offsetX = point.x - (rect.left + rect.width / 2)
+    const offsetY = point.y - (rect.top + rect.height / 2)
+    const ratio = nextScale / current.scale
+    const next = clampZoom({
+      scale: nextScale,
+      x: offsetX - (offsetX - current.x) * ratio,
+      y: offsetY - (offsetY - current.y) * ratio,
+    })
+    setZoom(next)
+    zoomRef.current = next
   }
   const imageStyle = canZoom
     ? {
@@ -296,9 +341,9 @@ export function ExpandedPreview(props: {
         class={`preview-modal-body ${flowEnabled ? 'flow-body' : ''}`}
         onClick={closeFromEmptySpace}
         onMouseDown={handleMouseDown}
-        onMouseLeave={clearFlowMousePan}
+        onMouseLeave={clearMousePan}
         onMouseMove={handleMouseMove}
-        onMouseUp={clearFlowMousePan}
+        onMouseUp={clearMousePan}
         onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
