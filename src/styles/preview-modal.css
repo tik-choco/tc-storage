@@ -117,7 +117,13 @@
   justify-content: flex-start;
   overflow: auto;
   padding: calc(82px + env(safe-area-inset-top)) 12px 28px;
-  touch-action: pan-y;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.preview-modal-body.flow-body:active {
+  cursor: grabbing;
 }
 
 .preview-flow-list {
