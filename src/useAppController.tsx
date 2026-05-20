@@ -99,6 +99,7 @@ export function useAppController() {
   const detailFileShareCid = detailFile?.lastShareCid ?? detailFile?.lastCid
   const fileShareUrl = detailFile && detailFileShareCid && detailFolder && fileShareKeys[detailFile.id] ? makeFileShareUrl(detailFile, detailFolder, settings.roomId, snapshot.clock, detailFileShareCid, fileShareKeys[detailFile.id], shareProfile) : ''
   const previewFiles = useMemo(() => (selectedFile ? filesInFolder(snapshot, selectedFile.folderId) : fileRows), [fileRows, selectedFile, snapshot])
+  const previewFilesWithContent = useMemo(() => previewFiles.map((file) => ({ ...file, dataUrl: fileDataUrls[file.id] })), [fileDataUrls, previewFiles])
   const selectedFileIndex = selectedFile ? previewFiles.findIndex((file) => file.id === selectedFile.id) : -1
   const selectedPreviewProgress = selectedPreviewFile && !selectedPreviewFile.dataUrl ? transfer.fileLoadProgress[selectedPreviewFile.id] ?? 0 : 0
   const storageUsed = files.reduce((total, file) => total + file.size, 0)
@@ -231,6 +232,7 @@ export function useAppController() {
     dropTargetFolderId,
     endItemDrag: dragDrop.endItemDrag,
     expandedPreviewOpen,
+    fileLoadProgress: transfer.fileLoadProgress,
     fileDataUrls,
     fileRows,
     fileShareKeys,
@@ -267,6 +269,7 @@ export function useAppController() {
     popoverPositions,
     preloadFileContent: fileContent.preloadFileContent,
     previewFiles,
+    previewFilesWithContent,
     profileAvatarImages: avatarPicker.profileAvatarImages,
     profileOpen,
     query,

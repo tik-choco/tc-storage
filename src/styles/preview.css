@@ -47,6 +47,39 @@
   will-change: transform;
 }
 
+.preview-flow-item .preview-frame.expanded {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.preview-flow-item .preview-frame.expanded img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: unset;
+}
+
+.preview-flow-item .preview-frame.expanded video {
+  width: 100%;
+  height: auto;
+  max-height: 80dvh;
+}
+
+.preview-flow-item .preview-frame.expanded iframe {
+  height: 78dvh;
+}
+
+.preview-flow-item .preview-frame.expanded pre {
+  height: auto;
+  max-height: none;
+}
+
+.preview-flow-item .preview-frame.expanded .binary-preview {
+  min-height: 180px;
+}
+
 .preview-frame audio {
   width: calc(100% - 28px);
 }

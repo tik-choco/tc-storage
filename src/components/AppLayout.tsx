@@ -88,13 +88,16 @@ export function AppLayout({ controller: c }: AppLayoutProps) {
       {c.expandedPreviewOpen && c.selectedPreviewFile ? (
         <ExpandedPreview
           file={c.selectedPreviewFile}
+          files={c.previewFilesWithContent}
           index={c.selectedFileIndex}
+          loadingProgressByFileId={c.fileLoadProgress}
           loadingProgress={c.selectedPreviewProgress}
           total={c.previewFiles.length}
           onClose={() => c.setExpandedPreviewOpen(false)}
           onPrevious={() => c.movePreview(-1)}
           onNext={() => c.movePreview(1)}
           onDownload={(file) => void c.downloadStoredFile(file)}
+          onPreloadFile={c.preloadFileContent}
         />
       ) : null}
     </main>

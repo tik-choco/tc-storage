@@ -5,18 +5,28 @@ import { isTextLike } from '../format.js'
 
 export function ExpandedPreview(props: {
   file: FileRecord
+  files: FileRecord[]
   index: number
+  loadingProgressByFileId: Record<string, number>
   loadingProgress: number
   total: number
   onClose: () => void
   onPrevious: () => void
   onNext: () => void
   onDownload: (file: FileRecord) => void | Promise<void>
+  onPreloadFile: (file: FileRecord) => void
 }) {
+  const [mode, setMode] = useState<'single' | 'flow'>('single')
   const canNavigate = props.total > 1
-  const canZoom = props.file.mimeType.startsWith('image/') && Boolean(props.file.dataUrl)
+  const flowFiles = props.files.length ? props.files : [props.file]
+  const flowEnabled = mode === 'flow' && canNavigate
+  const canZoom = !flowEnabled && props.file.mimeType.startsWith('image/') && Boolean(props.file.dataUrl)
   const [zoom, setZoom] = useState({ scale: 1, x: 0, y: 0 })
+  const flowBodyRef = useRef<HTMLDivElement>(null)
+  const flowItemRefs = useRef<Record<string, HTMLElement | null>>({})
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const wheelLastNavigateAtRef = useRef(0)
+  const wheelDeltaRef = useRef(0)
   const pinchRef = useRef<{ distance: number; center: { x: number; y: number }; zoom: { scale: number; x: number; y: number } } | null>(null)
   const panRef = useRef<{ x: number; y: number; zoom: { scale: number; x: number; y: number } } | null>(null)
   const zoomRef = useRef(zoom)
@@ -31,6 +41,34 @@ export function ExpandedPreview(props: {
     pinchRef.current = null
     panRef.current = null
   }, [props.file.id])
+
+  useEffect(() => {
+    if (!flowEnabled) return
+    props.onPreloadFile(props.file)
+    const current = flowItemRefs.current[props.file.id]
+    current?.scrollIntoView({ block: 'start' })
+  }, [flowEnabled, props.file.id])
+
+  useEffect(() => {
+    if (!flowEnabled) return
+    const root = flowBodyRef.current
+    if (!root || typeof IntersectionObserver !== 'function') {
+      for (const file of flowFiles.slice(Math.max(0, props.index - 1), props.index + 2)) props.onPreloadFile(file)
+      return
+    }
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue
+        const id = (entry.target as HTMLElement).dataset.fileId
+        const file = flowFiles.find((item) => item.id === id)
+        if (file) props.onPreloadFile(file)
+      }
+    }, { root, rootMargin: '260px 0px' })
+    for (const element of Object.values(flowItemRefs.current)) {
+      if (element) observer.observe(element)
+    }
+    return () => observer.disconnect()
+  }, [flowEnabled, flowFiles, props.index])
 
   const closeFromEmptySpace = (event: MouseEvent) => {
     if (event.target === event.currentTarget) props.onClose()
@@ -107,6 +145,20 @@ export function ExpandedPreview(props: {
     if (deltaX > 0) props.onPrevious()
     else props.onNext()
   }
+  const handleWheel = (event: WheelEvent) => {
+    if (!canNavigate || flowEnabled || zoomRef.current.scale > 1.02) return
+    const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    if (Math.abs(delta) < 4) return
+    event.preventDefault()
+    const now = Date.now()
+    if (now - wheelLastNavigateAtRef.current < 420) return
+    wheelDeltaRef.current += delta
+    if (Math.abs(wheelDeltaRef.current) < 48) return
+    if (wheelDeltaRef.current > 0) props.onNext()
+    else props.onPrevious()
+    wheelDeltaRef.current = 0
+    wheelLastNavigateAtRef.current = now
+  }
   const imageStyle = canZoom
     ? {
         transform: `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.scale})`,
@@ -115,7 +167,7 @@ export function ExpandedPreview(props: {
     : undefined
 
   return (
-    <section class={`preview-modal ${canZoom ? 'zoomable' : ''}`} role="dialog" aria-modal="true" aria-label={props.file.name} onClick={closeFromEmptySpace}>
+    <section class={`preview-modal ${canZoom ? 'zoomable' : ''} ${flowEnabled ? 'flow-mode' : ''}`} role="dialog" aria-modal="true" aria-label={props.file.name} onClick={closeFromEmptySpace}>
       <header class="preview-modal-top">
         <div>
           <span>Preview</span>
@@ -123,15 +175,36 @@ export function ExpandedPreview(props: {
           <small>{props.index >= 0 ? `${props.index + 1} / ${props.total}` : `1 / ${props.total}`} · {formatBytes(props.file.size)}</small>
         </div>
         <div class="preview-modal-actions">
+          {canNavigate ? (
+            <div class="preview-mode-toggle" role="group" aria-label="Preview mode">
+              <button type="button" class={mode === 'single' ? 'selected' : ''} aria-pressed={mode === 'single'} onClick={() => setMode('single')}>Single</button>
+              <button type="button" class={mode === 'flow' ? 'selected' : ''} aria-pressed={mode === 'flow'} onClick={() => setMode('flow')}>Flow</button>
+            </div>
+          ) : null}
           <button onClick={() => props.onDownload(props.file)} title="Download"><Download size={18} /></button>
           <button onClick={props.onClose} title="Close"><X size={18} /></button>
         </div>
       </header>
-      <button class="preview-nav previous" onClick={props.onPrevious} disabled={!canNavigate} title="Previous file"><ChevronLeft size={26} /></button>
-      <div class="preview-modal-body" onClick={closeFromEmptySpace} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-        <PreviewContent file={props.file} loadingProgress={props.loadingProgress} expanded imageStyle={imageStyle} zoomable={canZoom} />
+      {flowEnabled ? null : <button class="preview-nav previous" onClick={props.onPrevious} disabled={!canNavigate} title="Previous file"><ChevronLeft size={26} /></button>}
+      <div ref={flowBodyRef} class={`preview-modal-body ${flowEnabled ? 'flow-body' : ''}`} onClick={closeFromEmptySpace} onWheel={handleWheel} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+        {flowEnabled ? (
+          <div class="preview-flow-list">
+            {flowFiles.map((file) => (
+              <article
+                class={`preview-flow-item ${file.id === props.file.id ? 'current' : ''}`}
+                data-file-id={file.id}
+                key={file.id}
+                ref={(element) => { flowItemRefs.current[file.id] = element }}
+              >
+                <PreviewContent file={file} loadingProgress={props.loadingProgressByFileId[file.id] ?? 0} expanded />
+              </article>
+            ))}
+          </div>
+        ) : (
+          <PreviewContent file={props.file} loadingProgress={props.loadingProgress} expanded imageStyle={imageStyle} zoomable={canZoom} />
+        )}
       </div>
-      <button class="preview-nav next" onClick={props.onNext} disabled={!canNavigate} title="Next file"><ChevronRight size={26} /></button>
+      {flowEnabled ? null : <button class="preview-nav next" onClick={props.onNext} disabled={!canNavigate} title="Next file"><ChevronRight size={26} /></button>}
     </section>
   )
 }
