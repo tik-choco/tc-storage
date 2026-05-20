@@ -64,6 +64,7 @@ export function BrowserPanel(props: {
   onPreloadFile: (file: FileRecord) => void
   onSelectFolder: (folderId: string | null) => void
   onShareFile: (file: FileRecord) => void
+  onShareFolder: (folder: FolderRecord) => void
   onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
   onUploadFiles: (fileList: FileList | null) => void
   onViewMode: (mode: BrowserViewMode) => void

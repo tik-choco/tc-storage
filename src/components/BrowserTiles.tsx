@@ -34,6 +34,7 @@ export function FolderTile(props: {
   files: FileRecord[]
   reorderTarget: BrowserReorderTarget | null
   selected: boolean
+  shareBusy: boolean
   onDeleteFolder: (folder: FolderRecord) => void
   onDownloadFolder: (folder: FolderRecord) => void
   onDragEnd: () => void
@@ -42,6 +43,7 @@ export function FolderTile(props: {
   onItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
   onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onSelectFolder: (folderId: string | null) => void
+  onShareFolder: (folder: FolderRecord) => void
   onShowFolderDetails: (folder: FolderRecord, anchor?: HTMLElement) => void
 }) {
   const fileCount = filesInFolder({ folders: [], files: props.files, activity: [], clock: 0, originNode: '' }, props.folder.id).length
@@ -81,6 +83,7 @@ export function FolderTile(props: {
       <span class="tile-date">{dateLabel(props.folder.updatedAt)}</span>
       <span class="row-actions tile-actions">
         <button onClick={() => props.onDownloadFolder(props.folder)} title="Download folder as ZIP"><Download size={16} /></button>
+        <button onClick={() => props.onShareFolder(props.folder)} disabled={props.shareBusy} title={props.shareBusy ? 'Sharing folder' : 'Share folder'}><Share2 size={16} /></button>
         <button onClick={(event) => props.onShowFolderDetails(props.folder, event.currentTarget)} title="Details"><Info size={16} /></button>
         <button onClick={() => props.onDeleteFolder(props.folder)} title="Delete folder"><Trash2 size={16} /></button>
       </span>

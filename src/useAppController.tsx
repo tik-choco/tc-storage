@@ -292,6 +292,7 @@ export function useAppController() {
     settingsDraft,
     settingsOpen,
     shareFile: fileActions.shareFile,
+    shareFolder: folderActions.shareFolder,
     showFileDetails: panel.showFileDetails,
     showFolderDetails: panel.showFolderDetails,
     snapshot,

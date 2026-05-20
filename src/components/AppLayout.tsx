@@ -75,6 +75,7 @@ export function AppLayout({ controller: c }: AppLayoutProps) {
           onSaveFolder={(share) => void c.saveFolderToMist(share)}
           onSelectFolder={c.selectFolder}
           onShareFile={(file) => void c.shareFile(file)}
+          onShareFolder={(folder) => void c.shareFolder(folder)}
           onShowFileDetails={c.showFileDetails}
           onShowFolderDetails={c.showFolderDetails}
           onUploadFiles={(list) => void c.uploadFiles(list)}

@@ -112,8 +112,19 @@ export function createFolderActions(options: FolderActionOptions) {
 
   async function saveFolderToMist(shareAfterSave: boolean) {
     if (!currentFolder) return setNotice({ tone: 'error', text: '保存するフォルダーを選択してください' })
-    const passphrase = currentFolderKey || generateFolderKey()
-    if (!currentFolderKey) setFolderKeys((current) => ({ ...current, [currentFolder.id]: passphrase }))
+    await saveFolder(currentFolder, currentFolderKey, shareAfterSave)
+  }
+
+  async function shareFolder(folder: FolderRecord) {
+    await saveFolder(folder, folderKeysRef.current[folder.id] ?? '', true)
+  }
+
+  async function saveFolder(folder: FolderRecord, folderKey: string, shareAfterSave: boolean) {
+    const sourceSnapshot = snapshotRef.current
+    const targetFolder = sourceSnapshot.folders.find((item) => item.id === folder.id && !item.deletedAt)
+    if (!targetFolder) return setNotice({ tone: 'error', text: '保存するフォルダーを選択してください' })
+    const passphrase = folderKey || generateFolderKey()
+    if (!folderKey) setFolderKeys((current) => ({ ...current, [targetFolder.id]: passphrase }))
     const now = new Date().toISOString()
     const clipboard = shareAfterSave ? reserveClipboardWrite() : undefined
     setBusy(shareAfterSave ? 'share' : 'save')
@@ -127,16 +138,16 @@ export function createFolderActions(options: FolderActionOptions) {
     }
     setNotice({ tone: 'info', text: shareAfterSave ? '共有URLを作成中...' : 'mistlibへ保存中...' })
     try {
-      const folderForSave = shareAfterSave ? stampFolderPatch(currentFolder, { shareEnabled: true, sharedRoomId: settings.roomId }, now, settings.nodeId) : currentFolder
-      const foldersForSave = foldersForSync(snapshot, currentFolder.id).map((folder) => (folder.id === currentFolder.id ? folderForSave : folder))
-      const filesForSave = await ensureFolderFilesStored(folderForSave, folderFilesForSync(snapshot, currentFolder.id), passphrase)
+      const folderForSave = shareAfterSave ? stampFolderPatch(targetFolder, { shareEnabled: true, sharedRoomId: settings.roomId }, now, settings.nodeId) : targetFolder
+      const foldersForSave = foldersForSync(sourceSnapshot, targetFolder.id).map((item) => (item.id === targetFolder.id ? folderForSave : item))
+      const filesForSave = await ensureFolderFilesStored(folderForSave, folderFilesForSync(sourceSnapshot, targetFolder.id), passphrase)
       const cid = await saveEncryptedFolderToMist({ folder: folderForSave, folders: foldersForSave, files: filesForSave, passphrase, originNode: settings.nodeId })
-      clearFolderSyncTimer(currentFolder.id)
+      clearFolderSyncTimer(targetFolder.id)
       const filesForSaveById = new Map(filesForSave.map((file) => [file.id, stripFileContent(file)]))
-      syncSignaturesRef.current[currentFolder.id] = sharedFolderSignature({ ...snapshot, folders: snapshot.folders.map((folder) => (folder.id === currentFolder.id ? folderForSave : folder)), files: snapshot.files.map((file) => filesForSaveById.get(file.id) ?? file) }, currentFolder.id)
-      markFolderSaved(currentFolder, cid, now, shareAfterSave, filesForSave)
-      if (shareAfterSave) networkRef.current.broadcastShare({ clock: snapshot.clock + 1, folderId: currentFolder.id, folderName: currentFolder.name, cid })
-      const copied = shareAfterSave ? await writeReservedClipboard(makeFolderShareUrl(currentFolder, settings.roomId, snapshot.clock + 1, cid, passphrase, shareProfile), clipboard) : false
+      syncSignaturesRef.current[targetFolder.id] = sharedFolderSignature({ ...sourceSnapshot, folders: sourceSnapshot.folders.map((item) => (item.id === targetFolder.id ? folderForSave : item)), files: sourceSnapshot.files.map((file) => filesForSaveById.get(file.id) ?? file) }, targetFolder.id)
+      markFolderSaved(targetFolder, cid, now, shareAfterSave, filesForSave)
+      if (shareAfterSave) networkRef.current.broadcastShare({ clock: sourceSnapshot.clock + 1, folderId: targetFolder.id, folderName: targetFolder.name, cid })
+      const copied = shareAfterSave ? await writeReservedClipboard(makeFolderShareUrl(targetFolder, settings.roomId, sourceSnapshot.clock + 1, cid, passphrase, shareProfile), clipboard) : false
       setNotice({ tone: 'success', text: shareAfterSave ? copied ? '共有URLをコピーしました' : '共有URLを作成しました' : '暗号化してmistlibへ保存しました' })
     } catch (error) {
       clipboard?.cancel()
@@ -195,5 +206,5 @@ export function createFolderActions(options: FolderActionOptions) {
     scheduleFolderSync(folder.id, reason)
   }
 
-  return { beginCreateFolder, cancelCreateFolder, confirmCreateFolder, deleteCurrentFolder, deleteFolder, patchCurrentFolder, requestDeleteFolder, saveFolderToMist }
+  return { beginCreateFolder, cancelCreateFolder, confirmCreateFolder, deleteCurrentFolder, deleteFolder, patchCurrentFolder, requestDeleteFolder, saveFolderToMist, shareFolder }
 }

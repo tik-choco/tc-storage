@@ -40,6 +40,7 @@ export function FolderRow(props: {
   files: FileRecord[]
   reorderTarget: BrowserReorderTarget | null
   selected: boolean
+  shareBusy: boolean
   onDeleteFolder: (folder: FolderRecord) => void
   onDownloadFolder: (folder: FolderRecord) => void
   onDragEnd: () => void
@@ -49,6 +50,7 @@ export function FolderRow(props: {
   onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onSelectFolder: (folderId: string | null) => void
   onSelectItem: (item: BrowserDragItem, selected: boolean, range?: boolean) => void
+  onShareFolder: (folder: FolderRecord) => void
   onShowFolderDetails: (folder: FolderRecord, anchor?: HTMLElement) => void
 }) {
   const isDragSource = props.dragItem?.type === 'folder' && props.dragItem.id === props.folder.id
@@ -84,6 +86,7 @@ export function FolderRow(props: {
       <span>{dateLabel(props.folder.updatedAt)}</span>
       <span class="row-actions">
         <button onClick={() => props.onDownloadFolder(props.folder)} title="Download folder as ZIP"><Download size={16} /></button>
+        <button onClick={() => props.onShareFolder(props.folder)} disabled={props.shareBusy} title={props.shareBusy ? 'Sharing folder' : 'Share folder'}><Share2 size={16} /></button>
         <button onClick={(event) => props.onShowFolderDetails(props.folder, event.currentTarget)} title="Details"><Info size={16} /></button>
         <button onClick={() => props.onDeleteFolder(props.folder)} title="Delete folder"><Trash2 size={16} /></button>
       </span>
