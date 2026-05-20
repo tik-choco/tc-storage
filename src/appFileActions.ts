@@ -24,6 +24,7 @@ interface FileActionOptions {
   folderKeysRef: MutableRef<Record<string, string>>
   folders: FolderRecord[]
   networkRef: MutableRef<MistShare>
+  scheduleFolderSync: (folderId: string, reason: string) => void
   setBusy: SetState<string>
   setCurrentFolderId: SetState<string | null>
   setDeleteRequest: SetState<DeleteRequest | null>
@@ -46,7 +47,7 @@ interface FileActionOptions {
 export function createFileActions(options: FileActionOptions) {
   const {
     announceFolderChange, currentFolderId, deleteFolder, deleteRequest, ensureFileContent,
-    fileShareKeys, folderKeysRef, folders, networkRef, setBusy, setCurrentFolderId,
+    fileShareKeys, folderKeysRef, folders, networkRef, scheduleFolderSync, setBusy, setCurrentFolderId,
     setDeleteRequest, setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys,
     setFolderPanelOpen, setNotice, setProfileOpen, setSelectedItems, setSettingsOpen, setSnapshot, settings,
     shareProfile, snapshot, snapshotRef,
@@ -86,6 +87,7 @@ export function createFileActions(options: FileActionOptions) {
       })
       setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: mergeUploadedFiles(current.files, uploaded.map(stripFileContent), now, settings.nodeId) }, { actorNodeId: settings.nodeId, folderId: targetFolderId, action: 'file.upload', detail: `${uploaded.length} 件のファイルを追加` }, now), settings.nodeId))
       for (const file of uploaded.map(stripFileContent)) announceFolderChange(storageFolder, 'file-upserted', file)
+      scheduleSharedFolderSync(storageFolder, 'local file upload')
       setNotice({ tone: 'success', text: `${uploaded.length} 件のファイルを追加しました` })
     } catch (error) {
       setNotice({ tone: 'error', text: describeError(error, 'アップロードに失敗しました') })
@@ -132,7 +134,10 @@ export function createFileActions(options: FileActionOptions) {
     const renamedFile = stripFileContent(stampFilePatch(currentFile, { name: nextName }, now, settings.nodeId))
     setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((item) => (item.id === currentFile.id ? renamedFile : item)) }, { actorNodeId: settings.nodeId, fileId: currentFile.id, folderId: currentFile.folderId, action: 'file.rename', detail: `${currentFile.name} を ${nextName} に変更` }, now), settings.nodeId))
     const sharedRoot = nearestSharedAncestorFolder(snapshotValue, currentFile.folderId)
-    if (sharedRoot) announceFolderChange(sharedRoot, 'file-upserted', renamedFile)
+    if (sharedRoot) {
+      announceFolderChange(sharedRoot, 'file-upserted', renamedFile)
+      scheduleSharedFolderSync(sharedRoot, 'local file rename')
+    }
     setNotice({ tone: 'success', text: 'ファイル名を変更しました' })
   }
 
@@ -161,11 +166,19 @@ export function createFileActions(options: FileActionOptions) {
     const deletedFile = stripFileContent(stampFilePatch(file, { deletedAt: now }, now, settings.nodeId))
     setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((item) => (item.id === file.id ? deletedFile : item)) }, { actorNodeId: settings.nodeId, fileId: file.id, folderId: file.folderId, action: 'file.delete', detail: `${file.name} を削除` }, now), settings.nodeId))
     const folder = nearestSharedAncestorFolder(snapshotRef.current, file.folderId) ?? snapshotRef.current.folders.find((item) => item.id === file.folderId)
-    if (folder) announceFolderChange(folder, 'file-deleted', deletedFile)
+    if (folder) {
+      announceFolderChange(folder, 'file-deleted', deletedFile)
+      scheduleSharedFolderSync(folder, 'local file delete')
+    }
   }
 
   function markFileShared(file: FileRecord, cid: string, now: string) {
     setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((item) => (item.id === file.id ? stampFilePatch(item, { lastShareCid: cid }, now, settings.nodeId) : item)) }, { actorNodeId: settings.nodeId, fileId: file.id, folderId: file.folderId, action: 'file.share', detail: `${file.name} をmistlib共有` }, now), settings.nodeId))
+  }
+
+  function scheduleSharedFolderSync(folder: FolderRecord, reason: string): void {
+    if (!folder.shareEnabled || !folderKeysRef.current[folder.id]) return
+    scheduleFolderSync(folder.id, reason)
   }
 
   return { confirmDelete, requestDeleteFile, renameFile, shareFile, uploadFiles }

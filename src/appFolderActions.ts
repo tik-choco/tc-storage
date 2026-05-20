@@ -25,6 +25,7 @@ interface FolderActionOptions {
   folderKeysRef: MutableRef<Record<string, string>>
   folders: FolderRecord[]
   networkRef: MutableRef<MistShare>
+  scheduleFolderSync: (folderId: string, reason: string) => void
   setBusy: SetState<string>
   setCurrentFolderId: SetState<string | null>
   setDetailFileId: SetState<string | null>
@@ -50,7 +51,7 @@ export function createFolderActions(options: FolderActionOptions) {
   const {
     announceFolderChange, clearFolderSyncTimer, currentFolder, currentFolderId, currentFolderKey,
     ensureFolderFilesStored, folderKeysRef, folderPanelFolder, folderPanelFolderId, folders, networkRef,
-    setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
+    scheduleFolderSync, setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setProfileOpen,
     setSelectedFileId, setSettingsOpen, setSnapshot, settings, shareProfile, snapshot, snapshotRef,
     syncSignaturesRef,
@@ -59,7 +60,10 @@ export function createFolderActions(options: FolderActionOptions) {
   function patchCurrentFolder(patch: Partial<FolderRecord>) {
     if (!folderPanelFolder) return
     const now = new Date().toISOString()
+    const sharedRoot = nearestSharedAncestorFolder(snapshotRef.current, folderPanelFolder.id)
     setSnapshot((current) => touchSnapshot({ ...current, folders: current.folders.map((folder) => (folder.id === folderPanelFolder.id ? stampFolderPatch(folder, patch, now, settings.nodeId) : folder)) }, settings.nodeId))
+    const folderForSync = sharedRoot ?? (patch.shareEnabled ? { ...folderPanelFolder, shareEnabled: true } : undefined)
+    if (folderForSync) scheduleSharedFolderSync(folderForSync, 'local folder settings changed')
   }
 
   function beginCreateFolder() {
@@ -99,7 +103,10 @@ export function createFolderActions(options: FolderActionOptions) {
     setSnapshot((current) => touchSnapshot(addActivity({ ...current, folders: [...current.folders, folder] }, { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.create', detail: `${folder.name} を作成` }, now), settings.nodeId))
     setFolderKeys((current) => ({ ...current, [folder.id]: inheritedKey || generateFolderKey() }))
     setSelectedFileId(null)
-    if (sharedRoot) announceFolderChange(sharedRoot, 'folder-upserted', undefined, folder)
+    if (sharedRoot) {
+      announceFolderChange(sharedRoot, 'folder-upserted', undefined, folder)
+      scheduleSharedFolderSync(sharedRoot, 'local folder create')
+    }
     setNotice({ tone: 'success', text: `${folder.name} を作成しました` })
   }
 
@@ -180,6 +187,12 @@ export function createFolderActions(options: FolderActionOptions) {
     setFolderPanelOpen(false)
     const sharedRoot = nearestSharedAncestorFolder(snapshotRef.current, folder.id) ?? folder
     announceFolderChange(sharedRoot, 'folder-deleted', undefined, folder)
+    if (sharedRoot.id !== folder.id) scheduleSharedFolderSync(sharedRoot, 'local folder delete')
+  }
+
+  function scheduleSharedFolderSync(folder: FolderRecord, reason: string): void {
+    if (!folder.shareEnabled || !folderKeysRef.current[folder.id]) return
+    scheduleFolderSync(folder.id, reason)
   }
 
   return { beginCreateFolder, cancelCreateFolder, confirmCreateFolder, deleteCurrentFolder, deleteFolder, patchCurrentFolder, requestDeleteFolder, saveFolderToMist }

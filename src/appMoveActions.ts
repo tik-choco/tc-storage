@@ -13,6 +13,7 @@ interface MoveOptions {
   announceFolderChange: (folder: FolderRecord, changeType: 'file-upserted' | 'file-deleted' | 'folder-upserted' | 'folder-deleted', file?: FileRecord, changedFolder?: FolderRecord) => void
   ensureFileContent: FileContentActions['ensureFileContent']
   folderKeysRef: MutableRef<Record<string, string>>
+  scheduleFolderSync: (folderId: string, reason: string) => void
   setBusy: SetState<string>
   setFileContentCache: SetState<Record<string, string>>
   setFolderKeys: SetState<Record<string, string>>
@@ -24,7 +25,7 @@ interface MoveOptions {
 
 export function createMoveActions(options: MoveOptions): MoveActions {
   const {
-    announceFolderChange, ensureFileContent, folderKeysRef, setBusy, setFileContentCache,
+    announceFolderChange, ensureFileContent, folderKeysRef, scheduleFolderSync, setBusy, setFileContentCache,
     setFolderKeys, setNotice, setSnapshot, settings, snapshotRef,
   } = options
 
@@ -79,8 +80,12 @@ export function createMoveActions(options: MoveOptions): MoveActions {
       setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((item) => (item.id === file.id ? movedFile : item)) }, { actorNodeId: settings.nodeId, folderId: targetFolderId, fileId: file.id, action: 'file.move', detail: `${file.name} を ${targetFolder.name} に移動` }, now), settings.nodeId))
       if (sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id) {
         announceFolderChange(sourceSharedRoot, 'file-deleted', stripFileContent(stampFilePatch(file, { deletedAt: now }, now, settings.nodeId)))
+        scheduleSharedFolderSync(sourceSharedRoot, 'local file move out')
       }
-      if (targetSharedRoot) announceFolderChange(targetSharedRoot, 'file-upserted', movedFile)
+      if (targetSharedRoot) {
+        announceFolderChange(targetSharedRoot, 'file-upserted', movedFile)
+        scheduleSharedFolderSync(targetSharedRoot, 'local file move in')
+      }
       setNotice({ tone: 'success', text: `${file.name} を ${targetFolder.name} に移動しました` })
     } catch (error) {
       setNotice({ tone: 'error', text: describeError(error, 'ファイルを移動できませんでした') })
@@ -107,9 +112,20 @@ export function createMoveActions(options: MoveOptions): MoveActions {
       }
     }
     setSnapshot((current) => touchSnapshot(addActivity({ ...current, folders: current.folders.map((item) => (item.id === folder.id ? movedFolder : item)) }, { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.move', detail: `${folder.name} を ${targetFolder?.name ?? 'My Drive'} に移動` }, now), settings.nodeId))
-    if (sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id) announceFolderChange(sourceSharedRoot, 'folder-deleted', undefined, folder)
-    if (targetSharedRoot) announceFolderChange(targetSharedRoot, 'folder-upserted', undefined, movedFolder)
+    if (sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id) {
+      announceFolderChange(sourceSharedRoot, 'folder-deleted', undefined, folder)
+      scheduleSharedFolderSync(sourceSharedRoot, 'local folder move out')
+    }
+    if (targetSharedRoot) {
+      announceFolderChange(targetSharedRoot, 'folder-upserted', undefined, movedFolder)
+      scheduleSharedFolderSync(targetSharedRoot, 'local folder move in')
+    }
     setNotice({ tone: 'success', text: `${folder.name} を ${targetFolder?.name ?? 'My Drive'} に移動しました` })
+  }
+
+  function scheduleSharedFolderSync(folder: FolderRecord, reason: string): void {
+    if (!folder.shareEnabled || !folderKeysRef.current[folder.id]) return
+    scheduleFolderSync(folder.id, reason)
   }
 
   return { canMoveItemToFolder, moveDraggedItem }

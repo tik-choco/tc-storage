@@ -49,6 +49,14 @@ export function canAutoImportFolderState(options: {
   return Boolean(options.incomingSignature && options.incomingSignature !== options.localSignature)
 }
 
+export function shouldDeferRemoteFolderStateImport(options: {
+  folder: FolderRecord | undefined
+  snapshot: StorageSnapshot
+}): boolean {
+  if (!options.folder) return false
+  return hasSharedFolderChangesSinceLastShare(options.snapshot, options.folder)
+}
+
 function sharedFolderContentUpdatedAt(snapshot: StorageSnapshot, folderId: string): string {
   const updatedAtValues = [
     ...foldersForSync(snapshot, folderId).map((folder) => folder.updatedAt),

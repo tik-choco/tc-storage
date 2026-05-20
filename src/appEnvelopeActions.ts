@@ -4,7 +4,7 @@ import { descendantFolderIds } from './appHelpers.js'
 import { canPreloadThumbnail, envelopeLogDetails, folderLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import { mergeSnapshots, stampFilePatch, stampFolderPatch } from './crdt.js'
 import { addActivity, stripFileContent, type FileRecord, type StorageSnapshot } from './domain.js'
-import { canAutoImportFolderState, hasSharedFolderChangesSinceLastShare, sharedFolderSignature } from './folderSync.js'
+import { canAutoImportFolderState, sharedFolderSignature, shouldDeferRemoteFolderStateImport } from './folderSync.js'
 import type { ShareEnvelope } from './p2p.js'
 
 interface EnvelopeOptions {
@@ -90,11 +90,6 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
     const linkedPassphrase = linkedShare?.cid ? importKeysRef.current[linkedShare.cid]?.trim() ?? '' : ''
     const passphrase = folderKeysRef.current[envelope.folderId] || (linkedShare ? linkedPassphrase : '')
     const localSignature = sharedFolderSignature(snapshotValue, envelope.folderId)
-    if (folder && envelope.cid === folder.lastCid && hasSharedFolderChangesSinceLastShare(snapshotValue, folder)) {
-      syncLog('folder-state matches local cid but local changes exist: scheduling storage_add', folderLogDetails(folder))
-      scheduleFolderSync(folder.id, 'remote has current cid but local changes exist')
-      return
-    }
     if (!folder) {
       if (passphrase && linkedShare && !autoImportCidsRef.current.has(envelope.cid) && !autoImportInFlightRef.current.has(envelope.cid)) {
         syncLog('folder-state accepted for linked share without local folder: storage_get will start', envelopeLogDetails(envelope))
@@ -106,6 +101,14 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
     }
     if (!passphrase) return syncLog('folder-state skipped: folder key missing', envelopeLogDetails(envelope))
     rememberFolderPeer(envelope)
+    if (shouldDeferRemoteFolderStateImport({ folder, snapshot: snapshotValue })) {
+      const reason = envelope.cid === folder.lastCid
+        ? 'remote has current cid but local changes exist'
+        : 'local changes pending before remote folder-state import'
+      syncLog('folder-state deferred: scheduling local storage_add before import', { ...folderLogDetails(folder), incomingCid: shortLogValue(envelope.cid), reason })
+      scheduleFolderSync(folder.id, reason)
+      return
+    }
     if (folder.lastCid === envelope.cid) return syncLog('folder-state skipped: cid already current', { ...envelopeLogDetails(envelope), localCid: shortLogValue(folder.lastCid) })
     if (!envelope.folderSignature) return syncLog('folder-state skipped: remote signature missing', envelopeLogDetails(envelope))
     if (envelope.folderSignature === localSignature) return syncLog('folder-state skipped: signatures match', { ...envelopeLogDetails(envelope), signatureLength: localSignature.length })

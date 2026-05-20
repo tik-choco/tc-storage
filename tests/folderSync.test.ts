@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { remoteFolderSnapshot } from '../src/appHelpers.js'
 import { stampFilePatch, stampFolderPatch } from '../src/crdt.js'
 import { createInitialSnapshot, makeFileFromDataUrl, makeFolder } from '../src/domain.js'
-import { canAutoImportFolderShare, canAutoImportFolderState, folderFilesForSync, foldersForSync, hasSharedFolderChangesSinceLastShare, sharedFolderSignature } from '../src/folderSync.js'
+import { canAutoImportFolderShare, canAutoImportFolderState, folderFilesForSync, foldersForSync, hasSharedFolderChangesSinceLastShare, sharedFolderSignature, shouldDeferRemoteFolderStateImport } from '../src/folderSync.js'
 
 test('sharedFolderSignature tracks content changes but ignores saved CIDs', () => {
   const { file, folder, snapshot } = snapshotWithFolderAndFile()
@@ -220,6 +220,20 @@ test('hasSharedFolderChangesSinceLastShare detects local edits after the last sh
   assert.equal(hasSharedFolderChangesSinceLastShare(sharedSnapshot, sharedFolder), false)
   assert.equal(hasSharedFolderChangesSinceLastShare(editedSnapshot, sharedFolder), true)
   assert.equal(hasSharedFolderChangesSinceLastShare(snapshot, { ...folder, shareEnabled: true }), true)
+})
+
+test('remote folder-state import is deferred while local shared changes are unpublished', () => {
+  const { file, folder, snapshot } = snapshotWithFolderAndFile()
+  const sharedAt = '2026-05-17T00:00:05.000Z'
+  const sharedFolder = stampFolderPatch(folder, { shareEnabled: true, lastCid: 'cid-folder', lastSharedAt: sharedAt }, sharedAt, 'node-a')
+  const sharedSnapshot = { ...snapshot, folders: [sharedFolder] }
+  const reorderedSnapshot = {
+    ...sharedSnapshot,
+    files: [stampFilePatch(file, { sortOrder: 2000 }, '2026-05-17T00:00:06.000Z', 'node-a')],
+  }
+
+  assert.equal(shouldDeferRemoteFolderStateImport({ folder: sharedFolder, snapshot: sharedSnapshot }), false)
+  assert.equal(shouldDeferRemoteFolderStateImport({ folder: sharedFolder, snapshot: reorderedSnapshot }), true)
 })
 
 function snapshotWithFolderAndFile() {

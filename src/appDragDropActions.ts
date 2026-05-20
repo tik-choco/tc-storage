@@ -1,8 +1,9 @@
 import type { BrowserDragItem, BrowserReorderTarget, Notice } from './appTypes.js'
 import type { MoveActions, MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
+import { nearestSharedAncestorFolder } from './appUtils.js'
 import { stampFilePatch, stampFolderPatch } from './crdt.js'
-import { addActivity, compareFilesForDisplay, compareFoldersForDisplay, touchSnapshot, type StorageSnapshot } from './domain.js'
+import { addActivity, compareFilesForDisplay, compareFoldersForDisplay, touchSnapshot, type FolderRecord, type StorageSnapshot } from './domain.js'
 import { hasBrowserDragItem, hasExternalFiles, readBrowserDragItems, writeBrowserDragItems } from './dragDrop.js'
 import type { AppSettings } from './localSettings.js'
 
@@ -12,6 +13,7 @@ interface DragDropOptions {
   dragItemRef: MutableRef<BrowserDragItem | null>
   dragItemsRef: MutableRef<BrowserDragItem[]>
   moveActions: MoveActions
+  scheduleFolderSync: (folderId: string, reason: string) => void
   selectedItems: BrowserDragItem[]
   setDragActive: SetState<boolean>
   setDragItem: SetState<BrowserDragItem | null>
@@ -27,7 +29,7 @@ interface DragDropOptions {
 
 export function createDragDropActions(options: DragDropOptions) {
   const {
-    browserViewMode, currentFolderId, dragItemRef, dragItemsRef, moveActions, selectedItems, setDragActive, setDragItem,
+    browserViewMode, currentFolderId, dragItemRef, dragItemsRef, moveActions, scheduleFolderSync, selectedItems, setDragActive, setDragItem,
     setDropTargetFolderId, setNotice, setReorderTarget, setSelectedItems, setSnapshot, settings, snapshotRef, uploadFiles,
   } = options
 
@@ -172,6 +174,7 @@ export function createDragDropActions(options: DragDropOptions) {
         const sortOrder = orderById.get(file.id)
         return sortOrder === undefined || file.sortOrder === sortOrder ? file : stampFilePatch(file, { sortOrder }, now, settings.nodeId)
       }) }, { actorNodeId: settings.nodeId, folderId: currentFolderId ?? undefined, fileId: item.id, action: 'file.reorder', detail: `${movedFile?.name ?? 'ファイル'} を並び替え` }, now), settings.nodeId))
+      scheduleReorderedSharedFolder(item, 'local file reorder')
       setNotice({ tone: 'success', text: 'ファイルの並び順を更新しました' })
       return
     }
@@ -183,7 +186,23 @@ export function createDragDropActions(options: DragDropOptions) {
       const sortOrder = orderById.get(folder.id)
       return sortOrder === undefined || folder.sortOrder === sortOrder ? folder : stampFolderPatch(folder, { sortOrder }, now, settings.nodeId)
     }) }, { actorNodeId: settings.nodeId, folderId: item.id, action: 'folder.reorder', detail: `${movedFolder?.name ?? 'フォルダー'} を並び替え` }, now), settings.nodeId))
+    scheduleReorderedSharedFolder(item, 'local folder reorder')
     setNotice({ tone: 'success', text: 'フォルダーの並び順を更新しました' })
+  }
+
+  function scheduleReorderedSharedFolder(item: BrowserDragItem, reason: string): void {
+    const folder = sharedFolderForReorder(item)
+    if (!folder) return
+    scheduleFolderSync(folder.id, reason)
+  }
+
+  function sharedFolderForReorder(item: BrowserDragItem): FolderRecord | undefined {
+    const snapshotValue = snapshotRef.current
+    if (item.type === 'folder') {
+      const folder = snapshotValue.folders.find((value) => value.id === item.id)
+      return nearestSharedAncestorFolder(snapshotValue, folder?.id ?? currentFolderId)
+    }
+    return nearestSharedAncestorFolder(snapshotValue, currentFolderId)
   }
 
   function handleDrag(event: DragEvent) {
