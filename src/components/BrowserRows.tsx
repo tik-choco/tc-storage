@@ -19,7 +19,7 @@ export function NewFolderRow(props: DraftFolderProps) {
         <Folder size={20} class="folder-stroke teal" />
         <DraftFolderInput name={props.name} onChange={props.onChange} onKeyDown={handleKeyDown} />
       </div>
-      <span class="status-cell">
+      <span class="status-cell folder-status">
         <Lock size={15} />
         Encrypted
       </span>
@@ -56,7 +56,7 @@ export function FolderRow(props: {
 
   return (
     <div
-      class={`table-row movable-item selectable-item folder-drop-target ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
+      class={`table-row movable-item selectable-item folder-drop-target ${props.folder.shareEnabled ? 'shared-folder' : ''} ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
       data-select-id={props.folder.id}
       data-select-type="folder"
       draggable
@@ -72,11 +72,11 @@ export function FolderRow(props: {
         <input type="checkbox" checked={props.selected} onClick={(event) => props.onSelectItem({ type: 'folder', id: props.folder.id }, event.currentTarget.checked, event.shiftKey)} aria-label={`Select ${props.folder.name}`} />
       </span>
       <button class="name-cell" onClick={() => props.onSelectFolder(props.folder.id)}>
-        <Folder size={20} class={`folder-stroke ${props.folder.color}`} />
+        <Folder size={20} class={`folder-stroke ${props.folder.shareEnabled ? 'shared' : props.folder.color}`} />
         <span>{props.folder.name}</span>
       </button>
-      <span class="status-cell">
-        <Lock size={15} />
+      <span class={`status-cell folder-status ${props.folder.shareEnabled ? 'shared-status' : ''}`}>
+        {props.folder.shareEnabled ? <Share2 size={15} /> : <Lock size={15} />}
         {props.folder.shareEnabled ? 'Shared' : 'Encrypted'}
       </span>
       <span>{filesInFolder({ folders: [], files: props.files, activity: [], clock: 0, originNode: '' }, props.folder.id).length} files</span>

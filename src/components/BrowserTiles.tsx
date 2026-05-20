@@ -50,7 +50,7 @@ export function FolderTile(props: {
 
   return (
     <div
-      class={`tile-card folder-tile movable-item selectable-item folder-drop-target ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
+      class={`tile-card folder-tile movable-item selectable-item folder-drop-target ${props.folder.shareEnabled ? 'shared-folder' : ''} ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
       data-select-id={props.folder.id}
       data-select-type="folder"
       draggable
@@ -66,13 +66,13 @@ export function FolderTile(props: {
     >
       <button class="tile-open" onClick={() => props.onSelectFolder(props.folder.id)} title="Open folder">
         <span class="tile-icon">
-          <Folder size={34} class={`folder-stroke ${props.folder.color}`} />
+          <Folder size={34} class={`folder-stroke ${props.folder.shareEnabled ? 'shared' : props.folder.color}`} />
         </span>
         <strong>{props.folder.name}</strong>
       </button>
       <div class="tile-meta-row">
-        <span class="status-cell">
-          <Lock size={15} />
+        <span class={`status-cell folder-status ${props.folder.shareEnabled ? 'shared-status' : ''}`}>
+          {props.folder.shareEnabled ? <Share2 size={15} /> : <Lock size={15} />}
           {props.folder.shareEnabled ? 'Shared' : 'Encrypted'}
         </span>
         <span>{fileCount} files</span>

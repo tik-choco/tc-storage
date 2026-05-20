@@ -187,6 +187,10 @@
   color: #2563eb;
 }
 
+.folder-stroke.shared {
+  color: #1976d2;
+}
+
 .folder-stroke.amber {
   color: #b45309;
 }
@@ -197,4 +201,44 @@
 
 .folder-stroke.slate {
   color: #475569;
+}
+
+.tile-card.shared-folder:not(.selected-item) {
+  border-color: #bbdefb;
+}
+
+.tile-card.shared-folder:not(.selected-item):hover {
+  border-color: #90caf9;
+  background: #fafcff;
+}
+
+.shared-folder .tile-icon {
+  background: #e3f2fd;
+}
+
+.folder-status {
+  width: max-content;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.folder-status svg {
+  color: #64748b;
+}
+
+.folder-status.shared-status {
+  border-color: #bbdefb;
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.folder-status.shared-status svg {
+  color: #1976d2;
 }

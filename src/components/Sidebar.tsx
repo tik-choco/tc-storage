@@ -68,7 +68,7 @@ function FolderTreeItem(props: {
   return (
     <div class="side-folder-branch">
       <button
-        class={`side-folder-item movable-item folder-drop-target ${props.currentFolderId === props.folder.id ? 'selected' : ''} ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''}`}
+        class={`side-folder-item movable-item folder-drop-target ${props.folder.shareEnabled ? 'shared-folder' : ''} ${props.currentFolderId === props.folder.id ? 'selected' : ''} ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''}`}
         draggable
         onDragEnd={props.onItemDragEnd}
         onDragLeave={(event) => props.onMoveTargetDragLeave(props.folder.id, event)}
@@ -78,7 +78,7 @@ function FolderTreeItem(props: {
         style={{ '--folder-depth-offset': `${props.depth * 18}px` }}
         onClick={() => props.onSelectFolder(props.folder.id)}
       >
-        <Folder size={17} class={`folder-stroke ${props.folder.color}`} />
+        <Folder size={17} class={`folder-stroke ${props.folder.shareEnabled ? 'shared' : props.folder.color}`} />
         <span>{props.folder.name}</span>
       </button>
       {childFolders(props.snapshot, props.folder.id).map((folder) => (
