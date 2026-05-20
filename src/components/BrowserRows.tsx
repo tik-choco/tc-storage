@@ -85,10 +85,10 @@ export function FolderRow(props: {
       <span>{filesInFolder({ folders: [], files: props.files, activity: [], clock: 0, originNode: '' }, props.folder.id).length} files</span>
       <span>{dateLabel(props.folder.updatedAt)}</span>
       <span class="row-actions">
-        <button onClick={() => props.onDownloadFolder(props.folder)} title="Download folder as ZIP"><Download size={16} /></button>
-        <button onClick={() => props.onShareFolder(props.folder)} disabled={props.shareBusy} title={props.shareBusy ? 'Sharing folder' : 'Share folder'}><Share2 size={16} /></button>
         <button onClick={(event) => props.onShowFolderDetails(props.folder, event.currentTarget)} title="Details"><Info size={16} /></button>
+        <button onClick={() => props.onDownloadFolder(props.folder)} title="Download folder as ZIP"><Download size={16} /></button>
         <button onClick={() => props.onDeleteFolder(props.folder)} title="Delete folder"><Trash2 size={16} /></button>
+        <button onClick={() => props.onShareFolder(props.folder)} disabled={props.shareBusy} title={props.shareBusy ? 'Sharing folder' : 'Share folder'}><Share2 size={16} /></button>
       </span>
     </div>
   )
@@ -162,17 +162,15 @@ export function FileRow(props: {
           <FileText size={20} />
           <span>{props.file.name}</span>
         </button>
-        <button class="name-detail-button" onClick={(event) => props.onShowFileDetails(props.file, event.currentTarget)} title="Details">
-          <Info size={16} />
-        </button>
       </div>
       <span class="status-cell"><ShieldCheck size={15} />v{props.file.version}</span>
       <span>{formatBytes(props.file.size)}</span>
       <span>{dateLabel(props.file.updatedAt)}</span>
       <span class="row-actions">
+        <button onClick={(event) => { event.stopPropagation(); props.onShowFileDetails(props.file, event.currentTarget) }} title="Details"><Info size={16} /></button>
         <button onClick={(event) => { event.stopPropagation(); props.onDownloadFile(props.file) }} title="Download file"><Download size={16} /></button>
-        <button onClick={(event) => { event.stopPropagation(); props.onShareFile(props.file) }} disabled={props.busy} title={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
         <button onClick={(event) => { event.stopPropagation(); props.onDeleteFile(props.file) }} title="Delete"><Trash2 size={16} /></button>
+        <button onClick={(event) => { event.stopPropagation(); props.onShareFile(props.file) }} disabled={props.busy} title={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
       </span>
     </div>
   )

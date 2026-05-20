@@ -227,5 +227,5 @@ function isActionClick(event: MouseEvent): boolean {
 
 function isLongPressBlocked(event: PointerEvent): boolean {
   const target = event.target
-  return target instanceof Element && Boolean(target.closest('input,a,select,textarea,.row-actions,.name-detail-button'))
+  return target instanceof Element && Boolean(target.closest('input,a,select,textarea,.row-actions'))
 }

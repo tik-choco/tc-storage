@@ -132,11 +132,11 @@ function BrowserActions(props: {
 
   return (
     <div class="browser-actions">
-      <button onClick={() => props.onDownloadFolder(props.currentFolder!)} title="Download folder as ZIP">
-        <Download size={17} />
-      </button>
       <button onClick={(event) => props.onOpenFolderPanel(event.currentTarget)} title="Folder details">
         <Info size={17} />
+      </button>
+      <button onClick={() => props.onDownloadFolder(props.currentFolder!)} title="Download folder as ZIP">
+        <Download size={17} />
       </button>
       <button class="share-button" onClick={(event) => props.onSaveFolder(true, event.currentTarget)} disabled={props.busy === 'share'} title="Share encrypted folder">
         <Share2 size={17} />

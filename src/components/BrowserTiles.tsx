@@ -82,10 +82,10 @@ export function FolderTile(props: {
       </div>
       <span class="tile-date">{dateLabel(props.folder.updatedAt)}</span>
       <span class="row-actions tile-actions">
-        <button onClick={() => props.onDownloadFolder(props.folder)} title="Download folder as ZIP"><Download size={16} /></button>
-        <button onClick={() => props.onShareFolder(props.folder)} disabled={props.shareBusy} title={props.shareBusy ? 'Sharing folder' : 'Share folder'}><Share2 size={16} /></button>
         <button onClick={(event) => props.onShowFolderDetails(props.folder, event.currentTarget)} title="Details"><Info size={16} /></button>
+        <button onClick={() => props.onDownloadFolder(props.folder)} title="Download folder as ZIP"><Download size={16} /></button>
         <button onClick={() => props.onDeleteFolder(props.folder)} title="Delete folder"><Trash2 size={16} /></button>
+        <button onClick={() => props.onShareFolder(props.folder)} disabled={props.shareBusy} title={props.shareBusy ? 'Sharing folder' : 'Share folder'}><Share2 size={16} /></button>
       </span>
     </div>
   )
@@ -169,8 +169,8 @@ export function FileTile(props: {
           <span class="media-only-actions">
             <button onClick={(event) => { event.stopPropagation(); props.onShowFileDetails(props.file, event.currentTarget) }} aria-label="Show file details"><Info size={16} /></button>
             <button onClick={(event) => { event.stopPropagation(); props.onDownloadFile(props.file) }} aria-label="Download file"><Download size={16} /></button>
-            <button onClick={(event) => { event.stopPropagation(); props.onShareFile(props.file) }} disabled={props.busy} aria-label={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
             <button onClick={(event) => { event.stopPropagation(); props.onDeleteFile(props.file) }} aria-label="Delete file"><Trash2 size={16} /></button>
+            <button onClick={(event) => { event.stopPropagation(); props.onShareFile(props.file) }} disabled={props.busy} aria-label={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
           </span>
         </div>
       </div>
@@ -205,8 +205,8 @@ export function FileTile(props: {
       <span class="row-actions tile-actions">
         <button onClick={(event) => { event.stopPropagation(); props.onShowFileDetails(props.file, event.currentTarget) }} title="Details"><Info size={16} /></button>
         <button onClick={(event) => { event.stopPropagation(); props.onDownloadFile(props.file) }} title="Download file"><Download size={16} /></button>
-        <button onClick={(event) => { event.stopPropagation(); props.onShareFile(props.file) }} disabled={props.busy} title={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
         <button onClick={(event) => { event.stopPropagation(); props.onDeleteFile(props.file) }} title="Delete"><Trash2 size={16} /></button>
+        <button onClick={(event) => { event.stopPropagation(); props.onShareFile(props.file) }} disabled={props.busy} title={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
       </span>
     </div>
   )

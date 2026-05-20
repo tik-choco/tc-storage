@@ -216,8 +216,7 @@
   box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.16);
 }
 
-.file-open-button,
-.name-detail-button {
+.file-open-button {
   display: inline-flex;
   align-items: center;
   min-width: 0;
@@ -239,17 +238,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.name-detail-button {
-  justify-content: center;
-  width: 32px;
-  color: #64748b;
-}
-
-.name-detail-button:hover {
-  background: #e2e8f0;
-  color: #0f766e;
 }
 
 .status-cell {
