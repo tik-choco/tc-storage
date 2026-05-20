@@ -19,6 +19,7 @@ export function remoteFolderSnapshot(bundle: FolderBundle, share: PendingShare):
   const rootFolder = stampFolderPatch(
     bundle.folder,
     {
+      parentId: null,
       shareEnabled: true,
       sharedRoomId: share.roomId,
       lastCid: share.cid,

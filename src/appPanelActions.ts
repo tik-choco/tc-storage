@@ -78,7 +78,7 @@ export function createPanelActions(options: PanelOptions) {
     setSettingsOpen(false)
     setProfileOpen(false)
     setFolderPanelFolderId(null)
-    setFolderPanelOpen(true)
+    setFolderPanelOpen(false)
     setDetailFileId(null)
     setSelectedFileId(null)
     setExpandedPreviewOpen(false)

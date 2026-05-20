@@ -70,7 +70,7 @@ export function AppLayout({ controller: c }: AppLayoutProps) {
           onOpenFolderPanel={c.openFolderPanel}
           onPreloadFile={c.preloadFileContent}
           onQuery={c.setQuery}
-          onSaveFolder={(share, anchor) => void c.saveFolderToMist(share, anchor)}
+          onSaveFolder={(share) => void c.saveFolderToMist(share)}
           onSelectFolder={c.selectFolder}
           onShareFile={(file) => void c.shareFile(file)}
           onShowFileDetails={c.showFileDetails}
@@ -110,14 +110,8 @@ function renderFolderPanel(c: AppController) {
           folder={c.folderPanelFolder}
           shareUrl={c.folderShareUrl}
           syncPeers={c.folderPanelPeers}
-          pendingShares={c.pendingShares}
-          importKeys={c.importKeys}
-          busy={c.busy}
-          onCancelShare={c.cancelPendingShare}
           onCopy={c.copyText}
           onDeleteFolder={c.deleteCurrentFolder}
-          onImportKey={(cid, value) => c.setImportKeys((current) => ({ ...current, [cid]: value }))}
-          onImportShare={(share) => void c.importShare(share)}
           onPatchFolder={c.patchCurrentFolder}
         />
       </DraggablePopover>

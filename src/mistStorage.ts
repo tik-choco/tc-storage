@@ -42,12 +42,14 @@ export async function saveEncryptedFolderToMist(options: {
 }): Promise<string> {
   assertMistStorageAvailable()
   const mist = await loadMistModule()
+  const rootFolder = { ...options.folder, parentId: null }
+  const folders = options.folders?.map((folder) => (folder.id === options.folder.id ? rootFolder : folder))
   const bundle: FolderBundle = {
     version: 1,
     exportedAt: new Date().toISOString(),
     originNode: options.originNode,
-    folder: options.folder,
-    folders: options.folders,
+    folder: rootFolder,
+    folders,
     files: options.files.map(stripFileContent),
   }
   const encrypted = await encryptJson(bundle, options.passphrase)

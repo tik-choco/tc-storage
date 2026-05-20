@@ -12,8 +12,6 @@ import type { AppSettings } from './localSettings.js'
 import { saveEncryptedFolderToMist } from './mistStorage.js'
 import type { ShareProfile } from './p2p.js'
 import { makeFolderShareUrl } from './shareLinks.js'
-import type { PopoverPosition } from './components/FloatingPopover.js'
-import { popoverPositionFromAnchor } from './components/FloatingPopover.js'
 
 interface FolderActionOptions {
   announceFolderChange: (folder: FolderRecord, changeType: 'folder-upserted' | 'folder-deleted', file?: FileRecord, changedFolder?: FolderRecord) => void
@@ -26,7 +24,6 @@ interface FolderActionOptions {
   folderPanelFolderId: string | null
   folderKeysRef: MutableRef<Record<string, string>>
   folders: FolderRecord[]
-  movePopover: (kind: 'folder', position: PopoverPosition) => void
   networkRef: MutableRef<MistShare>
   setBusy: SetState<string>
   setCurrentFolderId: SetState<string | null>
@@ -52,7 +49,7 @@ interface FolderActionOptions {
 export function createFolderActions(options: FolderActionOptions) {
   const {
     announceFolderChange, clearFolderSyncTimer, currentFolder, currentFolderId, currentFolderKey,
-    ensureFolderFilesStored, folderKeysRef, folderPanelFolder, folderPanelFolderId, folders, movePopover, networkRef,
+    ensureFolderFilesStored, folderKeysRef, folderPanelFolder, folderPanelFolderId, folders, networkRef,
     setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setProfileOpen,
     setSelectedFileId, setSettingsOpen, setSnapshot, settings, shareProfile, snapshot, snapshotRef,
@@ -106,7 +103,7 @@ export function createFolderActions(options: FolderActionOptions) {
     setNotice({ tone: 'success', text: `${folder.name} を作成しました` })
   }
 
-  async function saveFolderToMist(shareAfterSave: boolean, anchor?: HTMLElement) {
+  async function saveFolderToMist(shareAfterSave: boolean) {
     if (!currentFolder) return setNotice({ tone: 'error', text: '保存するフォルダーを選択してください' })
     const passphrase = currentFolderKey || generateFolderKey()
     if (!currentFolderKey) setFolderKeys((current) => ({ ...current, [currentFolder.id]: passphrase }))
@@ -114,9 +111,8 @@ export function createFolderActions(options: FolderActionOptions) {
     const clipboard = shareAfterSave ? reserveClipboardWrite() : undefined
     setBusy(shareAfterSave ? 'share' : 'save')
     if (shareAfterSave) {
-      if (anchor) movePopover('folder', popoverPositionFromAnchor(anchor, 360))
-      setFolderPanelFolderId(currentFolder.id)
-      setFolderPanelOpen(true)
+      setFolderPanelFolderId(null)
+      setFolderPanelOpen(false)
       setSettingsOpen(false)
       setProfileOpen(false)
       setDetailFileId(null)

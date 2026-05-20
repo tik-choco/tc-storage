@@ -150,6 +150,44 @@ test('remoteFolderSnapshot imports descendant folders from folder bundle', () =>
   assert.ok(remote.folders.some((item) => item.id === childFolder.id && item.parentId === folder.id))
 })
 
+test('remoteFolderSnapshot detaches a shared nested folder from its original parent', () => {
+  const { folder: parent } = snapshotWithFolderAndFile()
+  const childFolder = makeFolder({
+    id: 'folder-child',
+    name: 'Assets',
+    parentId: parent.id,
+    color: 'blue',
+    roomId: 'tc-storage-main',
+    now: '2026-05-17T00:00:00.000Z',
+    nodeId: 'node-a',
+  })
+
+  const remote = remoteFolderSnapshot(
+    {
+      version: 1,
+      exportedAt: '2026-05-17T00:00:00.000Z',
+      originNode: 'node-a',
+      folder: childFolder,
+      folders: [childFolder],
+      files: [],
+    },
+    {
+      type: 'folder-share',
+      from: 'node-a',
+      roomId: 'tc-storage-main',
+      sentAt: '2026-05-17T00:00:01.000Z',
+      receivedAt: '2026-05-17T00:00:02.000Z',
+      clock: 2,
+      folderId: childFolder.id,
+      folderName: childFolder.name,
+      cid: 'cid-folder-child',
+    },
+  )
+
+  assert.deepEqual(remote.folders.map((item) => item.id), [childFolder.id])
+  assert.equal(remote.folders[0]?.parentId, null)
+})
+
 test('canAutoImportFolderShare accepts same folder with key even before local sharing is enabled', () => {
   const { folder } = snapshotWithFolderAndFile()
 
