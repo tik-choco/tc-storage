@@ -102,7 +102,6 @@ export function createFileActions(options: FileActionOptions) {
     const now = new Date().toISOString()
     const clipboard = reserveClipboardWrite()
     setBusy(`file-share-${file.id}`)
-    setDetailFileId(file.id)
     setSettingsOpen(false)
     setNotice({ tone: 'info', text: '共有URLを作成中...' })
     try {

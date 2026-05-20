@@ -161,9 +161,9 @@ export function FileTile(props: {
         <div class="media-only-overlay">
           <strong class="media-only-name">{props.file.name}</strong>
           <span class="media-only-actions">
-            <button onClick={(event) => props.onShowFileDetails(props.file, event.currentTarget)} aria-label="Show file details"><Info size={16} /></button>
-            <button onClick={() => props.onShareFile(props.file)} disabled={props.busy} aria-label={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
-            <button onClick={() => props.onDeleteFile(props.file)} aria-label="Delete file"><Trash2 size={16} /></button>
+            <button onClick={(event) => { event.stopPropagation(); props.onShowFileDetails(props.file, event.currentTarget) }} aria-label="Show file details"><Info size={16} /></button>
+            <button onClick={(event) => { event.stopPropagation(); props.onShareFile(props.file) }} disabled={props.busy} aria-label={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
+            <button onClick={(event) => { event.stopPropagation(); props.onDeleteFile(props.file) }} aria-label="Delete file"><Trash2 size={16} /></button>
           </span>
         </div>
       </div>
@@ -196,9 +196,9 @@ export function FileTile(props: {
       </div>
       <span class="tile-date">{dateLabel(props.file.updatedAt)}</span>
       <span class="row-actions tile-actions">
-        <button onClick={(event) => props.onShowFileDetails(props.file, event.currentTarget)} title="Details"><Info size={16} /></button>
-        <button onClick={() => props.onShareFile(props.file)} disabled={props.busy} title={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
-        <button onClick={() => props.onDeleteFile(props.file)} title="Delete"><Trash2 size={16} /></button>
+        <button onClick={(event) => { event.stopPropagation(); props.onShowFileDetails(props.file, event.currentTarget) }} title="Details"><Info size={16} /></button>
+        <button onClick={(event) => { event.stopPropagation(); props.onShareFile(props.file) }} disabled={props.busy} title={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
+        <button onClick={(event) => { event.stopPropagation(); props.onDeleteFile(props.file) }} title="Delete"><Trash2 size={16} /></button>
       </span>
     </div>
   )
