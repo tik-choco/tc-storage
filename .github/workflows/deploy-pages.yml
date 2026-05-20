@@ -16,6 +16,7 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       VITE_BASE_PATH: /tc-storage/
+      VITE_ENABLE_DEBUG_LOGS: false
     permissions:
       contents: read
       pages: write

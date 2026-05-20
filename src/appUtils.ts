@@ -1,16 +1,17 @@
 import type { BrowserViewMode, PendingShare } from './appTypes.js'
 import type { FileRecord, FolderBundle, FolderRecord, StorageSnapshot } from './domain.js'
+import { debugInfo, debugWarn } from './logging.js'
 import type { ShareEnvelope } from './p2p.js'
 
 export const folderColors = ['teal', 'blue', 'amber', 'rose', 'slate'] as const
 export const browserViewModeKey = 'tc-storage-browser-view-mode-v1'
 
 export function syncLog(message: string, details?: Record<string, unknown>): void {
-  console.info('[tc-storage:sync]', message, details ?? '')
+  debugInfo('sync', message, details)
 }
 
 export function syncWarn(message: string, details?: Record<string, unknown>): void {
-  console.warn('[tc-storage:sync]', message, details ?? '')
+  debugWarn('sync', message, details)
 }
 
 export function isSeededLegacySnapshot(snapshot: StorageSnapshot): boolean {

@@ -78,9 +78,20 @@ export default defineConfig(({ mode }) => {
     ? Number(env.VITE_HMR_CLIENT_PORT)
     : undefined
   const base = env.VITE_BASE_PATH || '/'
+  const debugLogsEnabled = env.VITE_ENABLE_DEBUG_LOGS === 'true'
 
   return {
     base,
+    build: {
+      rolldownOptions: {
+        output: {
+          minify:
+            mode === 'production' && !debugLogsEnabled
+              ? { compress: { dropConsole: true } }
+              : undefined,
+        },
+      },
+    },
     plugins: [
       !hmrEnabled && noopViteHmrClientPlugin(),
       preact(),

@@ -1,5 +1,6 @@
 import { decryptJson, encryptJson, type EncryptedPayload } from './crypto.js'
 import { stripFileContent, type FileBundle, type FileRecord, type FolderBundle, type FolderRecord } from './domain.js'
+import { debugInfo, debugWarn } from './logging.js'
 
 type MistModule = typeof import('./vendor/mistlib-wasm/mistlib_wasm.js')
 type NavigatorWithOpfs = Navigator & {
@@ -13,11 +14,11 @@ const decoder = new TextDecoder()
 let mistModulePromise: Promise<MistModule> | undefined
 
 function storageLog(message: string, details?: Record<string, unknown>): void {
-  console.info('[tc-storage:mist-storage]', message, details ?? '')
+  debugInfo('mist-storage', message, details)
 }
 
 function storageWarn(message: string, details?: Record<string, unknown>): void {
-  console.warn('[tc-storage:mist-storage]', message, details ?? '')
+  debugWarn('mist-storage', message, details)
 }
 
 export async function loadMistModule(): Promise<MistModule> {

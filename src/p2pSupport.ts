@@ -1,4 +1,5 @@
 import type { AppSettings } from './localSettings.js'
+import { debugInfo, debugWarn } from './logging.js'
 import type { BroadcastSharePayload, MistModule, NetworkState, ShareEnvelope, ShareProfile } from './p2pTypes.js'
 
 export const initialNetworkState: NetworkState = {
@@ -10,11 +11,11 @@ export const initialNetworkState: NetworkState = {
 }
 
 export function p2pLog(message: string, details?: Record<string, unknown>): void {
-  console.info('[tc-storage:p2p]', message, details ?? '')
+  debugInfo('p2p', message, details)
 }
 
 export function p2pWarn(message: string, details?: Record<string, unknown>): void {
-  console.warn('[tc-storage:p2p]', message, details ?? '')
+  debugWarn('p2p', message, details)
 }
 
 export function createOutgoingShareEnvelope(payload: BroadcastSharePayload, settings: AppSettings): ShareEnvelope {
