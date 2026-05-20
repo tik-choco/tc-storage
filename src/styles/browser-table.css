@@ -3,9 +3,27 @@
   width: 100%;
 }
 
+.table.drop-zone {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .drop-zone.drag-active {
   outline: 3px solid rgba(20, 184, 166, 0.28);
   outline-offset: -3px;
+}
+
+.marquee-active {
+  user-select: none;
+}
+
+.selection-marquee {
+  position: absolute;
+  z-index: 6;
+  border: 1px solid #0f766e;
+  border-radius: 4px;
+  background: rgba(20, 184, 166, 0.14);
+  pointer-events: none;
 }
 
 .movable-item {
@@ -26,19 +44,19 @@
 }
 
 .table:not(.table-grid) .reorder-before {
-  box-shadow: inset 0 3px 0 #2563eb;
+  box-shadow: inset 0 3px 0 #0f766e;
 }
 
 .table:not(.table-grid) .reorder-after {
-  box-shadow: inset 0 -3px 0 #2563eb;
+  box-shadow: inset 0 -3px 0 #0f766e;
 }
 
 .table-grid .reorder-before {
-  box-shadow: -4px 0 0 #2563eb;
+  box-shadow: -4px 0 0 #0f766e;
 }
 
 .table-grid .reorder-after {
-  box-shadow: 4px 0 0 #2563eb;
+  box-shadow: 4px 0 0 #0f766e;
 }
 
 .drop-zone.drop-target,
@@ -81,12 +99,53 @@
 
 .table-row {
   display: grid;
-  grid-template-columns: minmax(240px, 1.6fr) minmax(110px, 0.7fr) minmax(90px, 0.5fr) minmax(110px, 0.6fr) 124px;
+  grid-template-columns: 28px minmax(240px, 1.6fr) minmax(110px, 0.7fr) minmax(90px, 0.5fr) minmax(110px, 0.6fr) 124px;
   align-items: center;
   gap: 12px;
   min-height: 58px;
   padding: 0 14px;
   border-bottom: 1px solid #edf2f7;
+}
+
+.selection-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selected-item {
+  border-color: #5eead4;
+  background: #ecfdf5;
+  box-shadow: inset 3px 0 0 #0f766e;
+}
+
+.table-grid .tile-card.selected-item::before,
+.table-grid .tile-card.selected-item::after {
+  position: absolute;
+  content: "";
+  pointer-events: none;
+}
+
+.table-grid .tile-card.selected-item::after {
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #0f766e;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+}
+
+.table-grid .tile-card.selected-item::before {
+  top: 13px;
+  right: 13px;
+  z-index: 5;
+  width: 7px;
+  height: 4px;
+  border-bottom: 2px solid #fff;
+  border-left: 2px solid #fff;
+  transform: rotate(-45deg);
 }
 
 .table-row:last-child {

@@ -1,11 +1,15 @@
 .table-grid {
   display: grid;
+  align-content: start;
+  align-items: start;
+  grid-auto-rows: max-content;
   grid-template-columns: repeat(auto-fill, minmax(176px, 190px));
   gap: 12px;
   padding: 14px;
 }
 
 .tile-card {
+  position: relative;
   display: grid;
   grid-template-rows: auto auto auto auto;
   align-content: start;
@@ -21,6 +25,22 @@
 .tile-card:hover {
   border-color: #b8c8d6;
   background: #f8fafc;
+}
+
+.table-grid .tile-card.selected-item,
+.table-grid .tile-card.selected-item:hover {
+  border-color: #0f766e;
+  background: #ecfdf5;
+  box-shadow:
+    inset 3px 0 0 #0f766e,
+    0 0 0 2px rgba(20, 184, 166, 0.16);
+}
+
+.table-grid .media-only-tile.selected-item,
+.table-grid .media-only-tile.selected-item:hover {
+  border: 2px solid #0f766e;
+  background: #ecfdf5;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.16);
 }
 
 .pending-folder-tile {

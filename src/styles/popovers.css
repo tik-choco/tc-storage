@@ -82,6 +82,21 @@
   width: min(330px, calc(100vw - 28px));
 }
 
+.centered-popover {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  max-height: calc(100dvh - 28px);
+  animation: centered-popover-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 50%;
+}
+
+.confirm-popover .panel-title,
+.confirm-popover .panel-title:active {
+  cursor: default;
+}
+
 .delete-confirm-panel {
   display: grid;
   gap: 10px;
@@ -132,5 +147,17 @@
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes centered-popover-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 10px)) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
   }
 }

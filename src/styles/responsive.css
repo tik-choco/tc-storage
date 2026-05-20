@@ -75,6 +75,7 @@
   }
 
   .main-column {
+    min-height: calc(100dvh - 49px);
     padding: 8px 8px 50px;
   }
 
@@ -93,38 +94,13 @@
     transform-origin: 50% 0;
   }
 
-  .topbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-  }
-
   .browser-head {
     align-items: stretch;
     flex-direction: column;
   }
 
   .browser-actions {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 38px minmax(76px, auto);
-    width: 100%;
-    margin-left: 0;
-  }
-
-  .browser-actions.root-actions {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .used-pill {
-    height: 34px;
-    min-height: 34px;
-    min-width: 0;
-    justify-content: center;
-    padding: 0 8px;
-  }
-
-  .used-pill span {
-    display: none;
+    gap: 6px;
   }
 
   .browser-actions .share-button {
@@ -141,18 +117,27 @@
     display: none;
   }
 
-  .search-strip {
-    grid-template-columns: minmax(0, 1fr) repeat(4, 36px);
+  .browser-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 6px;
     padding: 8px;
   }
 
-  .search-strip .search-box {
-    min-width: 0;
+  .browser-toolbar.with-path {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .browser-toolbar .breadcrumbs {
+    grid-column: 1 / -1;
+    max-width: 100%;
+  }
+
+  .browser-tool-actions {
+    gap: 6px;
   }
 
   .view-toggle {
-    grid-column: 2 / span 2;
+    grid-column: auto;
   }
 
   .table-grid {
@@ -206,7 +191,7 @@
   }
 
   .table-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
     gap: 6px;
     padding: 12px 14px;
   }
@@ -215,32 +200,35 @@
     display: none;
   }
 
-  .table-row > span:nth-child(2),
   .table-row > span:nth-child(3),
-  .table-row > span:nth-child(4) {
-    grid-column: 1 / 2;
+  .table-row > span:nth-child(4),
+  .table-row > span:nth-child(5) {
+    grid-column: 2 / 3;
     font-size: 12px;
   }
 
   .table-row .row-actions {
-    grid-column: 2 / 3;
+    grid-column: 3 / 4;
     grid-row: 1 / span 4;
   }
 }
 
 @media (max-width: 420px) {
-  .search-strip {
-    grid-template-columns: minmax(0, 1fr) repeat(4, 34px);
+  .browser-toolbar {
+    grid-template-columns: 1fr;
     gap: 6px;
     padding: 8px;
+  }
+
+  .browser-tool-actions {
+    justify-content: flex-end;
   }
 
   .view-toggle {
     grid-template-columns: repeat(2, 34px);
   }
 
-  .search-strip button,
-  .search-strip .search-box,
+  .browser-tool-actions > button,
   .view-toggle {
     min-height: 34px;
     height: 34px;

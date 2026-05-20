@@ -1,9 +1,10 @@
-import { Check, Copy, FileText, Folder, Info, Lock, Share2, ShieldCheck, Star, Trash2, X } from 'lucide-preact'
+import { Check, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, X } from 'lucide-preact'
 import { useEffect } from 'preact/hooks'
 import type { BrowserDragItem, BrowserReorderTarget, PendingShare } from '../appTypes.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
 import { dateLabel } from '../format.js'
 import type { DraftFolderProps } from './BrowserTableTypes.js'
+import { DraftFolderInput } from './DraftFolderInput.js'
 
 export function NewFolderTile(props: DraftFolderProps) {
   function handleKeyDown(event: KeyboardEvent) {
@@ -16,7 +17,7 @@ export function NewFolderTile(props: DraftFolderProps) {
       <div class="tile-icon">
         <Folder size={30} class="folder-stroke teal" />
       </div>
-      <input value={props.name} autoFocus onInput={(event) => props.onChange(event.currentTarget.value)} onKeyDown={handleKeyDown} placeholder="Folder name" />
+      <DraftFolderInput name={props.name} onChange={props.onChange} onKeyDown={handleKeyDown} />
       <span class="tile-meta">New folder</span>
       <span class="row-actions tile-actions">
         <button onClick={props.onConfirm} title="Create folder"><Check size={16} /></button>
@@ -32,7 +33,7 @@ export function FolderTile(props: {
   folder: FolderRecord
   files: FileRecord[]
   reorderTarget: BrowserReorderTarget | null
-  onCopy: (value: string, label: string) => void
+  selected: boolean
   onDeleteFolder: (folder: FolderRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
@@ -49,8 +50,13 @@ export function FolderTile(props: {
 
   return (
     <div
-      class={`tile-card folder-tile movable-item folder-drop-target ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
+      class={`tile-card folder-tile movable-item selectable-item folder-drop-target ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
+      data-select-id={props.folder.id}
+      data-select-type="folder"
       draggable
+      onClick={(event) => {
+        if (!isActionClick(event)) props.onSelectFolder(props.folder.id)
+      }}
       onDragEnd={props.onDragEnd}
       onDragLeave={(event) => props.onItemDragLeave({ type: 'folder', id: props.folder.id }, event)}
       onDragOver={(event) => props.onItemDragOver({ type: 'folder', id: props.folder.id }, event)}
@@ -73,7 +79,6 @@ export function FolderTile(props: {
       </div>
       <span class="tile-date">{dateLabel(props.folder.updatedAt)}</span>
       <span class="row-actions tile-actions">
-        {props.folder.lastCid ? <button onClick={() => props.onCopy(props.folder.lastCid ?? '', 'CID')} title="Copy CID"><Copy size={16} /></button> : null}
         <button onClick={(event) => props.onShowFolderDetails(props.folder, event.currentTarget)} title="Details"><Info size={16} /></button>
         <button onClick={() => props.onDeleteFolder(props.folder)} title="Delete folder"><Trash2 size={16} /></button>
       </span>
@@ -112,6 +117,7 @@ export function FileTile(props: {
   dragItem: BrowserDragItem | null
   file: FileRecord
   reorderTarget: BrowserReorderTarget | null
+  selected: boolean
   onDeleteFile: (file: FileRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
@@ -122,7 +128,6 @@ export function FileTile(props: {
   onPreloadFile: (file: FileRecord) => void
   onShareFile: (file: FileRecord) => void
   onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
-  onToggleStar: (file: FileRecord) => void
 }) {
   const isDragSource = props.dragItem?.type === 'file' && props.dragItem.id === props.file.id
   const reorderClass = reorderTargetClass(props.reorderTarget, 'file', props.file.id)
@@ -136,8 +141,13 @@ export function FileTile(props: {
   if (isMediaFile(props.file)) {
     return (
       <div
-        class={`tile-card file-tile media-only-tile movable-item ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
+        class={`tile-card file-tile media-only-tile movable-item selectable-item ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
+        data-select-id={props.file.id}
+        data-select-type="file"
         draggable
+        onClick={(event) => {
+          if (!isActionClick(event)) props.onOpenFile(props.file)
+        }}
         onDragEnd={props.onDragEnd}
         onDragLeave={(event) => props.onItemDragLeave({ type: 'file', id: props.file.id }, event)}
         onDragOver={(event) => props.onItemDragOver({ type: 'file', id: props.file.id }, event)}
@@ -151,7 +161,6 @@ export function FileTile(props: {
         <div class="media-only-overlay">
           <strong class="media-only-name">{props.file.name}</strong>
           <span class="media-only-actions">
-            <button onClick={() => props.onToggleStar(props.file)} aria-label="Star file"><Star size={16} fill={props.file.starred ? 'currentColor' : 'none'} /></button>
             <button onClick={(event) => props.onShowFileDetails(props.file, event.currentTarget)} aria-label="Show file details"><Info size={16} /></button>
             <button onClick={() => props.onShareFile(props.file)} disabled={props.busy} aria-label={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
             <button onClick={() => props.onDeleteFile(props.file)} aria-label="Delete file"><Trash2 size={16} /></button>
@@ -163,8 +172,13 @@ export function FileTile(props: {
 
   return (
     <div
-      class={`tile-card file-tile movable-item ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
+      class={`tile-card file-tile movable-item selectable-item ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
+      data-select-id={props.file.id}
+      data-select-type="file"
       draggable
+      onClick={(event) => {
+        if (!isActionClick(event)) props.onOpenFile(props.file)
+      }}
       onDragEnd={props.onDragEnd}
       onDragLeave={(event) => props.onItemDragLeave({ type: 'file', id: props.file.id }, event)}
       onDragOver={(event) => props.onItemDragOver({ type: 'file', id: props.file.id }, event)}
@@ -182,7 +196,6 @@ export function FileTile(props: {
       </div>
       <span class="tile-date">{dateLabel(props.file.updatedAt)}</span>
       <span class="row-actions tile-actions">
-        <button onClick={() => props.onToggleStar(props.file)} title="Star"><Star size={16} fill={props.file.starred ? 'currentColor' : 'none'} /></button>
         <button onClick={(event) => props.onShowFileDetails(props.file, event.currentTarget)} title="Details"><Info size={16} /></button>
         <button onClick={() => props.onShareFile(props.file)} disabled={props.busy} title={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
         <button onClick={() => props.onDeleteFile(props.file)} title="Delete"><Trash2 size={16} /></button>
@@ -233,4 +246,9 @@ function FileTilePreview(props: { dataUrl: string | undefined; file: FileRecord;
       <FileText size={32} />
     </span>
   )
+}
+
+function isActionClick(event: MouseEvent): boolean {
+  const target = event.target
+  return target instanceof Element && Boolean(target.closest('button,input,a,select,textarea'))
 }

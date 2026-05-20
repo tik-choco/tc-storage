@@ -1,8 +1,10 @@
-import { Check, Copy, FileText, Folder, Info, Lock, Share2, ShieldCheck, Star, Trash2, X } from 'lucide-preact'
+import { Check, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, X } from 'lucide-preact'
+import { selectFromPointerEvent } from '../appSelectionActions.js'
 import type { BrowserDragItem, BrowserReorderTarget, PendingShare } from '../appTypes.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
 import { dateLabel } from '../format.js'
 import type { DraftFolderProps } from './BrowserTableTypes.js'
+import { DraftFolderInput } from './DraftFolderInput.js'
 
 export function NewFolderRow(props: DraftFolderProps) {
   function handleKeyDown(event: KeyboardEvent) {
@@ -12,9 +14,10 @@ export function NewFolderRow(props: DraftFolderProps) {
 
   return (
     <div class="table-row draft-folder-row" role="row">
+      <span class="selection-cell" />
       <div class="name-cell draft-folder-name">
         <Folder size={20} class="folder-stroke teal" />
-        <input value={props.name} autoFocus onInput={(event) => props.onChange(event.currentTarget.value)} onKeyDown={handleKeyDown} placeholder="Folder name" />
+        <DraftFolderInput name={props.name} onChange={props.onChange} onKeyDown={handleKeyDown} />
       </div>
       <span class="status-cell">
         <Lock size={15} />
@@ -36,7 +39,7 @@ export function FolderRow(props: {
   folder: FolderRecord
   files: FileRecord[]
   reorderTarget: BrowserReorderTarget | null
-  onCopy: (value: string, label: string) => void
+  selected: boolean
   onDeleteFolder: (folder: FolderRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
@@ -44,6 +47,7 @@ export function FolderRow(props: {
   onItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
   onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onSelectFolder: (folderId: string | null) => void
+  onSelectItem: (item: BrowserDragItem, selected: boolean, range?: boolean) => void
   onShowFolderDetails: (folder: FolderRecord, anchor?: HTMLElement) => void
 }) {
   const isDragSource = props.dragItem?.type === 'folder' && props.dragItem.id === props.folder.id
@@ -52,8 +56,11 @@ export function FolderRow(props: {
 
   return (
     <div
-      class={`table-row movable-item folder-drop-target ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
+      class={`table-row movable-item selectable-item folder-drop-target ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
+      data-select-id={props.folder.id}
+      data-select-type="folder"
       draggable
+      onClick={(event) => handleSelectClick(event, { type: 'folder', id: props.folder.id }, props.selected, props.onSelectItem)}
       onDragEnd={props.onDragEnd}
       onDragLeave={(event) => props.onItemDragLeave({ type: 'folder', id: props.folder.id }, event)}
       onDragOver={(event) => props.onItemDragOver({ type: 'folder', id: props.folder.id }, event)}
@@ -61,6 +68,9 @@ export function FolderRow(props: {
       onDrop={(event) => props.onItemDrop({ type: 'folder', id: props.folder.id }, event)}
       role="row"
     >
+      <span class="selection-cell">
+        <input type="checkbox" checked={props.selected} onClick={(event) => props.onSelectItem({ type: 'folder', id: props.folder.id }, event.currentTarget.checked, event.shiftKey)} aria-label={`Select ${props.folder.name}`} />
+      </span>
       <button class="name-cell" onClick={() => props.onSelectFolder(props.folder.id)}>
         <Folder size={20} class={`folder-stroke ${props.folder.color}`} />
         <span>{props.folder.name}</span>
@@ -72,7 +82,6 @@ export function FolderRow(props: {
       <span>{filesInFolder({ folders: [], files: props.files, activity: [], clock: 0, originNode: '' }, props.folder.id).length} files</span>
       <span>{dateLabel(props.folder.updatedAt)}</span>
       <span class="row-actions">
-        {props.folder.lastCid ? <button onClick={() => props.onCopy(props.folder.lastCid ?? '', 'CID')} title="Copy CID"><Copy size={16} /></button> : null}
         <button onClick={(event) => props.onShowFolderDetails(props.folder, event.currentTarget)} title="Details"><Info size={16} /></button>
         <button onClick={() => props.onDeleteFolder(props.folder)} title="Delete folder"><Trash2 size={16} /></button>
       </span>
@@ -87,6 +96,7 @@ export function PendingFolderShareRow(props: {
 }) {
   return (
     <div class="table-row pending-folder-row" role="row">
+      <span class="selection-cell" />
       <div class="name-cell">
         <Folder size={20} class="folder-stroke blue" />
         <span>{props.share.folderName ?? 'Shared folder'}</span>
@@ -109,6 +119,7 @@ export function FileRow(props: {
   dragItem: BrowserDragItem | null
   file: FileRecord
   reorderTarget: BrowserReorderTarget | null
+  selected: boolean
   onDeleteFile: (file: FileRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
@@ -116,17 +127,20 @@ export function FileRow(props: {
   onItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
   onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onOpenFile: (file: FileRecord) => void
+  onSelectItem: (item: BrowserDragItem, selected: boolean, range?: boolean) => void
   onShareFile: (file: FileRecord) => void
   onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
-  onToggleStar: (file: FileRecord) => void
 }) {
   const isDragSource = props.dragItem?.type === 'file' && props.dragItem.id === props.file.id
   const reorderClass = reorderTargetClass(props.reorderTarget, 'file', props.file.id)
 
   return (
     <div
-      class={`table-row movable-item ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
+      class={`table-row movable-item selectable-item ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
+      data-select-id={props.file.id}
+      data-select-type="file"
       draggable
+      onClick={(event) => handleSelectClick(event, { type: 'file', id: props.file.id }, props.selected, props.onSelectItem)}
       onDragEnd={props.onDragEnd}
       onDragLeave={(event) => props.onItemDragLeave({ type: 'file', id: props.file.id }, event)}
       onDragOver={(event) => props.onItemDragOver({ type: 'file', id: props.file.id }, event)}
@@ -134,6 +148,9 @@ export function FileRow(props: {
       onDrop={(event) => props.onItemDrop({ type: 'file', id: props.file.id }, event)}
       role="row"
     >
+      <span class="selection-cell">
+        <input type="checkbox" checked={props.selected} onClick={(event) => props.onSelectItem({ type: 'file', id: props.file.id }, event.currentTarget.checked, event.shiftKey)} aria-label={`Select ${props.file.name}`} />
+      </span>
       <div class="name-cell file-name-cell">
         <button class="file-open-button" onClick={() => props.onOpenFile(props.file)} title="Open preview">
           <FileText size={20} />
@@ -147,7 +164,6 @@ export function FileRow(props: {
       <span>{formatBytes(props.file.size)}</span>
       <span>{dateLabel(props.file.updatedAt)}</span>
       <span class="row-actions">
-        <button onClick={() => props.onToggleStar(props.file)} title="Star"><Star size={16} fill={props.file.starred ? 'currentColor' : 'none'} /></button>
         <button onClick={() => props.onShareFile(props.file)} disabled={props.busy} title={props.busy ? 'Sharing file' : 'Share file'}><Share2 size={16} /></button>
         <button onClick={() => props.onDeleteFile(props.file)} title="Delete"><Trash2 size={16} /></button>
       </span>
@@ -157,4 +173,20 @@ export function FileRow(props: {
 
 function reorderTargetClass(target: BrowserReorderTarget | null, type: BrowserDragItem['type'], id: string): string {
   return target?.type === type && target.id === id ? `reorder-${target.position}` : ''
+}
+
+function handleSelectClick(
+  event: MouseEvent,
+  item: BrowserDragItem,
+  selected: boolean,
+  onSelectItem: (item: BrowserDragItem, selected: boolean, range?: boolean) => void,
+) {
+  if (isActionClick(event)) return
+  const next = selectFromPointerEvent(event, selected)
+  onSelectItem(item, next.selected, next.range)
+}
+
+function isActionClick(event: MouseEvent): boolean {
+  const target = event.target
+  return target instanceof Element && Boolean(target.closest('button,input,a,select,textarea'))
 }

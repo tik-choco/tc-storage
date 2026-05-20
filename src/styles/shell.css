@@ -125,15 +125,11 @@
 }
 
 .main-column {
-  min-width: 0;
-  padding: 16px 16px 46px;
-}
-
-.topbar {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100vh;
+  padding: 16px 16px 46px;
 }
 
 .hidden-input {

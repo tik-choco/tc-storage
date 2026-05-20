@@ -1,11 +1,15 @@
-import { AlertCircle, CheckCircle2, Wifi } from 'lucide-preact'
+import { AlertCircle, CheckCircle2, HardDrive, Wifi } from 'lucide-preact'
 import type { DownloadProgress, Notice } from '../appTypes.js'
+import { formatBytes } from '../domain.js'
 import type { NetworkState } from '../p2p.js'
 
 export function TopSummary(props: {
+  currentFolderName: string | null
+  currentFolderStorageUsed: number
   downloadProgress: DownloadProgress | null
   networkState: NetworkState
   notice: Notice
+  storageUsed: number
 }) {
   return (
     <footer class="status-bar">
@@ -31,6 +35,18 @@ export function TopSummary(props: {
           <strong>{props.downloadProgress.percent}%</strong>
         </div>
       ) : null}
+      <div class="status-storage" title={`${props.currentFolderName}: ${formatBytes(props.currentFolderStorageUsed)} / Total: ${formatBytes(props.storageUsed)}`}>
+        <HardDrive size={14} />
+        {props.currentFolderName ? (
+          <>
+            <span>{props.currentFolderName}</span>
+            <strong>{formatBytes(props.currentFolderStorageUsed)}</strong>
+            <i />
+          </>
+        ) : null}
+        <span>Total</span>
+        <strong>{formatBytes(props.storageUsed)}</strong>
+      </div>
     </footer>
   )
 }

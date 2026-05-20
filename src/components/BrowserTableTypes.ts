@@ -1,4 +1,5 @@
 import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare } from '../appTypes.js'
+import type { SelectionActions } from '../appSelectionActions.js'
 import type { FileRecord, FolderRecord } from '../domain.js'
 
 export type BrowserTableProps = {
@@ -13,13 +14,13 @@ export type BrowserTableProps = {
   fileDataUrls: Record<string, string>
   folderRows: FolderRecord[]
   pendingFolderShares: PendingShare[]
+  selection?: SelectionActions
   files: FileRecord[]
   folderNameDraft: string | null
   viewMode: BrowserViewMode
   onCancelCreateFolder: () => void
   onCancelPendingShare: (share: PendingShare) => void
   onConfirmCreateFolder: () => void
-  onCopy: (value: string, label: string) => void
   onDeleteFolder: (folder: FolderRecord) => void
   onDeleteFile: (file: FileRecord) => void
   onDrag: (event: DragEvent) => void
@@ -39,7 +40,6 @@ export type BrowserTableProps = {
   onShareFile: (file: FileRecord) => void
   onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
   onShowFolderDetails: (folder: FolderRecord, anchor?: HTMLElement) => void
-  onToggleStar: (file: FileRecord) => void
 }
 
 export type DraftFolderProps = {

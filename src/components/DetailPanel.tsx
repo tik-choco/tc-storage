@@ -28,7 +28,6 @@ export function FolderPanel(props: {
           <span>Folder</span>
           <strong>{props.folder ? props.folder.name : 'My Drive'}</strong>
         </div>
-        {props.folder?.lastCid ? <button onClick={() => props.onCopy(props.folder?.lastCid ?? '', 'CID')} title="Copy CID"><Copy size={17} /></button> : null}
       </div>
       {props.folder ? <FolderSettings {...props} folder={props.folder} /> : <div class="empty-detail">Select a folder to manage sharing.</div>}
       {props.folder ? <SyncPeers peers={props.syncPeers} /> : null}

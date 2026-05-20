@@ -14,10 +14,12 @@ export type PendingShare = ShareEnvelope & {
 
 export type BrowserViewMode = 'list' | 'grid'
 
-export type DeleteRequest = { type: 'file'; file: FileRecord } | { type: 'folder'; folder: FolderRecord }
-
 export type BrowserDragItem = { type: 'file' | 'folder'; id: string }
 export type BrowserReorderTarget = BrowserDragItem & { position: 'before' | 'after' }
+export type DeleteRequest =
+  | { type: 'file'; file: FileRecord }
+  | { type: 'folder'; folder: FolderRecord }
+  | { type: 'selection'; files: FileRecord[]; folders: FolderRecord[] }
 
 export type DownloadProgress = {
   fileId: string

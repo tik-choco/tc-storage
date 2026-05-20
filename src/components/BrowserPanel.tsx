@@ -1,18 +1,20 @@
 import {
   Folder,
   FolderPlus,
-  HardDrive,
   Info,
   LayoutGrid,
   List,
   Search,
   Share2,
+  Trash2,
   Upload,
+  X,
 } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
 import { useRef } from 'preact/hooks'
 import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare } from '../appTypes.js'
-import { folderPath, formatBytes, type FileRecord, type FolderRecord, type StorageSnapshot } from '../domain.js'
+import { emptySelectionActions, type SelectionActions } from '../appSelectionActions.js'
+import { folderPath, type FileRecord, type FolderRecord, type StorageSnapshot } from '../domain.js'
 import { FileTable } from './BrowserTable.js'
 
 export function BrowserPanel(props: {
@@ -32,9 +34,8 @@ export function BrowserPanel(props: {
   folderNameDraft: string | null
   query: string
   snapshot: StorageSnapshot
-  storageUsed: number
+  selection?: SelectionActions
   viewMode: BrowserViewMode
-  onCopy: (value: string, label: string) => void
   onCancelCreateFolder: () => void
   onCancelPendingShare: (share: PendingShare) => void
   onConfirmCreateFolder: () => void
@@ -61,27 +62,40 @@ export function BrowserPanel(props: {
   onSelectFolder: (folderId: string | null) => void
   onShareFile: (file: FileRecord) => void
   onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
-  onToggleStar: (file: FileRecord) => void
   onUploadFiles: (fileList: FileList | null) => void
   onViewMode: (mode: BrowserViewMode) => void
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentPath = props.currentFolderId ? folderPath(props.snapshot, props.currentFolderId) : []
+  const selection = props.selection ?? emptySelectionActions
 
   return (
     <>
-      <header class="topbar">
-        <Breadcrumbs currentPath={currentPath} onSelectFolder={props.onSelectFolder} />
-        <BrowserActions busy={props.busy} currentFolder={props.currentFolder} storageUsed={props.storageUsed} onOpenFolderPanel={props.onOpenFolderPanel} onSaveFolder={props.onSaveFolder} />
-        <input ref={fileInputRef} class="hidden-input" type="file" multiple onChange={(event) => props.onUploadFiles(event.currentTarget.files)} />
-      </header>
-
       {props.children}
       <section class="browser-panel">
-        <SearchStrip busy={props.busy} currentFolder={props.currentFolder} currentFolderId={props.currentFolderId} query={props.query} viewMode={props.viewMode} onCreateFolder={props.onCreateFolder} onQuery={props.onQuery} onUpload={() => fileInputRef.current?.click()} onViewMode={props.onViewMode} />
-        <FileTable {...props} />
+        <input ref={fileInputRef} class="hidden-input" type="file" multiple onChange={(event) => props.onUploadFiles(event.currentTarget.files)} />
+        <BrowserToolbar busy={props.busy} currentFolder={props.currentFolder} currentFolderId={props.currentFolderId} currentPath={currentPath} query={props.query} selection={selection} viewMode={props.viewMode} onCreateFolder={props.onCreateFolder} onOpenFolderPanel={props.onOpenFolderPanel} onQuery={props.onQuery} onSaveFolder={props.onSaveFolder} onSelectFolder={props.onSelectFolder} onUpload={() => fileInputRef.current?.click()} onViewMode={props.onViewMode} />
+        <FileTable {...props} selection={selection} />
       </section>
     </>
+  )
+}
+
+function SelectionBar(props: { selection: SelectionActions }) {
+  return (
+    <div class="selection-bar">
+      <label class="selection-toggle">
+        <input type="checkbox" checked={props.selection.allVisibleSelected} onChange={() => props.selection.toggleSelectAllVisible()} />
+        <span>{props.selection.selectedCount} selected</span>
+      </label>
+      <button type="button" class="danger" onClick={props.selection.requestDeleteSelection} disabled={props.selection.selectedCount === 0} title="Delete selected">
+        <Trash2 size={16} />
+        <span>Delete</span>
+      </button>
+      <button type="button" onClick={props.selection.clearSelection} disabled={props.selection.selectedCount === 0} title="Clear selection">
+        <X size={16} />
+      </button>
+    </div>
   )
 }
 
@@ -106,63 +120,74 @@ function Breadcrumbs(props: {
 function BrowserActions(props: {
   busy: string
   currentFolder: FolderRecord | null
-  storageUsed: number
   onOpenFolderPanel: (anchor?: HTMLElement) => void
   onSaveFolder: (shareAfterSave: boolean, anchor?: HTMLElement) => void
 }) {
+  if (!props.currentFolder) return null
+
   return (
-    <div class={`browser-actions ${props.currentFolder ? '' : 'root-actions'}`}>
-      <span class="used-pill" title="Used storage">
-        <HardDrive size={15} />
-        <span>Used</span>
-        <strong>{formatBytes(props.storageUsed)}</strong>
-      </span>
-      {props.currentFolder ? (
-        <>
-          <button onClick={(event) => props.onOpenFolderPanel(event.currentTarget)} title="Folder details">
-            <Info size={17} />
-          </button>
-          <button class="share-button" onClick={(event) => props.onSaveFolder(true, event.currentTarget)} disabled={props.busy === 'share'} title="Share encrypted folder">
-            <Share2 size={17} />
-            <span>{props.busy === 'share' ? 'Sharing' : 'Share'}</span>
-          </button>
-        </>
-      ) : null}
+    <div class="browser-actions">
+      <button onClick={(event) => props.onOpenFolderPanel(event.currentTarget)} title="Folder details">
+        <Info size={17} />
+      </button>
+      <button class="share-button" onClick={(event) => props.onSaveFolder(true, event.currentTarget)} disabled={props.busy === 'share'} title="Share encrypted folder">
+        <Share2 size={17} />
+        <span>{props.busy === 'share' ? 'Sharing' : 'Share'}</span>
+      </button>
     </div>
   )
 }
 
-function SearchStrip(props: {
+function BrowserToolbar(props: {
   busy: string
   currentFolder: FolderRecord | null
   currentFolderId: string | null
+  currentPath: FolderRecord[]
   query: string
+  selection: SelectionActions
   viewMode: BrowserViewMode
   onCreateFolder: () => void
+  onOpenFolderPanel: (anchor?: HTMLElement) => void
   onQuery: (value: string) => void
+  onSaveFolder: (shareAfterSave: boolean, anchor?: HTMLElement) => void
+  onSelectFolder: (folderId: string | null) => void
   onUpload: () => void
   onViewMode: (mode: BrowserViewMode) => void
 }) {
+  const selecting = props.selection.selectedCount > 0
   return (
-    <div class="search-strip">
-      <div class="search-box">
-        <Search size={18} />
-        <input value={props.query} onInput={(event) => props.onQuery(event.currentTarget.value)} placeholder="Search files and folders" />
-      </div>
-      <div class="view-toggle" role="group" aria-label="View mode">
-        <button type="button" class={props.viewMode === 'list' ? 'selected' : ''} aria-pressed={props.viewMode === 'list'} onClick={() => props.onViewMode('list')} title="List view">
-          <List size={17} />
+    <div class={`browser-toolbar ${props.currentPath.length > 0 ? 'with-path' : ''}`}>
+      <Breadcrumbs currentPath={props.currentPath} onSelectFolder={props.onSelectFolder} />
+      {selecting ? <SelectionBar selection={props.selection} /> : <SearchBox query={props.query} onQuery={props.onQuery} />}
+      <div class="browser-tool-actions">
+        <div class="view-toggle" role="group" aria-label="View mode">
+          <button type="button" class={props.viewMode === 'list' ? 'selected' : ''} aria-pressed={props.viewMode === 'list'} onClick={() => props.onViewMode('list')} title="List view">
+            <List size={17} />
+          </button>
+          <button type="button" class={props.viewMode === 'grid' ? 'selected' : ''} aria-pressed={props.viewMode === 'grid'} onClick={() => props.onViewMode('grid')} title="Tile view">
+            <LayoutGrid size={17} />
+          </button>
+        </div>
+        <button type="button" onClick={props.onUpload} disabled={!props.currentFolder || props.busy === 'upload'} title="Upload files">
+          <Upload size={17} />
         </button>
-        <button type="button" class={props.viewMode === 'grid' ? 'selected' : ''} aria-pressed={props.viewMode === 'grid'} onClick={() => props.onViewMode('grid')} title="Tile view">
-          <LayoutGrid size={17} />
+        <button type="button" onClick={props.onCreateFolder} disabled={Boolean(props.currentFolderId && !props.currentFolder)} title="Create folder">
+          <FolderPlus size={17} />
         </button>
       </div>
-      <button type="button" onClick={props.onUpload} disabled={!props.currentFolder || props.busy === 'upload'} title="Upload files">
-        <Upload size={17} />
-      </button>
-      <button type="button" onClick={props.onCreateFolder} disabled={Boolean(props.currentFolderId && !props.currentFolder)} title="Create folder">
-        <FolderPlus size={17} />
-      </button>
+      <BrowserActions busy={props.busy} currentFolder={props.currentFolder} onOpenFolderPanel={props.onOpenFolderPanel} onSaveFolder={props.onSaveFolder} />
+    </div>
+  )
+}
+
+function SearchBox(props: {
+  query: string
+  onQuery: (value: string) => void
+}) {
+  return (
+    <div class="toolbar-search">
+      <Search size={18} />
+      <input value={props.query} onInput={(event) => props.onQuery(event.currentTarget.value)} placeholder="Search files and folders" />
     </div>
   )
 }
