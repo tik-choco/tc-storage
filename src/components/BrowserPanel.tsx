@@ -11,7 +11,7 @@ import {
 } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
 import { useRef } from 'preact/hooks'
-import type { BrowserDragItem, BrowserViewMode } from '../appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare } from '../appTypes.js'
 import { folderPath, formatBytes, type FileRecord, type FolderRecord, type StorageSnapshot } from '../domain.js'
 import { FileTable } from './BrowserTable.js'
 
@@ -23,9 +23,11 @@ export function BrowserPanel(props: {
   dragActive: boolean
   dragItem: BrowserDragItem | null
   dropTargetFolderId: string | null | undefined
+  reorderTarget: BrowserReorderTarget | null
   fileRows: FileRecord[]
   fileDataUrls: Record<string, string>
   folderRows: FolderRecord[]
+  pendingFolderShares: PendingShare[]
   files: FileRecord[]
   folderNameDraft: string | null
   query: string
@@ -34,6 +36,7 @@ export function BrowserPanel(props: {
   viewMode: BrowserViewMode
   onCopy: (value: string, label: string) => void
   onCancelCreateFolder: () => void
+  onCancelPendingShare: (share: PendingShare) => void
   onConfirmCreateFolder: () => void
   onCreateFolder: () => void
   onDeleteFolder: (folder: FolderRecord) => void
@@ -42,6 +45,9 @@ export function BrowserPanel(props: {
   onDrop: (event: DragEvent) => void
   onItemDragEnd: () => void
   onItemDragStart: (item: BrowserDragItem, event: DragEvent) => void
+  onBrowserItemDragLeave: (target: BrowserDragItem, event: DragEvent) => void
+  onBrowserItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
+  onBrowserItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onMoveTargetDragLeave: (folderId: string | null, event: DragEvent) => void
   onMoveTargetDragOver: (folderId: string | null, event: DragEvent) => void
   onMoveTargetDrop: (folderId: string | null, event: DragEvent) => void

@@ -1,4 +1,4 @@
-import type { BrowserDragItem, BrowserViewMode } from '../appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare } from '../appTypes.js'
 import type { FileRecord, FolderRecord } from '../domain.js'
 
 export type BrowserTableProps = {
@@ -8,13 +8,16 @@ export type BrowserTableProps = {
   dragActive: boolean
   dragItem: BrowserDragItem | null
   dropTargetFolderId: string | null | undefined
+  reorderTarget: BrowserReorderTarget | null
   fileRows: FileRecord[]
   fileDataUrls: Record<string, string>
   folderRows: FolderRecord[]
+  pendingFolderShares: PendingShare[]
   files: FileRecord[]
   folderNameDraft: string | null
   viewMode: BrowserViewMode
   onCancelCreateFolder: () => void
+  onCancelPendingShare: (share: PendingShare) => void
   onConfirmCreateFolder: () => void
   onCopy: (value: string, label: string) => void
   onDeleteFolder: (folder: FolderRecord) => void
@@ -23,6 +26,9 @@ export type BrowserTableProps = {
   onDrop: (event: DragEvent) => void
   onItemDragEnd: () => void
   onItemDragStart: (item: BrowserDragItem, event: DragEvent) => void
+  onBrowserItemDragLeave: (target: BrowserDragItem, event: DragEvent) => void
+  onBrowserItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
+  onBrowserItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onMoveTargetDragLeave: (folderId: string | null, event: DragEvent) => void
   onMoveTargetDragOver: (folderId: string | null, event: DragEvent) => void
   onMoveTargetDrop: (folderId: string | null, event: DragEvent) => void

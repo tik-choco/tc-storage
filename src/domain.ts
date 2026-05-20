@@ -9,6 +9,7 @@ export type FolderRecord = {
   id: string
   name: string
   parentId: string | null
+  sortOrder?: number
   color: FolderColor
   encrypted: boolean
   shareEnabled: boolean
@@ -25,6 +26,7 @@ export type FolderRecord = {
 export type FileRecord = {
   id: string
   folderId: string
+  sortOrder?: number
   name: string
   mimeType: string
   size: number
@@ -116,6 +118,7 @@ export function makeFolder(options: {
     id: options.id ?? makeId('folder'),
     name: options.name,
     parentId: options.parentId,
+    sortOrder: Date.parse(options.now),
     color: options.color,
     encrypted: true,
     shareEnabled: false,
@@ -140,6 +143,7 @@ export function makeFileFromDataUrl(options: {
   const file: FileRecord = {
     id: options.id ?? makeId('file'),
     folderId: options.folderId,
+    sortOrder: Date.parse(options.now),
     name: options.name,
     mimeType: options.mimeType,
     size: options.size,
@@ -158,23 +162,31 @@ export function touchSnapshot(snapshot: StorageSnapshot, originNode: string): St
 }
 
 export function activeFolders(snapshot: StorageSnapshot): FolderRecord[] {
-  return snapshot.folders.filter((folder) => !folder.deletedAt)
+  return snapshot.folders.filter((folder) => !folder.deletedAt).sort(compareFoldersForDisplay)
 }
 
 export function activeFiles(snapshot: StorageSnapshot): FileRecord[] {
-  return snapshot.files.filter((file) => !file.deletedAt)
+  return snapshot.files.filter((file) => !file.deletedAt).sort(compareFilesForDisplay)
 }
 
 export function filesInFolder(snapshot: StorageSnapshot, folderId: string): FileRecord[] {
   return activeFiles(snapshot)
     .filter((file) => file.folderId === folderId)
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort(compareFilesForDisplay)
 }
 
 export function childFolders(snapshot: StorageSnapshot, parentId: string | null): FolderRecord[] {
   return activeFolders(snapshot)
     .filter((folder) => folder.parentId === parentId)
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort(compareFoldersForDisplay)
+}
+
+export function compareFoldersForDisplay(a: FolderRecord, b: FolderRecord): number {
+  return compareSortOrder(a, b) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
+}
+
+export function compareFilesForDisplay(a: FileRecord, b: FileRecord): number {
+  return compareSortOrder(a, b) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
 }
 
 export function folderPath(snapshot: StorageSnapshot, folderId: string): FolderRecord[] {
@@ -230,4 +242,10 @@ function stampAll<T extends { fieldVersions?: Record<string, VersionStamp>; upda
     if (key !== 'fieldVersions') fieldVersions[key] = { updatedAt, nodeId }
   }
   return { ...record, fieldVersions }
+}
+
+function compareSortOrder(a: { sortOrder?: number; createdAt: string }, b: { sortOrder?: number; createdAt: string }): number {
+  const left = Number.isFinite(a.sortOrder) ? a.sortOrder as number : 0
+  const right = Number.isFinite(b.sortOrder) ? b.sortOrder as number : 0
+  return left - right
 }

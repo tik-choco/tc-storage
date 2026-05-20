@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'preact/hooks'
 import { descendantFolderIds, filterByName, mergeUploadedFiles, nextFolderName, remoteFileSnapshot, remoteFolderSnapshot } from './appHelpers.js'
-import type { BrowserDragItem, BrowserViewMode, DeleteRequest, Notice, PendingShare } from './appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, DeleteRequest, Notice, PendingShare } from './appTypes.js'
 import { BrowserPanel } from './components/BrowserPanel.js'
 import { DeleteConfirmPanel } from './components/DeleteConfirmPanel.js'
 import { FolderPanel } from './components/DetailPanel.js'
@@ -11,7 +11,7 @@ import { Sidebar } from './components/Sidebar.js'
 import { TopSummary } from './components/TopSummary.js'
 import { copyToClipboard, reserveClipboardWrite, writeReservedClipboard } from './clipboard.js'
 import { mergeSnapshots, stampFilePatch, stampFolderPatch } from './crdt.js'
-import { activeFiles, activeFolders, addActivity, childFolders, filesInFolder, makeFolder, stripFileContent, touchSnapshot, type FileRecord, type FolderBundle, type FolderRecord, type StorageSnapshot } from './domain.js'
+import { activeFiles, activeFolders, addActivity, childFolders, compareFilesForDisplay, compareFoldersForDisplay, filesInFolder, makeFolder, stripFileContent, touchSnapshot, type FileRecord, type FolderBundle, type FolderRecord, type StorageSnapshot } from './domain.js'
 import { hasBrowserDragItem, hasExternalFiles, readBrowserDragItem, writeBrowserDragItem } from './dragDrop.js'
 import { describeError } from './errors.js'
 import { downloadFile, readBrowserFile } from './fileIO.js'
@@ -24,8 +24,9 @@ import { loadSettings, type AppSettings } from './localSettings.js'
 import { loadStoredSnapshot } from './localSnapshot.js'
 import { loadEncryptedFileFromMist, loadEncryptedFolderFromMist, saveEncryptedFileToMist, saveEncryptedFolderToMist } from './mistStorage.js'
 import { useMistShare, type ShareEnvelope, type ShareProfile } from './p2p.js'
+import { loadImportKeys, loadPendingShares } from './pendingShares.js'
 import { makeFileShareUrl, makeFolderShareUrl, type LinkedShare } from './shareLinks.js'
-import { activeAncestorFolderId, browserViewModeKey, canPreloadThumbnail, envelopeLogDetails, folderColors, folderKeyUpdatesForBundle, folderLogDetails, loadBrowserViewMode, nearestSharedAncestorFolder, shareLogDetails, shortLogValue, syncLog, syncWarn } from './appUtils.js'
+import { activeAncestorFolderId, browserViewModeKey, canPreloadThumbnail, envelopeLogDetails, folderColors, folderKeyUpdatesForBundle, folderLogDetails, loadBrowserViewMode, nearestSharedAncestorFolder, shareLogDetails, shortLogValue, syncLog, syncWarn, withoutRecordKey } from './appUtils.js'
 import { useAppEffects } from './useAppEffects.js'
 import { useProfileAvatarPicker } from './useProfileAvatarPicker.js'
 import { useTransferProgress } from './useTransferProgress.js'
@@ -40,9 +41,9 @@ export function App() {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(() => readFolderRoute())
   const [query, setQuery] = useState('')
   const [folderNameDraft, setFolderNameDraft] = useState<string | null>(null)
-  const [importKeys, setImportKeys] = useState<Record<string, string>>({})
+  const [importKeys, setImportKeys] = useState<Record<string, string>>(() => loadImportKeys())
   const [browserViewMode, setBrowserViewMode] = useState<BrowserViewMode>(() => loadBrowserViewMode())
-  const [pendingShares, setPendingShares] = useState<PendingShare[]>([])
+  const [pendingShares, setPendingShares] = useState<PendingShare[]>(() => loadPendingShares())
   const [fileContentCache, setFileContentCache] = useState<Record<string, string>>({})
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -54,6 +55,7 @@ export function App() {
   const [dragActive, setDragActive] = useState(false)
   const [dragItem, setDragItem] = useState<BrowserDragItem | null>(null)
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null | undefined>(undefined)
+  const [reorderTarget, setReorderTarget] = useState<BrowserReorderTarget | null>(null)
   const [notice, setNotice] = useState<Notice>({ tone: 'info', text: '' })
   const [busy, setBusy] = useState('')
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null)
@@ -91,6 +93,11 @@ export function App() {
   const profileImageFiles = useMemo(() => files.filter((file) => file.mimeType.startsWith('image/')), [files])
   const folderRows = useMemo(() => filterByName(query.trim() ? folders : currentFolderId ? currentFolder ? childFolders(snapshot, currentFolder.id) : [] : childFolders(snapshot, null), query), [currentFolder, currentFolderId, folders, query, snapshot])
   const fileRows = useMemo(() => filterByName(query.trim() ? files : currentFolder ? filesInFolder(snapshot, currentFolder.id) : [], query), [currentFolder, files, query, snapshot])
+  const pendingFolderShares = useMemo(() => {
+    if (currentFolderId !== null) return []
+    const folderShares = pendingShares.filter((share) => share.autoImport && share.type === 'folder-share')
+    return query.trim() ? filterByName(folderShares.map((share) => ({ ...share, name: share.folderName ?? 'Shared folder' })), query) : folderShares
+  }, [currentFolderId, pendingShares, query])
   const currentFolderKey = currentFolder ? folderKeys[currentFolder.id] ?? '' : ''
   const folderPanelKey = folderPanelFolder ? folderKeys[folderPanelFolder.id] ?? '' : ''
   const folderPanelPeers = folderPanelFolder ? folderPeers[folderPanelFolder.id] ?? [] : []
@@ -288,8 +295,11 @@ export function App() {
     }
     const snapshotValue = snapshotRef.current
     const folder = snapshotValue.folders.find((item) => item.id === envelope.folderId)
-    const linkedShare = pendingSharesRef.current.find((share) => share.autoImport && share.cid === envelope.cid)
-    const linkedPassphrase = envelope.cid ? importKeysRef.current[envelope.cid]?.trim() ?? '' : ''
+    const linkedShare = pendingSharesRef.current.find((share) => (
+      share.autoImport &&
+      (share.cid === envelope.cid || Boolean(envelope.folderId && share.folderId === envelope.folderId))
+    ))
+    const linkedPassphrase = linkedShare?.cid ? importKeysRef.current[linkedShare.cid]?.trim() ?? '' : ''
     const passphrase = folderKeysRef.current[envelope.folderId] || (linkedShare ? linkedPassphrase : '')
     const localSignature = sharedFolderSignature(snapshotValue, envelope.folderId)
     if (folder && envelope.cid === folder.lastCid && hasSharedFolderChangesSinceLastShare(snapshotValue, folder)) {
@@ -300,7 +310,7 @@ export function App() {
     if (!folder) {
       if (passphrase && linkedShare && !autoImportCidsRef.current.has(envelope.cid) && !autoImportInFlightRef.current.has(envelope.cid)) {
         syncLog('folder-state accepted for linked share without local folder: storage_get will start', envelopeLogDetails(envelope))
-        await autoImportLinkedShare({ ...envelope, autoImport: true, type: 'folder-share', receivedAt: new Date().toISOString() }, passphrase)
+        await autoImportLinkedShare({ ...linkedShare, ...envelope, autoImport: true, type: 'folder-share', receivedAt: new Date().toISOString() }, passphrase)
         return
       }
       syncLog('folder-state skipped: local folder not found and no linked key is available', envelopeLogDetails(envelope))
@@ -556,11 +566,12 @@ export function App() {
   }
 
   async function autoImportFolderShare(share: PendingShare, passphrase: string) {
-    if (!share.cid) return
-    autoImportInFlightRef.current.add(share.cid)
+    const cid = share.cid
+    if (!cid) return
+    autoImportInFlightRef.current.add(cid)
     try {
       syncLog('storage_get start for folder-share', shareLogDetails(share))
-      const bundle = await materializeFolderBundleFiles(await loadEncryptedFolderFromMist(share.cid, passphrase), passphrase)
+      const bundle = await materializeFolderBundleFiles(await loadEncryptedFolderFromMist(cid, passphrase), passphrase)
       syncLog('storage_get complete for folder-share', { ...shareLogDetails(share), folderId: bundle.folder.id, folderName: bundle.folder.name, fileCount: bundle.files.length })
       const remoteSnapshot = remoteFolderSnapshot(bundle, share)
       const now = new Date().toISOString()
@@ -571,16 +582,15 @@ export function App() {
         rememberImportedFolderSignature(bundle.folder.id, next, remoteSnapshot)
         return next
       })
-      autoImportCidsRef.current.add(share.cid)
       setFolderKeys((current) => ({ ...current, ...folderKeyUpdatesForBundle(bundle, passphrase) }))
       rememberFolderPeer(share)
-      setPendingShares((current) => current.filter((item) => item.cid !== share.cid))
+      markPendingShareImported(share)
       setNotice({ tone: 'success', text: `${bundle.folder.name} を自動同期しました` })
     } catch (error) {
       syncWarn('storage_get failed for folder-share', { ...shareLogDetails(share), error: describeError(error, 'unknown error') })
       setNotice({ tone: 'error', text: describeError(error, '共有フォルダーの自動同期に失敗しました') })
     } finally {
-      autoImportInFlightRef.current.delete(share.cid)
+      autoImportInFlightRef.current.delete(cid)
     }
   }
 
@@ -613,9 +623,33 @@ export function App() {
   }
 
   function markPendingShareImported(share: PendingShare): void {
-    if (!share.cid) return
-    autoImportCidsRef.current.add(share.cid)
-    setPendingShares((current) => current.filter((item) => item.cid !== share.cid))
+    const cid = share.cid
+    if (!cid) return
+    autoImportCidsRef.current.add(cid)
+    const pendingMatches = pendingSharesRef.current.filter((item) => pendingShareMatchesImported(item, share))
+    setPendingShares((current) => current.filter((item) => !pendingShareMatchesImported(item, share)))
+    setImportKeys((current) => {
+      let next = withoutRecordKey(current, cid)
+      for (const pending of pendingMatches) {
+        if (pending.cid) next = withoutRecordKey(next, pending.cid)
+      }
+      return next
+    })
+  }
+
+  function cancelPendingShare(share: PendingShare): void {
+    const cid = share.cid
+    if (!cid) return
+    setPendingShares((current) => current.filter((item) => item.cid !== cid))
+    setImportKeys((current) => withoutRecordKey(current, cid))
+    setNotice({ tone: 'info', text: '共有待ちをキャンセルしました' })
+  }
+
+  function pendingShareMatchesImported(pending: PendingShare, imported: PendingShare): boolean {
+    if (pending.cid && pending.cid === imported.cid) return true
+    if (imported.type === 'folder-share' && pending.type === 'folder-share' && imported.folderId && pending.folderId === imported.folderId) return true
+    if (imported.type === 'file-share' && pending.type === 'file-share' && imported.fileId && pending.fileId === imported.fileId) return true
+    return false
   }
 
   async function ensureFolderFilesStored(folder: FolderRecord, filesForSave: FileRecord[], passphrase: string): Promise<FileRecord[]> {
@@ -1078,6 +1112,51 @@ export function App() {
     dragItemRef.current = null
     setDragItem(null)
     setDropTargetFolderId(undefined)
+    setReorderTarget(null)
+  }
+
+  function handleBrowserItemDragOver(target: BrowserDragItem, event: DragEvent) {
+    const item = dragItemRef.current
+    if (!item) {
+      if (target.type === 'folder' && hasExternalFiles(event.dataTransfer)) handleMoveTargetDragOver(target.id, event)
+      return
+    }
+    const reorder = reorderTargetFromEvent(item, target, event)
+    if (reorder) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+      setDragActive(false)
+      setDropTargetFolderId(undefined)
+      setReorderTarget(reorder)
+      return
+    }
+    setReorderTarget((current) => (current?.type === target.type && current.id === target.id ? null : current))
+    if (target.type === 'folder') handleMoveTargetDragOver(target.id, event)
+  }
+
+  function handleBrowserItemDragLeave(target: BrowserDragItem, event: DragEvent) {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget instanceof Node && event.currentTarget.contains(nextTarget)) return
+    setReorderTarget((current) => (current?.type === target.type && current.id === target.id ? null : current))
+    if (target.type === 'folder') handleMoveTargetDragLeave(target.id, event)
+  }
+
+  function handleBrowserItemDrop(target: BrowserDragItem, event: DragEvent) {
+    const item = dragItemRef.current ?? readBrowserDragItem(event.dataTransfer)
+    if (!item) {
+      if (target.type === 'folder') handleMoveTargetDrop(target.id, event)
+      return
+    }
+    const reorder = reorderTargetFromEvent(item, target, event)
+    if (reorder?.type === target.type && reorder.id === target.id && canReorderDraggedItem(item, target)) {
+      event.preventDefault()
+      event.stopPropagation()
+      endItemDrag()
+      reorderDraggedItem(item, reorder)
+      return
+    }
+    if (target.type === 'folder') handleMoveTargetDrop(target.id, event)
   }
 
   function handleMoveTargetDragOver(targetFolderId: string | null, event: DragEvent) {
@@ -1115,6 +1194,69 @@ export function App() {
       return
     }
     void uploadFiles(filesToUpload, targetFolderId)
+  }
+
+  function reorderTargetFromEvent(item: BrowserDragItem, target: BrowserDragItem, event: DragEvent): BrowserReorderTarget | null {
+    if (!canReorderDraggedItem(item, target)) return null
+    const ratio = itemDropRatio(event)
+    if (target.type === 'folder' && ratio > 0.3 && ratio < 0.7) return null
+    return { ...target, position: ratio < 0.5 ? 'before' : 'after' }
+  }
+
+  function itemDropRatio(event: DragEvent): number {
+    const target = event.currentTarget
+    if (!(target instanceof HTMLElement)) return 0.5
+    const rect = target.getBoundingClientRect()
+    if (browserViewMode === 'grid') return rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5
+    return rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5
+  }
+
+  function canReorderDraggedItem(item: BrowserDragItem, target: BrowserDragItem): boolean {
+    if (query.trim() || item.type !== target.type || item.id === target.id) return false
+    const snapshotValue = snapshotRef.current
+    if (item.type === 'file') {
+      const file = snapshotValue.files.find((value) => value.id === item.id && !value.deletedAt)
+      const targetFile = snapshotValue.files.find((value) => value.id === target.id && !value.deletedAt)
+      return Boolean(file && targetFile && file.folderId === currentFolderId && targetFile.folderId === currentFolderId)
+    }
+    const folder = snapshotValue.folders.find((value) => value.id === item.id && !value.deletedAt)
+    const targetFolder = snapshotValue.folders.find((value) => value.id === target.id && !value.deletedAt)
+    return Boolean(folder && targetFolder && folder.parentId === currentFolderId && targetFolder.parentId === currentFolderId)
+  }
+
+  function reorderDraggedItem(item: BrowserDragItem, target: BrowserReorderTarget): void {
+    if (!canReorderDraggedItem(item, target)) return
+    const now = new Date().toISOString()
+    const snapshotValue = snapshotRef.current
+    if (item.type === 'file') {
+      const currentRows = snapshotValue.files.filter((file) => !file.deletedAt && file.folderId === currentFolderId).sort(compareFilesForDisplay)
+      const nextIds = reorderIds(currentRows.map((file) => file.id), item.id, target.id, target.position)
+      const orderById = new Map(nextIds.map((id, index) => [id, (index + 1) * 1000]))
+      const movedFile = currentRows.find((file) => file.id === item.id)
+      setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((file) => {
+        const sortOrder = orderById.get(file.id)
+        return sortOrder === undefined || file.sortOrder === sortOrder ? file : stampFilePatch(file, { sortOrder }, now, settings.nodeId)
+      }) }, { actorNodeId: settings.nodeId, folderId: currentFolderId ?? undefined, fileId: item.id, action: 'file.reorder', detail: `${movedFile?.name ?? 'ファイル'} を並び替え` }, now), settings.nodeId))
+      setNotice({ tone: 'success', text: 'ファイルの並び順を更新しました' })
+      return
+    }
+    const currentRows = snapshotValue.folders.filter((folder) => !folder.deletedAt && folder.parentId === currentFolderId).sort(compareFoldersForDisplay)
+    const nextIds = reorderIds(currentRows.map((folder) => folder.id), item.id, target.id, target.position)
+    const orderById = new Map(nextIds.map((id, index) => [id, (index + 1) * 1000]))
+    const movedFolder = currentRows.find((folder) => folder.id === item.id)
+    setSnapshot((current) => touchSnapshot(addActivity({ ...current, folders: current.folders.map((folder) => {
+      const sortOrder = orderById.get(folder.id)
+      return sortOrder === undefined || folder.sortOrder === sortOrder ? folder : stampFolderPatch(folder, { sortOrder }, now, settings.nodeId)
+    }) }, { actorNodeId: settings.nodeId, folderId: item.id, action: 'folder.reorder', detail: `${movedFolder?.name ?? 'フォルダー'} を並び替え` }, now), settings.nodeId))
+    setNotice({ tone: 'success', text: 'フォルダーの並び順を更新しました' })
+  }
+
+  function reorderIds(ids: string[], sourceId: string, targetId: string, position: BrowserReorderTarget['position']): string[] {
+    const withoutSource = ids.filter((id) => id !== sourceId)
+    const targetIndex = withoutSource.indexOf(targetId)
+    if (targetIndex < 0) return ids
+    const insertIndex = position === 'before' ? targetIndex : targetIndex + 1
+    return [...withoutSource.slice(0, insertIndex), sourceId, ...withoutSource.slice(insertIndex)]
   }
 
   function canMoveItemToFolder(item: BrowserDragItem, targetFolderId: string | null): boolean {
@@ -1234,7 +1376,7 @@ export function App() {
     const linkedShare = { ...share, autoImport: true }
     setPendingShares((current) => [linkedShare, ...current.filter((item) => item.cid !== share.cid)].slice(0, 12)); if (share.cid) setImportKeys((current) => ({ ...current, [share.cid ?? '']: key }))
     setSettings((current) => current.roomId === share.roomId ? current : { ...current, roomId: share.roomId })
-    setSettingsOpen(false); setProfileOpen(false); setFolderPanelFolderId(null); setFolderPanelOpen(true); setDetailFileId(null); setSelectedFileId(null); setExpandedPreviewOpen(false); setNotice({ tone: 'info', text: '共有URLを読み込みました。取得を開始します' })
+    setCurrentFolderId(null); setQuery(''); setSettingsOpen(false); setProfileOpen(false); setFolderPanelFolderId(null); setFolderPanelOpen(true); setDetailFileId(null); setSelectedFileId(null); setExpandedPreviewOpen(false); setNotice({ tone: 'info', text: '共有URLを読み込みました。取得を開始します' })
   }
 
   function selectFolder(folderId: string | null) {
@@ -1326,7 +1468,7 @@ export function App() {
     <main class="app-shell">
       <Sidebar avatarUrl={avatarUrl} currentFolderId={currentFolderId} dragItem={dragItem} dropTargetFolderId={dropTargetFolderId} snapshot={snapshot} onItemDragEnd={endItemDrag} onItemDragStart={beginItemDrag} onMoveTargetDragLeave={handleMoveTargetDragLeave} onMoveTargetDragOver={handleMoveTargetDragOver} onMoveTargetDrop={handleMoveTargetDrop} onOpenProfile={openProfile} onOpenSettings={openSettings} onSelectFolder={selectFolder} />
       <section class="main-column">
-        <BrowserPanel busy={busy} currentFolder={currentFolder} currentFolderId={currentFolderId} dragActive={dragActive} dragItem={dragItem} dropTargetFolderId={dropTargetFolderId} fileDataUrls={fileDataUrls} fileRows={fileRows} folderNameDraft={folderNameDraft} folderRows={folderRows} files={files} query={query} snapshot={snapshot} storageUsed={storageUsed} viewMode={browserViewMode} onCancelCreateFolder={cancelCreateFolder} onConfirmCreateFolder={confirmCreateFolder} onCopy={copyText} onCreateFolder={beginCreateFolder} onDeleteFolder={requestDeleteFolder} onDeleteFile={requestDeleteFile} onDrag={handleDrag} onDrop={handleDrop} onFolderNameDraft={setFolderNameDraft} onItemDragEnd={endItemDrag} onItemDragStart={beginItemDrag} onMoveTargetDragLeave={handleMoveTargetDragLeave} onMoveTargetDragOver={handleMoveTargetDragOver} onMoveTargetDrop={handleMoveTargetDrop} onOpenFile={openFile} onOpenFolderPanel={openFolderPanel} onPreloadFile={preloadFileContent} onQuery={setQuery} onSaveFolder={(share, anchor) => void saveFolderToMist(share, anchor)} onSelectFolder={selectFolder} onShareFile={(file) => void shareFile(file)} onShowFileDetails={showFileDetails} onShowFolderDetails={showFolderDetails} onToggleStar={toggleStar} onUploadFiles={(list) => void uploadFiles(list)} onViewMode={setBrowserViewMode} />
+        <BrowserPanel busy={busy} currentFolder={currentFolder} currentFolderId={currentFolderId} dragActive={dragActive} dragItem={dragItem} dropTargetFolderId={dropTargetFolderId} fileDataUrls={fileDataUrls} fileRows={fileRows} folderNameDraft={folderNameDraft} folderRows={folderRows} pendingFolderShares={pendingFolderShares} files={files} query={query} reorderTarget={reorderTarget} snapshot={snapshot} storageUsed={storageUsed} viewMode={browserViewMode} onBrowserItemDragLeave={handleBrowserItemDragLeave} onBrowserItemDragOver={handleBrowserItemDragOver} onBrowserItemDrop={handleBrowserItemDrop} onCancelCreateFolder={cancelCreateFolder} onCancelPendingShare={cancelPendingShare} onConfirmCreateFolder={confirmCreateFolder} onCopy={copyText} onCreateFolder={beginCreateFolder} onDeleteFolder={requestDeleteFolder} onDeleteFile={requestDeleteFile} onDrag={handleDrag} onDrop={handleDrop} onFolderNameDraft={setFolderNameDraft} onItemDragEnd={endItemDrag} onItemDragStart={beginItemDrag} onMoveTargetDragLeave={handleMoveTargetDragLeave} onMoveTargetDragOver={handleMoveTargetDragOver} onMoveTargetDrop={handleMoveTargetDrop} onOpenFile={openFile} onOpenFolderPanel={openFolderPanel} onPreloadFile={preloadFileContent} onQuery={setQuery} onSaveFolder={(share, anchor) => void saveFolderToMist(share, anchor)} onSelectFolder={selectFolder} onShareFile={(file) => void shareFile(file)} onShowFileDetails={showFileDetails} onShowFolderDetails={showFolderDetails} onToggleStar={toggleStar} onUploadFiles={(list) => void uploadFiles(list)} onViewMode={setBrowserViewMode} />
       </section>
       <TopSummary downloadProgress={downloadProgress} networkState={network.state} notice={notice} />
       {folderPanelOpen ? (
@@ -1369,7 +1511,7 @@ export function App() {
   )
 
   function renderFolderPanel() {
-    return <FolderPanel folder={folderPanelFolder} shareUrl={folderShareUrl} syncPeers={folderPanelPeers} pendingShares={pendingShares} importKeys={importKeys} busy={busy} onCopy={copyText} onDeleteFolder={deleteCurrentFolder} onImportKey={(cid, value) => setImportKeys((current) => ({ ...current, [cid]: value }))} onImportShare={(share) => void importShare(share)} onPatchFolder={patchCurrentFolder} />
+    return <FolderPanel folder={folderPanelFolder} shareUrl={folderShareUrl} syncPeers={folderPanelPeers} pendingShares={pendingShares} importKeys={importKeys} busy={busy} onCancelShare={cancelPendingShare} onCopy={copyText} onDeleteFolder={deleteCurrentFolder} onImportKey={(cid, value) => setImportKeys((current) => ({ ...current, [cid]: value }))} onImportShare={(share) => void importShare(share)} onPatchFolder={patchCurrentFolder} />
   }
 
   function toggleStar(file: FileRecord) {
@@ -1394,6 +1536,7 @@ export function App() {
       const allowed = item ? canMoveItemToFolder(item, currentFolderId) : true
       if (event.dataTransfer) event.dataTransfer.dropEffect = allowed ? 'move' : 'none'
       setDragActive(false)
+      setReorderTarget(null)
       setDropTargetFolderId(allowed ? currentFolderId : undefined)
       return
     }

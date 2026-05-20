@@ -4,6 +4,7 @@ const baselineTimestamp = '1970-01-01T00:00:00.000Z'
 const folderFields = [
   'name',
   'parentId',
+  'sortOrder',
   'color',
   'encrypted',
   'shareEnabled',
@@ -15,6 +16,7 @@ const folderFields = [
 ] as const
 const fileFields = [
   'folderId',
+  'sortOrder',
   'name',
   'mimeType',
   'size',

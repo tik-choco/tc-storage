@@ -12,6 +12,7 @@ import { saveFileShareKeys } from './fileShareKeys.js'
 import { saveSettings, type AppSettings } from './localSettings.js'
 import { persistSnapshot } from './localSnapshot.js'
 import type { useMistShare } from './p2p.js'
+import { saveImportKeys, savePendingShares } from './pendingShares.js'
 import { useShareLinkImport, type LinkedShare } from './shareLinks.js'
 
 type MutableRef<T> = { current: T }
@@ -128,6 +129,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
   }, [])
   useEffect(() => persistSnapshot(snapshot), [snapshot])
   useEffect(() => { saveSettings(settings); saveFolderKeys(folderKeys); saveFileShareKeys(fileShareKeys); saveFolderSyncPeers(folderPeers) }, [settings, folderKeys, fileShareKeys, folderPeers])
+  useEffect(() => { savePendingShares(pendingShares); saveImportKeys(importKeys) }, [importKeys, pendingShares])
   useEffect(() => localStorage.setItem(browserViewModeKey, browserViewMode), [browserViewMode, browserViewModeKey])
   useEffect(() => setSettingsDraft(settings), [profileOpen, settings, settingsOpen])
   useEffect(() => setFolderKeys((current) => ensureFolderKeys(folders, current)), [folders])

@@ -201,6 +201,10 @@
     grid-column: 2 / 3;
   }
 
+  .share-item.auto-import {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .table-row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px;

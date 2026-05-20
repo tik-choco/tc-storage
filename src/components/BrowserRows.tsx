@@ -1,5 +1,5 @@
 import { Check, Copy, FileText, Folder, Info, Lock, Share2, ShieldCheck, Star, Trash2, X } from 'lucide-preact'
-import type { BrowserDragItem } from '../appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, PendingShare } from '../appTypes.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
 import { dateLabel } from '../format.js'
 import type { DraftFolderProps } from './BrowserTableTypes.js'
@@ -35,28 +35,30 @@ export function FolderRow(props: {
   dropTargetFolderId: string | null | undefined
   folder: FolderRecord
   files: FileRecord[]
+  reorderTarget: BrowserReorderTarget | null
   onCopy: (value: string, label: string) => void
   onDeleteFolder: (folder: FolderRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
-  onMoveTargetDragLeave: (folderId: string | null, event: DragEvent) => void
-  onMoveTargetDragOver: (folderId: string | null, event: DragEvent) => void
-  onMoveTargetDrop: (folderId: string | null, event: DragEvent) => void
+  onItemDragLeave: (target: BrowserDragItem, event: DragEvent) => void
+  onItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
+  onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onSelectFolder: (folderId: string | null) => void
   onShowFolderDetails: (folder: FolderRecord, anchor?: HTMLElement) => void
 }) {
   const isDragSource = props.dragItem?.type === 'folder' && props.dragItem.id === props.folder.id
   const isDropTarget = props.dropTargetFolderId === props.folder.id
+  const reorderClass = reorderTargetClass(props.reorderTarget, 'folder', props.folder.id)
 
   return (
     <div
-      class={`table-row movable-item folder-drop-target ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''}`}
+      class={`table-row movable-item folder-drop-target ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
       draggable
       onDragEnd={props.onDragEnd}
-      onDragLeave={(event) => props.onMoveTargetDragLeave(props.folder.id, event)}
-      onDragOver={(event) => props.onMoveTargetDragOver(props.folder.id, event)}
+      onDragLeave={(event) => props.onItemDragLeave({ type: 'folder', id: props.folder.id }, event)}
+      onDragOver={(event) => props.onItemDragOver({ type: 'folder', id: props.folder.id }, event)}
       onDragStart={(event) => props.onDragStart({ type: 'folder', id: props.folder.id }, event)}
-      onDrop={(event) => props.onMoveTargetDrop(props.folder.id, event)}
+      onDrop={(event) => props.onItemDrop({ type: 'folder', id: props.folder.id }, event)}
       role="row"
     >
       <button class="name-cell" onClick={() => props.onSelectFolder(props.folder.id)}>
@@ -78,26 +80,58 @@ export function FolderRow(props: {
   )
 }
 
+export function PendingFolderShareRow(props: {
+  busy: boolean
+  share: PendingShare
+  onCancelShare: (share: PendingShare) => void
+}) {
+  return (
+    <div class="table-row pending-folder-row" role="row">
+      <div class="name-cell">
+        <Folder size={20} class="folder-stroke blue" />
+        <span>{props.share.folderName ?? 'Shared folder'}</span>
+      </div>
+      <span class="status-cell">
+        <Share2 size={15} />
+        {props.busy ? '読み込み中' : '読み込み待ち'}
+      </span>
+      <span>共有待ち</span>
+      <span>{dateLabel(props.share.receivedAt)}</span>
+      <span class="row-actions">
+        <button onClick={() => props.onCancelShare(props.share)} disabled={props.busy} title="Cancel pending share"><X size={16} /></button>
+      </span>
+    </div>
+  )
+}
+
 export function FileRow(props: {
   busy: boolean
   dragItem: BrowserDragItem | null
   file: FileRecord
+  reorderTarget: BrowserReorderTarget | null
   onDeleteFile: (file: FileRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
+  onItemDragLeave: (target: BrowserDragItem, event: DragEvent) => void
+  onItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
+  onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onOpenFile: (file: FileRecord) => void
   onShareFile: (file: FileRecord) => void
   onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
   onToggleStar: (file: FileRecord) => void
 }) {
   const isDragSource = props.dragItem?.type === 'file' && props.dragItem.id === props.file.id
+  const reorderClass = reorderTargetClass(props.reorderTarget, 'file', props.file.id)
 
   return (
     <div
-      class={`table-row movable-item ${isDragSource ? 'drag-source' : ''}`}
+      class={`table-row movable-item ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
       draggable
       onDragEnd={props.onDragEnd}
+      onDragLeave={(event) => props.onItemDragLeave({ type: 'file', id: props.file.id }, event)}
+      onDragOver={(event) => props.onItemDragOver({ type: 'file', id: props.file.id }, event)}
       onDragStart={(event) => props.onDragStart({ type: 'file', id: props.file.id }, event)}
+      onDrop={(event) => props.onItemDrop({ type: 'file', id: props.file.id }, event)}
       role="row"
     >
       <div class="name-cell file-name-cell">
@@ -119,4 +153,8 @@ export function FileRow(props: {
       </span>
     </div>
   )
+}
+
+function reorderTargetClass(target: BrowserReorderTarget | null, type: BrowserDragItem['type'], id: string): string {
+  return target?.type === type && target.id === id ? `reorder-${target.position}` : ''
 }

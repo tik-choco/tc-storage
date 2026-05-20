@@ -1,4 +1,4 @@
-import { Copy, Download, Eye, EyeOff, KeyRound, Share2, Trash2, UserRound } from 'lucide-preact'
+import { Copy, Download, Eye, EyeOff, KeyRound, Share2, Trash2, UserRound, X } from 'lucide-preact'
 import { useState } from 'preact/hooks'
 import type { PendingShare, SyncPeer } from '../appTypes.js'
 import type { FolderColor, FolderRecord } from '../domain.js'
@@ -16,6 +16,7 @@ export function FolderPanel(props: {
   busy: string
   onCopy: (value: string, label: string) => void
   onDeleteFolder: () => void
+  onCancelShare: (share: PendingShare) => void
   onImportKey: (cid: string, value: string) => void
   onImportShare: (share: PendingShare) => void
   onPatchFolder: (patch: Partial<FolderRecord>) => void
@@ -90,6 +91,7 @@ function IncomingShares(props: {
   pendingShares: PendingShare[]
   importKeys: Record<string, string>
   busy: string
+  onCancelShare: (share: PendingShare) => void
   onImportKey: (cid: string, value: string) => void
   onImportShare: (share: PendingShare) => void
 }) {
@@ -101,29 +103,47 @@ function IncomingShares(props: {
         <Share2 size={17} />
         <span>Pending imports</span>
       </div>
-      {props.pendingShares.map((share) => (
-        <form class="share-item" key={share.cid} onSubmit={(event) => { event.preventDefault(); props.onImportShare(share) }}>
-          <div>
-            <strong>{share.type === 'file-share' ? share.fileName ?? 'Shared file' : share.folderName ?? 'Shared folder'}</strong>
-            <span>{share.type === 'file-share' ? share.folderName ?? shortCid(share.cid ?? '') : shortCid(share.cid ?? '')}</span>
-            <ShareSender share={share} />
-          </div>
-          <input
-            value={share.cid ? props.importKeys[share.cid] ?? '' : ''}
-            onInput={(event) => share.cid && props.onImportKey(share.cid, event.currentTarget.value)}
-            placeholder={share.type === 'file-share' ? 'File key' : 'Folder key'}
-            type={share.cid && visibleKeys[share.cid] ? 'text' : 'password'}
-            autocomplete="current-password"
-          />
-          <button type="button" onClick={() => share.cid && setVisibleKeys((current) => ({ ...current, [share.cid ?? '']: !current[share.cid ?? ''] }))} title={share.cid && visibleKeys[share.cid] ? 'Hide key' : 'Show key'}>
-            {share.cid && visibleKeys[share.cid] ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-          <button type="submit" disabled={props.busy === `import-${share.cid}`}>
-            <Download size={16} />
-            <span>Import</span>
-          </button>
-        </form>
-      ))}
+      {props.pendingShares.map((share) => {
+        const shareKey = share.cid ? props.importKeys[share.cid] ?? '' : ''
+        const hideStoredKey = share.autoImport && shareKey.trim()
+        const importBusy = props.busy === `import-${share.cid}`
+        return (
+          <form class={hideStoredKey ? 'share-item auto-import' : 'share-item'} key={share.cid} onSubmit={(event) => { event.preventDefault(); props.onImportShare(share) }}>
+            <div>
+              <strong>{share.type === 'file-share' ? share.fileName ?? 'Shared file' : share.folderName ?? 'Shared folder'}</strong>
+              <span>{share.type === 'file-share' ? share.folderName ?? shortCid(share.cid ?? '') : shortCid(share.cid ?? '')}</span>
+              <ShareSender share={share} />
+            </div>
+            {hideStoredKey ? (
+              <div class="share-waiting-status">{importBusy ? '読み込み中' : '読み込み待ち'}</div>
+            ) : (
+              <>
+                <input
+                  value={shareKey}
+                  onInput={(event) => share.cid && props.onImportKey(share.cid, event.currentTarget.value)}
+                  placeholder={share.type === 'file-share' ? 'File key' : 'Folder key'}
+                  type={share.cid && visibleKeys[share.cid] ? 'text' : 'password'}
+                  autocomplete="current-password"
+                />
+                <button type="button" onClick={() => share.cid && setVisibleKeys((current) => ({ ...current, [share.cid ?? '']: !current[share.cid ?? ''] }))} title={share.cid && visibleKeys[share.cid] ? 'Hide key' : 'Show key'}>
+                  {share.cid && visibleKeys[share.cid] ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </>
+            )}
+            {hideStoredKey ? (
+              <button type="button" onClick={() => props.onCancelShare(share)} disabled={importBusy} title="Cancel pending share">
+                <X size={16} />
+                <span>Cancel</span>
+              </button>
+            ) : (
+              <button type="submit" disabled={importBusy}>
+                <Download size={16} />
+                <span>Import</span>
+              </button>
+            )}
+          </form>
+        )
+      })}
       {props.pendingShares.length === 0 ? <div class="empty-detail compact">No pending imports</div> : null}
     </div>
   )

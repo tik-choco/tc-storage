@@ -23,6 +23,16 @@
   background: #f8fafc;
 }
 
+.pending-folder-tile {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.pending-folder-tile:hover {
+  border-color: #7dd3fc;
+  background: #e0f2fe;
+}
+
 .tile-open {
   display: grid;
   justify-items: start;
@@ -33,6 +43,10 @@
   background: transparent;
   color: #172033;
   text-align: left;
+}
+
+.pending-folder-open {
+  cursor: default;
 }
 
 .tile-icon {

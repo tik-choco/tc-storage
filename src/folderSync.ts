@@ -1,4 +1,5 @@
 import type { FileRecord, FolderRecord, StorageSnapshot } from './domain.js'
+import { compareFilesForDisplay } from './domain.js'
 
 export function foldersForSync(snapshot: StorageSnapshot, folderId: string): FolderRecord[] {
   const ids = descendantFolderIds(snapshot.folders, folderId)
@@ -11,7 +12,7 @@ export function folderFilesForSync(snapshot: StorageSnapshot, folderId: string):
   const ids = descendantFolderIds(snapshot.folders, folderId)
   return snapshot.files
     .filter((file) => ids.has(file.folderId))
-    .sort((a, b) => a.folderId.localeCompare(b.folderId) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+    .sort((a, b) => a.folderId.localeCompare(b.folderId) || compareFilesForDisplay(a, b))
 }
 
 export function sharedFolderSignature(snapshot: StorageSnapshot, folderId: string): string {
@@ -72,7 +73,7 @@ function descendantFolderIds(folders: FolderRecord[], folderId: string): Set<str
 }
 
 function folderSortKey(folder: FolderRecord): string {
-  return `${folder.parentId ?? ''}/${folder.name}`
+  return `${folder.parentId ?? ''}/${String(folder.sortOrder ?? 0).padStart(12, '0')}/${folder.name}`
 }
 
 function pickFolderSyncFields(folder: FolderRecord) {
@@ -80,6 +81,7 @@ function pickFolderSyncFields(folder: FolderRecord) {
     id: folder.id,
     name: folder.name,
     parentId: folder.parentId,
+    sortOrder: folder.sortOrder ?? 0,
     color: folder.color,
     encrypted: folder.encrypted,
     shareEnabled: folder.shareEnabled,
@@ -91,6 +93,7 @@ function pickFileSyncFields(file: FileRecord) {
   return {
     id: file.id,
     folderId: file.folderId,
+    sortOrder: file.sortOrder ?? 0,
     name: file.name,
     mimeType: file.mimeType,
     size: file.size,

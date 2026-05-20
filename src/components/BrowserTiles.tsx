@@ -1,6 +1,6 @@
 import { Check, Copy, FileText, Folder, Info, Lock, Share2, ShieldCheck, Star, Trash2, X } from 'lucide-preact'
 import { useEffect } from 'preact/hooks'
-import type { BrowserDragItem } from '../appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, PendingShare } from '../appTypes.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
 import { dateLabel } from '../format.js'
 import type { DraftFolderProps } from './BrowserTableTypes.js'
@@ -31,29 +31,31 @@ export function FolderTile(props: {
   dropTargetFolderId: string | null | undefined
   folder: FolderRecord
   files: FileRecord[]
+  reorderTarget: BrowserReorderTarget | null
   onCopy: (value: string, label: string) => void
   onDeleteFolder: (folder: FolderRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
-  onMoveTargetDragLeave: (folderId: string | null, event: DragEvent) => void
-  onMoveTargetDragOver: (folderId: string | null, event: DragEvent) => void
-  onMoveTargetDrop: (folderId: string | null, event: DragEvent) => void
+  onItemDragLeave: (target: BrowserDragItem, event: DragEvent) => void
+  onItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
+  onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onSelectFolder: (folderId: string | null) => void
   onShowFolderDetails: (folder: FolderRecord, anchor?: HTMLElement) => void
 }) {
   const fileCount = filesInFolder({ folders: [], files: props.files, activity: [], clock: 0, originNode: '' }, props.folder.id).length
   const isDragSource = props.dragItem?.type === 'folder' && props.dragItem.id === props.folder.id
   const isDropTarget = props.dropTargetFolderId === props.folder.id
+  const reorderClass = reorderTargetClass(props.reorderTarget, 'folder', props.folder.id)
 
   return (
     <div
-      class={`tile-card folder-tile movable-item folder-drop-target ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''}`}
+      class={`tile-card folder-tile movable-item folder-drop-target ${isDragSource ? 'drag-source' : ''} ${isDropTarget ? 'drop-target' : ''} ${reorderClass}`}
       draggable
       onDragEnd={props.onDragEnd}
-      onDragLeave={(event) => props.onMoveTargetDragLeave(props.folder.id, event)}
-      onDragOver={(event) => props.onMoveTargetDragOver(props.folder.id, event)}
+      onDragLeave={(event) => props.onItemDragLeave({ type: 'folder', id: props.folder.id }, event)}
+      onDragOver={(event) => props.onItemDragOver({ type: 'folder', id: props.folder.id }, event)}
       onDragStart={(event) => props.onDragStart({ type: 'folder', id: props.folder.id }, event)}
-      onDrop={(event) => props.onMoveTargetDrop(props.folder.id, event)}
+      onDrop={(event) => props.onItemDrop({ type: 'folder', id: props.folder.id }, event)}
       role="listitem"
     >
       <button class="tile-open" onClick={() => props.onSelectFolder(props.folder.id)} title="Open folder">
@@ -79,14 +81,43 @@ export function FolderTile(props: {
   )
 }
 
+export function PendingFolderShareTile(props: {
+  busy: boolean
+  share: PendingShare
+  onCancelShare: (share: PendingShare) => void
+}) {
+  return (
+    <div class="tile-card pending-folder-tile" role="listitem">
+      <div class="tile-open pending-folder-open">
+        <span class="tile-icon">
+          <Folder size={34} class="folder-stroke blue" />
+        </span>
+        <strong>{props.share.folderName ?? 'Shared folder'}</strong>
+      </div>
+      <div class="tile-meta-row">
+        <span class="status-cell"><Share2 size={15} />{props.busy ? '読み込み中' : '読み込み待ち'}</span>
+        <span>共有待ち</span>
+      </div>
+      <span class="tile-date">{dateLabel(props.share.receivedAt)}</span>
+      <span class="row-actions tile-actions">
+        <button onClick={() => props.onCancelShare(props.share)} disabled={props.busy} title="Cancel pending share"><X size={16} /></button>
+      </span>
+    </div>
+  )
+}
+
 export function FileTile(props: {
   busy: boolean
   dataUrl: string | undefined
   dragItem: BrowserDragItem | null
   file: FileRecord
+  reorderTarget: BrowserReorderTarget | null
   onDeleteFile: (file: FileRecord) => void
   onDragEnd: () => void
   onDragStart: (item: BrowserDragItem, event: DragEvent) => void
+  onItemDragLeave: (target: BrowserDragItem, event: DragEvent) => void
+  onItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
+  onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onOpenFile: (file: FileRecord) => void
   onPreloadFile: (file: FileRecord) => void
   onShareFile: (file: FileRecord) => void
@@ -94,6 +125,7 @@ export function FileTile(props: {
   onToggleStar: (file: FileRecord) => void
 }) {
   const isDragSource = props.dragItem?.type === 'file' && props.dragItem.id === props.file.id
+  const reorderClass = reorderTargetClass(props.reorderTarget, 'file', props.file.id)
 
   useEffect(() => {
     if (!props.dataUrl && isMediaFile(props.file) && (props.file.lastCid || props.file.lastShareCid)) {
@@ -104,10 +136,13 @@ export function FileTile(props: {
   if (isMediaFile(props.file)) {
     return (
       <div
-        class={`tile-card file-tile media-only-tile movable-item ${isDragSource ? 'drag-source' : ''}`}
+        class={`tile-card file-tile media-only-tile movable-item ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
         draggable
         onDragEnd={props.onDragEnd}
+        onDragLeave={(event) => props.onItemDragLeave({ type: 'file', id: props.file.id }, event)}
+        onDragOver={(event) => props.onItemDragOver({ type: 'file', id: props.file.id }, event)}
         onDragStart={(event) => props.onDragStart({ type: 'file', id: props.file.id }, event)}
+        onDrop={(event) => props.onItemDrop({ type: 'file', id: props.file.id }, event)}
         role="listitem"
       >
         <button class="media-only-button" onClick={() => props.onOpenFile(props.file)} aria-label={`Open preview for ${props.file.name}`}>
@@ -128,10 +163,13 @@ export function FileTile(props: {
 
   return (
     <div
-      class={`tile-card file-tile movable-item ${isDragSource ? 'drag-source' : ''}`}
+      class={`tile-card file-tile movable-item ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
       draggable
       onDragEnd={props.onDragEnd}
+      onDragLeave={(event) => props.onItemDragLeave({ type: 'file', id: props.file.id }, event)}
+      onDragOver={(event) => props.onItemDragOver({ type: 'file', id: props.file.id }, event)}
       onDragStart={(event) => props.onDragStart({ type: 'file', id: props.file.id }, event)}
+      onDrop={(event) => props.onItemDrop({ type: 'file', id: props.file.id }, event)}
       role="listitem"
     >
       <button class="tile-open" onClick={() => props.onOpenFile(props.file)} title="Open preview">
@@ -151,6 +189,10 @@ export function FileTile(props: {
       </span>
     </div>
   )
+}
+
+function reorderTargetClass(target: BrowserReorderTarget | null, type: BrowserDragItem['type'], id: string): string {
+  return target?.type === type && target.id === id ? `reorder-${target.position}` : ''
 }
 
 function isMediaFile(file: FileRecord) {

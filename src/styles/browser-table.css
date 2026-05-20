@@ -20,6 +20,27 @@
   opacity: 0.48;
 }
 
+.reorder-before,
+.reorder-after {
+  position: relative;
+}
+
+.table:not(.table-grid) .reorder-before {
+  box-shadow: inset 0 3px 0 #2563eb;
+}
+
+.table:not(.table-grid) .reorder-after {
+  box-shadow: inset 0 -3px 0 #2563eb;
+}
+
+.table-grid .reorder-before {
+  box-shadow: -4px 0 0 #2563eb;
+}
+
+.table-grid .reorder-after {
+  box-shadow: 4px 0 0 #2563eb;
+}
+
 .drop-zone.drop-target,
 .folder-drop-target.drop-target {
   outline: 2px solid rgba(15, 118, 110, 0.72);
@@ -111,6 +132,11 @@
 
 .draft-folder-row {
   background: #f8fafc;
+}
+
+.pending-folder-row {
+  border-color: #bae6fd;
+  background: #f0f9ff;
 }
 
 .draft-folder-name input {
