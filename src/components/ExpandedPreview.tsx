@@ -99,7 +99,8 @@ export function ExpandedPreview(props: {
     const movement = Math.hypot(deltaX, deltaY)
     if (movement < 12 && canZoom && canNavigate && isMobilePreview() && zoomRef.current.scale <= 1.02) {
       event.preventDefault()
-      props.onNext()
+      if (isLeftSideTap(touch.clientX, event.currentTarget)) props.onPrevious()
+      else props.onNext()
       return
     }
     if (!canNavigate || Math.abs(deltaX) < 52 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25 || zoomRef.current.scale > 1.02) return
@@ -208,6 +209,12 @@ function clamp(value: number, min: number, max: number): number {
 
 function isMobilePreview(): boolean {
   return window.matchMedia('(max-width: 760px)').matches
+}
+
+function isLeftSideTap(clientX: number, target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return clientX < window.innerWidth / 2
+  const rect = target.getBoundingClientRect()
+  return clientX < rect.left + rect.width / 2
 }
 
 function BinaryPreview(props: { file: FileRecord; loadingProgress?: number; message?: string }) {

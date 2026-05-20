@@ -1,4 +1,4 @@
-import { useRef, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import type { BrowserDragItem } from '../appTypes.js'
 import { emptySelectionActions } from '../appSelectionActions.js'
 import { DropOverlay } from './BrowserDropOverlay.js'
@@ -15,21 +15,45 @@ type Marquee = {
   startY: number
 }
 
+type PendingLongPress = Marquee & {
+  pointerId: number
+  timer: number
+}
+
+const longPressDelayMs = 360
+const longPressMoveTolerancePx = 10
+
 export function FileTable(props: BrowserTableProps) {
   const isCurrentDropTarget = props.dropTargetFolderId === props.currentFolderId
   const selection = props.selection ?? emptySelectionActions
   const selectionRef = useRef(selection)
   const tableRef = useRef<HTMLDivElement>(null)
   const marqueeRef = useRef<Marquee | null>(null)
+  const pendingLongPressRef = useRef<PendingLongPress | null>(null)
+  const suppressClickRef = useRef(false)
   const [marquee, setMarquee] = useState<Marquee | null>(null)
   const marqueeStyle = marquee ? marqueeRect(marquee, tableRef.current) : null
   selectionRef.current = selection
+  useEffect(() => () => cancelPendingLongPress(), [])
   const tableProps = {
     ref: tableRef,
-    onPointerCancel: (event: PointerEvent) => finishMarquee(event),
-    onPointerDown: (event: PointerEvent) => beginMarquee(event),
-    onPointerMove: (event: PointerEvent) => updateMarquee(event),
-    onPointerUp: (event: PointerEvent) => finishMarquee(event),
+    onClickCapture: (event: MouseEvent) => {
+      if (!suppressClickRef.current) return
+      event.preventDefault()
+      event.stopPropagation()
+      suppressClickRef.current = false
+    },
+    onContextMenu: (event: MouseEvent) => {
+      if (!marqueeRef.current && !suppressClickRef.current) return
+      event.preventDefault()
+    },
+    onPointerCancel: (event: PointerEvent) => { cancelPendingLongPress(); finishMarquee(event) },
+    onPointerDown: (event: PointerEvent) => beginPointerSelection(event),
+    onPointerMove: (event: PointerEvent) => {
+      if (marqueeRef.current) updateMarquee(event)
+      else updatePendingLongPress(event)
+    },
+    onPointerUp: (event: PointerEvent) => { cancelPendingLongPress(); finishMarquee(event) },
   }
 
   if (props.viewMode === 'grid') {
@@ -66,23 +90,67 @@ export function FileTable(props: BrowserTableProps) {
     </div>
   )
 
-  function beginMarquee(event: PointerEvent): void {
+  function beginPointerSelection(event: PointerEvent): void {
+    if (event.pointerType === 'touch' || event.pointerType === 'pen') {
+      scheduleLongPressSelection(event)
+      return
+    }
+    beginMarquee(event)
+  }
+
+  function beginMarquee(event: PointerEvent, allowSelectableItem = false): void {
     if (event.button !== 0 || !tableRef.current || isActionClick(event)) return
     const target = event.target
-    if (target instanceof Element && target.closest('.selectable-item')) return
+    if (!allowSelectableItem && target instanceof Element && target.closest('.selectable-item')) return
     event.preventDefault()
-    const next = {
+    startMarquee({
       additive: event.metaKey || event.ctrlKey,
       baseSelection: selectionRef.current.selectedItems,
       currentX: event.clientX,
       currentY: event.clientY,
       startX: event.clientX,
       startY: event.clientY,
+    }, event.pointerId)
+  }
+
+  function scheduleLongPressSelection(event: PointerEvent): void {
+    if (event.button !== 0 || !tableRef.current || isLongPressBlocked(event)) return
+    cancelPendingLongPress()
+    const pending = {
+      additive: false,
+      baseSelection: selectionRef.current.selectedItems,
+      currentX: event.clientX,
+      currentY: event.clientY,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      timer: 0,
     }
+    pending.timer = window.setTimeout(() => {
+      if (pendingLongPressRef.current?.pointerId !== pending.pointerId) return
+      pendingLongPressRef.current = null
+      suppressNextClick()
+      startMarquee(pending, pending.pointerId)
+    }, longPressDelayMs)
+    pendingLongPressRef.current = pending
+  }
+
+  function startMarquee(next: Marquee, pointerId: number): void {
+    if (!tableRef.current) return
     marqueeRef.current = next
-    tableRef.current.setPointerCapture(event.pointerId)
+    tableRef.current.setPointerCapture(pointerId)
     setMarquee(next)
     applyMarqueeSelection(next)
+  }
+
+  function updatePendingLongPress(event: PointerEvent): void {
+    const pending = pendingLongPressRef.current
+    if (!pending || pending.pointerId !== event.pointerId) return
+    pending.currentX = event.clientX
+    pending.currentY = event.clientY
+    if (Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY) > longPressMoveTolerancePx) {
+      cancelPendingLongPress()
+    }
   }
 
   function updateMarquee(event: PointerEvent): void {
@@ -109,6 +177,16 @@ export function FileTable(props: BrowserTableProps) {
     if (!tableRef.current) return
     const selectedByMarquee = intersectingItems(tableRef.current, next)
     selectionRef.current.setSelection(next.additive ? [...next.baseSelection, ...selectedByMarquee] : selectedByMarquee)
+  }
+
+  function cancelPendingLongPress(): void {
+    if (pendingLongPressRef.current) window.clearTimeout(pendingLongPressRef.current.timer)
+    pendingLongPressRef.current = null
+  }
+
+  function suppressNextClick(): void {
+    suppressClickRef.current = true
+    window.setTimeout(() => { suppressClickRef.current = false }, 500)
   }
 }
 
@@ -145,4 +223,9 @@ function intersects(a: { bottom: number; left: number; right: number; top: numbe
 function isActionClick(event: MouseEvent): boolean {
   const target = event.target
   return target instanceof Element && Boolean(target.closest('button,input,a,select,textarea'))
+}
+
+function isLongPressBlocked(event: PointerEvent): boolean {
+  const target = event.target
+  return target instanceof Element && Boolean(target.closest('input,a,select,textarea,.row-actions,.name-detail-button'))
 }
