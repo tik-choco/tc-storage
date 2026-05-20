@@ -30,7 +30,6 @@ export function ExpandedPreview(props: {
   const wheelDeltaRef = useRef(0)
   const flowZoomRef = useRef(flowZoom)
   const flowPinchRef = useRef<{ distance: number; zoom: number; center: { x: number; y: number }; scroll: { x: number; y: number } } | null>(null)
-  const flowPanRef = useRef<{ x: number; y: number; scroll: { x: number; y: number } } | null>(null)
   const flowMousePanRef = useRef<{ x: number; y: number; scroll: { x: number; y: number } } | null>(null)
   const singleMousePanRef = useRef<{ x: number; y: number; zoom: { scale: number; x: number; y: number } } | null>(null)
   const pinchRef = useRef<{ distance: number; center: { x: number; y: number }; zoom: { scale: number; x: number; y: number } } | null>(null)
@@ -91,7 +90,6 @@ export function ExpandedPreview(props: {
       flowPinchRef.current = pinch && root
         ? { distance: pinch.distance, zoom: flowZoomRef.current, center: pointInElement(pinch.center, root), scroll: { x: root.scrollLeft, y: root.scrollTop } }
         : null
-      flowPanRef.current = null
       touchStartRef.current = null
       return
     }
@@ -103,12 +101,6 @@ export function ExpandedPreview(props: {
       return
     }
     const touch = event.touches[0]
-    if (flowEnabled && touch) {
-      const root = flowBodyRef.current
-      flowPanRef.current = root ? { x: touch.clientX, y: touch.clientY, scroll: { x: root.scrollLeft, y: root.scrollTop } } : null
-      touchStartRef.current = null
-      return
-    }
     if (canZoom && zoomRef.current.scale > 1.02 && touch) {
       panRef.current = { x: touch.clientX, y: touch.clientY, zoom: zoomRef.current }
       touchStartRef.current = null
@@ -129,15 +121,6 @@ export function ExpandedPreview(props: {
       flowZoomRef.current = nextZoom
       root.scrollLeft = (flowPinchRef.current.scroll.x + flowPinchRef.current.center.x) * ratio - currentCenter.x
       root.scrollTop = (flowPinchRef.current.scroll.y + flowPinchRef.current.center.y) * ratio - currentCenter.y
-      return
-    }
-    if (flowEnabled && event.touches.length === 1 && flowPanRef.current) {
-      const touch = event.touches[0]
-      const root = flowBodyRef.current
-      if (!touch || !root) return
-      event.preventDefault()
-      root.scrollLeft = flowPanRef.current.scroll.x - (touch.clientX - flowPanRef.current.x)
-      root.scrollTop = flowPanRef.current.scroll.y - (touch.clientY - flowPanRef.current.y)
       return
     }
     if (!canZoom) return
@@ -166,15 +149,6 @@ export function ExpandedPreview(props: {
   const handleTouchEnd = (event: TouchEvent) => {
     if (flowPinchRef.current) {
       if (event.touches.length < 2) flowPinchRef.current = null
-      if (event.touches.length === 1) {
-        const touch = event.touches[0]
-        const root = flowBodyRef.current
-        flowPanRef.current = touch && root ? { x: touch.clientX, y: touch.clientY, scroll: { x: root.scrollLeft, y: root.scrollTop } } : null
-      }
-      return
-    }
-    if (flowPanRef.current) {
-      if (event.touches.length === 0) flowPanRef.current = null
       return
     }
     if (pinchRef.current) {

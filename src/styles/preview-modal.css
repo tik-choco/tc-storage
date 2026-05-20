@@ -118,7 +118,7 @@
   overflow: auto;
   padding: calc(82px + env(safe-area-inset-top)) 12px 28px;
   cursor: grab;
-  touch-action: none;
+  touch-action: pan-x pan-y;
   user-select: none;
 }
 
