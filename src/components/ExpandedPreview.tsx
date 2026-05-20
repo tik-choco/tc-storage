@@ -22,11 +22,14 @@ export function ExpandedPreview(props: {
   const flowEnabled = mode === 'flow' && canNavigate
   const canZoom = !flowEnabled && props.file.mimeType.startsWith('image/') && Boolean(props.file.dataUrl)
   const [zoom, setZoom] = useState({ scale: 1, x: 0, y: 0 })
+  const [flowZoom, setFlowZoom] = useState(1)
   const flowBodyRef = useRef<HTMLDivElement>(null)
   const flowItemRefs = useRef<Record<string, HTMLElement | null>>({})
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const wheelLastNavigateAtRef = useRef(0)
   const wheelDeltaRef = useRef(0)
+  const flowZoomRef = useRef(flowZoom)
+  const flowPinchRef = useRef<{ distance: number; zoom: number } | null>(null)
   const pinchRef = useRef<{ distance: number; center: { x: number; y: number }; zoom: { scale: number; x: number; y: number } } | null>(null)
   const panRef = useRef<{ x: number; y: number; zoom: { scale: number; x: number; y: number } } | null>(null)
   const zoomRef = useRef(zoom)
@@ -34,6 +37,10 @@ export function ExpandedPreview(props: {
   useEffect(() => {
     zoomRef.current = zoom
   }, [zoom])
+
+  useEffect(() => {
+    flowZoomRef.current = flowZoom
+  }, [flowZoom])
 
   useEffect(() => {
     setZoom({ scale: 1, x: 0, y: 0 })
@@ -74,6 +81,12 @@ export function ExpandedPreview(props: {
     if (event.target === event.currentTarget) props.onClose()
   }
   const handleTouchStart = (event: TouchEvent) => {
+    if (flowEnabled && event.touches.length >= 2) {
+      const pinch = pinchMetrics(event.touches)
+      flowPinchRef.current = pinch ? { distance: pinch.distance, zoom: flowZoomRef.current } : null
+      touchStartRef.current = null
+      return
+    }
     if (canZoom && event.touches.length >= 2) {
       const pinch = pinchMetrics(event.touches)
       pinchRef.current = pinch ? { ...pinch, zoom: zoomRef.current } : null
@@ -90,6 +103,13 @@ export function ExpandedPreview(props: {
     touchStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null
   }
   const handleTouchMove = (event: TouchEvent) => {
+    if (flowEnabled && event.touches.length >= 2 && flowPinchRef.current) {
+      const pinch = pinchMetrics(event.touches)
+      if (!pinch) return
+      event.preventDefault()
+      setFlowZoom(clamp(flowPinchRef.current.zoom * (pinch.distance / flowPinchRef.current.distance), 0.6, 3))
+      return
+    }
     if (!canZoom) return
     if (event.touches.length >= 2 && pinchRef.current) {
       const pinch = pinchMetrics(event.touches)
@@ -114,6 +134,10 @@ export function ExpandedPreview(props: {
     }
   }
   const handleTouchEnd = (event: TouchEvent) => {
+    if (flowPinchRef.current) {
+      if (event.touches.length < 2) flowPinchRef.current = null
+      return
+    }
     if (pinchRef.current) {
       if (event.touches.length < 2) pinchRef.current = null
       if (event.touches.length === 1) {
@@ -146,6 +170,14 @@ export function ExpandedPreview(props: {
     else props.onNext()
   }
   const handleWheel = (event: WheelEvent) => {
+    if (flowEnabled) {
+      if (!event.ctrlKey && !event.metaKey) return
+      const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+      if (Math.abs(delta) < 1) return
+      event.preventDefault()
+      setFlowZoom((current) => clamp(current * (delta > 0 ? 0.88 : 1.14), 0.6, 3))
+      return
+    }
     if (!canNavigate || flowEnabled || zoomRef.current.scale > 1.02) return
     const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
     if (Math.abs(delta) < 4) return
@@ -164,6 +196,9 @@ export function ExpandedPreview(props: {
         transform: `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.scale})`,
         transition: pinchRef.current || panRef.current ? 'none' : undefined,
       }
+    : undefined
+  const flowListStyle = flowEnabled
+    ? { width: `min(${Math.round(780 * flowZoom)}px, ${Math.round(100 * flowZoom)}%)` }
     : undefined
 
   return (
@@ -188,7 +223,7 @@ export function ExpandedPreview(props: {
       {flowEnabled ? null : <button class="preview-nav previous" onClick={props.onPrevious} disabled={!canNavigate} title="Previous file"><ChevronLeft size={26} /></button>}
       <div ref={flowBodyRef} class={`preview-modal-body ${flowEnabled ? 'flow-body' : ''}`} onClick={closeFromEmptySpace} onWheel={handleWheel} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
         {flowEnabled ? (
-          <div class="preview-flow-list">
+          <div class="preview-flow-list" style={flowListStyle}>
             {flowFiles.map((file) => (
               <article
                 class={`preview-flow-item ${file.id === props.file.id ? 'current' : ''}`}

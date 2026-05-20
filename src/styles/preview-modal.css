@@ -115,16 +115,18 @@
 .preview-modal-body.flow-body {
   align-items: stretch;
   justify-content: flex-start;
-  overflow-y: auto;
+  overflow: auto;
   padding: calc(82px + env(safe-area-inset-top)) 12px 28px;
   touch-action: pan-y;
 }
 
 .preview-flow-list {
   display: grid;
+  flex: 0 0 auto;
   align-content: start;
   gap: 0;
   width: min(780px, 100%);
+  max-width: none;
   margin: 0 auto;
 }
 
