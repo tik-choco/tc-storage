@@ -192,8 +192,11 @@ export function compareFilesForDisplay(a: FileRecord, b: FileRecord): number {
 export function folderPath(snapshot: StorageSnapshot, folderId: string): FolderRecord[] {
   const folders = activeFolders(snapshot)
   const path: FolderRecord[] = []
+  const visited = new Set<string>()
   let current = folders.find((folder) => folder.id === folderId)
   while (current) {
+    if (visited.has(current.id)) break
+    visited.add(current.id)
     path.unshift(current)
     current = current.parentId ? folders.find((folder) => folder.id === current?.parentId) : undefined
   }

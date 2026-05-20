@@ -30,8 +30,11 @@ export function canPreloadThumbnail(file: FileRecord): boolean {
 
 export function nearestSharedAncestorFolder(snapshot: StorageSnapshot, folderId: string | null): FolderRecord | undefined {
   if (!folderId) return undefined
+  const visited = new Set<string>()
   let current = snapshot.folders.find((folder) => folder.id === folderId)
   while (current) {
+    if (visited.has(current.id)) return undefined
+    visited.add(current.id)
     if (!current.deletedAt && current.shareEnabled) return current
     current = current.parentId ? snapshot.folders.find((folder) => folder.id === current?.parentId) : undefined
   }
@@ -40,10 +43,15 @@ export function nearestSharedAncestorFolder(snapshot: StorageSnapshot, folderId:
 
 export function activeAncestorFolderId(snapshot: StorageSnapshot, folderId: string | null): string | null {
   if (!folderId) return null
+  const visited = new Set<string>()
   let current = snapshot.folders.find((folder) => folder.id === folderId)
   while (current?.parentId) {
-    current = snapshot.folders.find((folder) => folder.id === current?.parentId)
-    if (current && !current.deletedAt) return current.id
+    if (visited.has(current.id)) return null
+    visited.add(current.id)
+    const parent = snapshot.folders.find((folder) => folder.id === current?.parentId)
+    if (!parent || visited.has(parent.id)) return null
+    if (!parent.deletedAt) return parent.id
+    current = parent
   }
   return null
 }
