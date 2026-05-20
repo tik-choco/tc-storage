@@ -1,0 +1,191 @@
+.table {
+  position: relative;
+  width: 100%;
+}
+
+.drop-zone.drag-active {
+  outline: 3px solid rgba(20, 184, 166, 0.28);
+  outline-offset: -3px;
+}
+
+.movable-item {
+  cursor: grab;
+}
+
+.movable-item:active {
+  cursor: grabbing;
+}
+
+.drag-source {
+  opacity: 0.48;
+}
+
+.drop-zone.drop-target,
+.folder-drop-target.drop-target {
+  outline: 2px solid rgba(15, 118, 110, 0.72);
+  outline-offset: -2px;
+  background: #f0fdfa;
+}
+
+.side-folder-item.folder-drop-target.drop-target,
+.side-icon-button.folder-drop-target.drop-target {
+  border-color: #14b8a6;
+  background: #ccfbf1;
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.3);
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 38px 12px 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 180px;
+  border: 2px dashed #0f766e;
+  border-radius: 8px;
+  background: rgba(240, 253, 250, 0.94);
+  color: #0f766e;
+  pointer-events: none;
+}
+
+.drop-overlay strong {
+  max-width: min(420px, calc(100% - 32px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.6fr) minmax(110px, 0.7fr) minmax(90px, 0.5fr) minmax(110px, 0.6fr) 124px;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 0 14px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.table-row:last-child {
+  border-bottom: 0;
+}
+
+.table-head {
+  min-height: 38px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.name-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  color: #172033;
+  text-align: left;
+}
+
+.name-cell span,
+.status-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-name {
+  font-weight: 600;
+}
+
+.file-name-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.draft-folder-row {
+  background: #f8fafc;
+}
+
+.draft-folder-name input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  outline: none;
+  padding: 0 10px;
+}
+
+.draft-folder-name input:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.16);
+}
+
+.file-open-button,
+.name-detail-button {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 34px;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+
+.file-open-button {
+  justify-content: flex-start;
+  gap: 10px;
+  overflow: hidden;
+  font-weight: 600;
+}
+
+.file-open-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name-detail-button {
+  justify-content: center;
+  width: 32px;
+  color: #64748b;
+}
+
+.name-detail-button:hover {
+  background: #e2e8f0;
+  color: #0f766e;
+}
+
+.status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.row-actions button {
+  width: 32px;
+  height: 32px;
+}
+
+.empty-row {
+  padding: 36px 14px;
+  color: #64748b;
+  text-align: center;
+}

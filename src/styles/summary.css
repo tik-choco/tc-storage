@@ -1,0 +1,100 @@
+.status-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 32;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 28px;
+  padding: 0 12px;
+  border-top: 1px solid #d8e1e8;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-network,
+.status-notice,
+.status-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+}
+
+.status-network {
+  flex: 0 0 auto;
+}
+
+.status-network span,
+.status-notice span,
+.status-download span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-network span {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.status-notice {
+  flex: 1 1 auto;
+  color: #475569;
+}
+
+.status-network svg,
+.status-notice svg {
+  color: #0f766e;
+}
+
+.status-notice.error {
+  color: #be123c;
+}
+
+.status-notice.error svg {
+  color: #be123c;
+}
+
+.status-notice:empty {
+  display: none;
+}
+
+.status-download {
+  flex: 0 1 260px;
+  color: #475569;
+}
+
+.status-download span {
+  max-width: 136px;
+  font-weight: 600;
+}
+
+.status-download strong {
+  color: #334155;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-download-bar {
+  flex: 1 1 72px;
+  height: 3px;
+  min-width: 56px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.status-download-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0f766e;
+  transition: width 180ms ease;
+}

@@ -1,0 +1,44 @@
+import type { BrowserDragItem, BrowserViewMode } from '../appTypes.js'
+import type { FileRecord, FolderRecord } from '../domain.js'
+
+export type BrowserTableProps = {
+  busy: string
+  currentFolder: FolderRecord | null
+  currentFolderId: string | null
+  dragActive: boolean
+  dragItem: BrowserDragItem | null
+  dropTargetFolderId: string | null | undefined
+  fileRows: FileRecord[]
+  fileDataUrls: Record<string, string>
+  folderRows: FolderRecord[]
+  files: FileRecord[]
+  folderNameDraft: string | null
+  viewMode: BrowserViewMode
+  onCancelCreateFolder: () => void
+  onConfirmCreateFolder: () => void
+  onCopy: (value: string, label: string) => void
+  onDeleteFolder: (folder: FolderRecord) => void
+  onDeleteFile: (file: FileRecord) => void
+  onDrag: (event: DragEvent) => void
+  onDrop: (event: DragEvent) => void
+  onItemDragEnd: () => void
+  onItemDragStart: (item: BrowserDragItem, event: DragEvent) => void
+  onMoveTargetDragLeave: (folderId: string | null, event: DragEvent) => void
+  onMoveTargetDragOver: (folderId: string | null, event: DragEvent) => void
+  onMoveTargetDrop: (folderId: string | null, event: DragEvent) => void
+  onFolderNameDraft: (value: string) => void
+  onOpenFile: (file: FileRecord) => void
+  onPreloadFile: (file: FileRecord) => void
+  onSelectFolder: (folderId: string | null) => void
+  onShareFile: (file: FileRecord) => void
+  onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
+  onShowFolderDetails: (folder: FolderRecord, anchor?: HTMLElement) => void
+  onToggleStar: (file: FileRecord) => void
+}
+
+export type DraftFolderProps = {
+  name: string
+  onCancel: () => void
+  onChange: (value: string) => void
+  onConfirm: () => void
+}

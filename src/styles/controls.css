@@ -1,0 +1,86 @@
+.side-nav button,
+.browser-actions button,
+.row-actions button,
+.panel-title button,
+.share-item button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+}
+
+.side-nav button:hover,
+.browser-actions button:hover,
+.row-actions button:hover,
+.panel-title button:hover {
+  background: #e2e8f0;
+}
+
+.brand span,
+.side-nav span,
+.share-button span,
+.share-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 160px;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #64748b;
+}
+
+.search-box input,
+.settings-panel input,
+.folder-settings input,
+.folder-settings select,
+.share-item input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  outline: none;
+}
+
+.search-box input {
+  border: 0;
+}
+
+.search-box input:focus,
+.settings-panel input:focus,
+.folder-settings input:focus,
+.folder-settings select:focus,
+.share-item input:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.16);
+}
+
+.browser-actions button,
+.share-item button,
+.wide {
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+}
+
+.primary {
+  border-color: #0f766e;
+  background: #0f766e;
+  color: #fff;
+}

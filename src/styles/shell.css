@@ -1,0 +1,141 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  min-height: 100vh;
+  background: #eef2f5;
+}
+
+.sidebar {
+  min-width: 0;
+  padding: 14px 10px 54px;
+  border-right: 1px solid #d9e1e8;
+  background: #f8fafc;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #0f766e;
+  color: #fff;
+  font-weight: 800;
+}
+
+.brand.compact {
+  flex: 0 0 auto;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+
+.side-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.side-icon-button,
+.side-profile-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+}
+
+.side-icon-button:hover,
+.side-profile-button:hover,
+.side-icon-button.selected {
+  background: #e2e8f0;
+}
+
+.side-profile-button {
+  overflow: hidden;
+}
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.side-nav button {
+  width: 100%;
+  text-align: left;
+}
+
+.side-folder-branch {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.side-nav .side-folder-item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  justify-content: stretch;
+  gap: 8px;
+  padding: 9px 10px 9px calc(10px + var(--folder-depth-offset, 0px));
+  text-align: left;
+}
+
+.side-nav .side-folder-item svg {
+  align-self: center;
+  justify-self: center;
+}
+
+.side-nav button.selected {
+  background: #e2e8f0;
+}
+
+.avatar-frame {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #0f766e;
+}
+
+.avatar-frame.small {
+  width: 24px;
+  height: 24px;
+}
+
+.avatar-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.main-column {
+  min-width: 0;
+  padding: 16px 16px 46px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.hidden-input {
+  display: none;
+}
