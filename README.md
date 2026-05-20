@@ -1,8 +1,8 @@
 # TC Storage
 
-TC Storage is a local-first web app for keeping, organizing, and sharing files from the browser.
+TC Storage is a local-first web app for keeping, organizing, sharing, and syncing files from the browser.
 
-The app provides a drive-like interface for files and folders. It includes file sharing, folder sharing, and peer sync features.
+The app provides a drive-like interface for files and folders.
 
 ## Features
 
@@ -23,9 +23,15 @@ The app provides a drive-like interface for files and folders. It includes file 
 
 ## Folder Sync
 
-- Connect to peers through a configurable mistlib room.
 - Sync shared folder changes with connected peers.
-- See sync peers for shared folders and files.
+- See which peers are connected for shared folders and files.
+
+## Mistlib And Peer Sync Privacy
+
+- Peer sync is used to discover connected devices and exchange sync messages.
+- File and folder data is not stored on a server.
+- File and folder data is encrypted and transferred between peers.
+- Signaling and room services do not receive plaintext file contents.
 
 ## Privacy
 
@@ -33,9 +39,13 @@ The app provides a drive-like interface for files and folders. It includes file 
 - Files and shared folders are handled with encryption keys.
 - Each local user has a DID-based identity.
 
-## Usage Notes
+## Copyright And Acceptable Use
 
-- Upload or share only files that you are allowed to use.
+- Do not upload, store, sync, or share content that infringes copyright or other rights.
+- Users are responsible for ensuring that they have the necessary rights and permissions for the files they use.
 - Share URLs, QR codes, and file keys only with intended recipients.
 - Local browser data can be removed by browser or site-data cleanup, so keep backups of important files.
-- The developers are not responsible for data loss, misuse, or damage caused by use of this app.
+
+## Disclaimer
+
+This software is provided as is. The developers and contributors are not responsible for user content, copyright infringement, data loss, unauthorized access, misuse, or damages caused by use of this app.
