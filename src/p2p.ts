@@ -30,6 +30,16 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
   const stablePeersRef = useRef<string[]>([])
   const [state, setState] = useState<NetworkState>(initialNetworkState)
 
+  function clearMistSession(mist = mistRef.current) {
+    cleanupMist(mist, peerTimerRef.current)
+    mistRef.current = null
+    peerTimerRef.current = undefined
+    peersRef.current = []
+    stablePeersRef.current = []
+    peerFirstSeenAtRef.current = {}
+    peerReadFailuresRef.current = 0
+  }
+
   useEffect(() => {
     settingsRef.current = settings
   }, [settings])
@@ -138,13 +148,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
       window.clearTimeout(helloTimerRef.current)
       helloTimerRef.current = undefined
     }
-    cleanupMist(mistRef.current, peerTimerRef.current)
-    mistRef.current = null
-    peerTimerRef.current = undefined
-    peersRef.current = []
-    stablePeersRef.current = []
-    peerFirstSeenAtRef.current = {}
-    peerReadFailuresRef.current = 0
+    clearMistSession()
     setState((current) => ({ ...current, mode: 'connecting', peers: [], lastEvent: 'mistlib 接続中' }))
 
     const settingsValue = settingsRef.current
@@ -173,6 +177,17 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
         try {
           const peers = peerIdsForMistSend(readPeers(mist.get_neighbors()), settingsValue.nodeId)
           const hadPeers = peersRef.current.length > 0
+          if (hadPeers && peers.length === 0) {
+            p2pWarn('mist peers dropped to zero; restarting room')
+            clearMistSession(mist)
+            setState((current) => ({
+              ...current,
+              mode: channel ? 'local-gossip' : 'offline',
+              peers: [],
+              lastEvent: 'peer 0 のため mistlib 再接続待機中',
+            }))
+            return
+          }
           const changed = !samePeerList(peersRef.current, peers)
           const previousStablePeers = stablePeersRef.current
           const peerObservation = observeStableMistPeers(peerFirstSeenAtRef.current, peers, Date.now(), stablePeerDelayMs)
@@ -207,13 +222,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
             }))
             return
           }
-          cleanupMist(mist, peerTimerRef.current)
-          mistRef.current = null
-          peerTimerRef.current = undefined
-          peersRef.current = []
-          stablePeersRef.current = []
-          peerFirstSeenAtRef.current = {}
-          peerReadFailuresRef.current = 0
+          clearMistSession(mist)
           p2pWarn('mist cleanup after repeated peer refresh failures')
           setState((current) => ({
             ...current,
@@ -247,13 +256,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
       window.clearTimeout(helloTimerRef.current)
       helloTimerRef.current = undefined
     }
-    cleanupMist(mistRef.current, peerTimerRef.current)
-    mistRef.current = null
-    peerTimerRef.current = undefined
-    peersRef.current = []
-    stablePeersRef.current = []
-    peerFirstSeenAtRef.current = {}
-    peerReadFailuresRef.current = 0
+    clearMistSession()
     channelRef.current?.close()
     channelRef.current = null
     setState((current) => ({ ...current, mode: 'idle', peers: [], lastEvent: '切断しました' }))
