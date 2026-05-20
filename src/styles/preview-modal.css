@@ -78,7 +78,7 @@
 }
 
 .preview-mode-toggle {
-  display: none;
+  display: flex;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 8px;
@@ -175,10 +175,6 @@
   .preview-modal-actions button {
     width: 36px;
     height: 36px;
-  }
-
-  .preview-mode-toggle {
-    display: flex;
   }
 
   .preview-mode-toggle button {
