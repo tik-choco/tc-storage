@@ -93,6 +93,10 @@ export function ExpandedPreview(props: {
       touchStartRef.current = null
       return
     }
+    if (flowEnabled) {
+      touchStartRef.current = null
+      return
+    }
     if (canZoom && event.touches.length >= 2) {
       const pinch = pinchMetrics(event.touches)
       pinchRef.current = pinch ? { ...pinch, zoom: zoomRef.current } : null
@@ -151,6 +155,7 @@ export function ExpandedPreview(props: {
       if (event.touches.length < 2) flowPinchRef.current = null
       return
     }
+    if (flowEnabled) return
     if (pinchRef.current) {
       if (event.touches.length < 2) pinchRef.current = null
       if (event.touches.length === 1) {
