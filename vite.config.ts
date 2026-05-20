@@ -77,8 +77,10 @@ export default defineConfig(({ mode }) => {
   const hmrClientPort = env.VITE_HMR_CLIENT_PORT
     ? Number(env.VITE_HMR_CLIENT_PORT)
     : undefined
+  const base = env.VITE_BASE_PATH || '/'
 
   return {
+    base,
     plugins: [
       !hmrEnabled && noopViteHmrClientPlugin(),
       preact(),
