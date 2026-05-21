@@ -25,7 +25,7 @@ export function useAppControllerRefs<TNetwork>(options: AppControllerRefsOptions
   const fileContentFailuresRef = useRef<Record<string, { retryAfter: number; signature: string }>>({})
   const importKeysRef = useRef(options.importKeys)
   const pendingSharesRef = useRef(options.pendingShares)
-  const fileContentLoadsRef = useRef<Record<string, Promise<string>>>({})
+  const fileContentLoadsRef = useRef<Partial<Record<string, Promise<string>>>>({})
   const fileContentStorageRef = useRef<Record<string, string>>({})
   const settingsRef = useRef(options.settings)
   const networkRef = useRef(options.network)

@@ -22,7 +22,7 @@ interface FileContentOptions {
   failFileLoadProgress: (fileId: string) => void
   fileContentCacheRef: MutableRef<Record<string, string>>
   fileContentFailuresRef?: MutableRef<Record<string, { retryAfter: number; signature: string }>>
-  fileContentLoadsRef: MutableRef<Record<string, Promise<string>>>
+  fileContentLoadsRef: MutableRef<Partial<Record<string, Promise<string>>>>
   fileContentStorageRef?: MutableRef<Record<string, string>>
   fileShareKeysRef: MutableRef<Record<string, string>>
   finishDownloadProgress: (file: DownloadTarget, requestId: number) => void
@@ -129,7 +129,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   }
 
   function preloadFileContent(file: FileRecord): void {
-    if (file.dataUrl || fileContentCacheRef.current[file.id] || !canResolveFileContent(file)) return
+    if (file.dataUrl || fileContentCacheRef.current[file.id] || fileContentLoadsRef.current[file.id] || !canResolveFileContent(file)) return
     if (isContentFailureCoolingDown(file)) return
     syncLog('thumbnail preload requested', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
     void ensureFileContent(file, { trackProgress: true }).then(() => {

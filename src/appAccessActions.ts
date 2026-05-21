@@ -219,6 +219,7 @@ export function createAccessActions(options: AccessOptions) {
     const folder = snapshotRef.current.folders.find((item) => item.id === envelope.folderId && !item.deletedAt)
     const folderKey = folder ? folderKeysRef.current[folder.id] : ''
     if (!folder?.shareEnabled || !folderKey) return
+    if (folderAccessModesRef.current[folder.id] !== 'shared-approval' && envelope.from !== settingsRef.current.nodeId) return
     if (!matchesFolderAccessGrantProof(folderKey, folder.id, envelope.requestId, envelope.targetNodeId, envelope.accessGrantProof)) return
     setFolderAccessRequests((current) => current.filter((request) => (
       request.folderId !== envelope.folderId ||

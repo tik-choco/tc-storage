@@ -73,6 +73,55 @@ test('shared-approval grant proof clears the request on other approvers', async 
   assert.deepEqual(accessRequests, [])
 })
 
+test('owner-only grant proof from another shared holder does not clear owner request', async () => {
+  const now = '2026-05-21T00:00:00.000Z'
+  const folder = { ...makeFolder({ id: fixedFolderId, name: 'Fixed invite', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: ownerDid }), shareEnabled: true }
+  let accessRequests: FolderAccessRequest[] = [{
+    id: `${fixedFolderId}:${requesterDid}:request-a`,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    nodeId: requesterDid,
+    publicKey: 'public-a',
+    folderKeyHash: expectedFolderKeyHash,
+    requestedAt: '2026-05-21T00:00:02.000Z',
+    requestId: 'request-a',
+  }]
+  const actions = createAccessActions({
+    accessRequestKeysRef: { current: {} },
+    folderAccessModesRef: { current: { [folder.id]: 'approval' } },
+    folderKeysRef: { current: { [folder.id]: folderSecret } },
+    networkRef: { current: networkStub() },
+    openFolderAccessRequests: () => {},
+    setFolderAccessRequests: (update) => {
+      accessRequests = applyStateUpdate(accessRequests, update)
+    },
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: () => {},
+    setPendingShares: () => {},
+    settingsRef: { current: settingsStub(ownerDid) },
+    snapshotRef: { current: { ...createInitialSnapshot(ownerDid), folders: [folder], files: [], activity: [] } },
+  })
+
+  await actions.handleFolderAccessGrant({
+    type: 'folder-access-grant',
+    from: otherDid,
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:04.000Z',
+    clock: 4,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    targetNodeId: requesterDid,
+    requestId: 'request-a',
+    accessGrantProof: folderAccessGrantProof(folderSecret, fixedFolderId, 'request-a', requesterDid),
+    accessGrantPublicKey: 'grant-public',
+    accessGrantIv: 'grant-iv',
+    accessGrantCipherText: 'grant-cipher',
+  })
+
+  assert.equal(accessRequests.length, 1)
+})
+
 test('shared-approval denial does not cancel the waiting invite', () => {
   let pendingShares: PendingShare[] = [{
     type: 'folder-share',

@@ -59,6 +59,50 @@ test('thumbnail preload backs off after a storage_get failure for the same conte
   assert.deepEqual(Object.keys(failuresRef.current), [file.id])
 })
 
+test('thumbnail preload does not start duplicate progress while content is already loading', () => {
+  const now = '2026-05-21T00:00:00.000Z'
+  const folder = makeFolder({ id: 'folder-a', name: 'Folder A', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: 'node-a' })
+  const file = stripFileContent(stampFilePatch(makeFileFromDataUrl({
+    id: 'file-a',
+    folderId: folder.id,
+    name: 'image.png',
+    mimeType: 'image/png',
+    size: 5,
+    dataUrl: 'data:image/png;base64,aGVsbG8=',
+    checksum: 'checksum-a',
+    now,
+    nodeId: 'node-a',
+  }), { lastCid: 'cid-loading' }, now, 'node-a'))
+  const snapshot = { ...createInitialSnapshot('node-a'), folders: [folder], files: [file], activity: [] }
+  let loadStarts = 0
+  const actions = createFileContentActions({
+    failDownloadProgress: () => {},
+    failFileLoadProgress: () => {},
+    fileContentCacheRef: { current: {} },
+    fileContentFailuresRef: { current: {} },
+    fileContentLoadsRef: { current: { [file.id]: new Promise<string>(() => {}) } },
+    fileShareKeysRef: { current: {} },
+    finishDownloadProgress: () => {},
+    finishFileLoadProgress: () => {},
+    folderKeysRef: { current: { [folder.id]: 'secret' } },
+    setFileContentCache: () => {},
+    setNotice: () => {},
+    setSnapshot: () => {},
+    settingsRef: { current: testSettings() },
+    snapshotRef: { current: snapshot },
+    startDownloadProgress: () => 0,
+    startFileLoadProgress: () => {
+      loadStarts += 1
+      return file.id
+    },
+    updateDownloadProgress: () => {},
+  })
+
+  actions.preloadFileContent(file)
+
+  assert.equal(loadStarts, 0)
+})
+
 test('auto folder import backs off after a storage_get failure for the same share', async () => {
   const share: PendingShare = {
     type: 'folder-share',
