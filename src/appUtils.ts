@@ -118,5 +118,5 @@ export function shortLogValue(value: string | undefined): string | undefined {
 }
 
 export function loadBrowserViewMode(): BrowserViewMode {
-  return localStorage.getItem(browserViewModeKey) === 'grid' ? 'grid' : 'list'
+  return localStorage.getItem(browserViewModeKey) === 'list' ? 'list' : 'grid'
 }
