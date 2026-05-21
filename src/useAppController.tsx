@@ -175,6 +175,8 @@ export function useAppController() {
     networkMode: network.state.mode,
     networkRef,
     peerCount: network.state.peers.length,
+    stablePeerCount: network.state.stablePeers.length,
+    stablePeerKey: network.state.stablePeers.toSorted().join(','),
     pendingShares,
     pendingSharesRef,
     preloadFileContent: fileContent.preloadFileContent,

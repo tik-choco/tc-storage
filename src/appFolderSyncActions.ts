@@ -28,7 +28,7 @@ export function createFolderSyncActions(options: FolderSyncOptions) {
     snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef,
   } = options
 
-  function announceSharedFolders() {
+  function announceSharedFolders(options: { publishLocalChangesImmediately?: boolean } = {}) {
     const snapshotValue = snapshotRef.current
     const folderKeysValue = folderKeysRef.current
     syncLog('announce shared folders tick', {
@@ -38,8 +38,13 @@ export function createFolderSyncActions(options: FolderSyncOptions) {
     for (const folder of snapshotValue.folders) {
       if (!folder.shareEnabled || !folderKeysValue[folder.id]) continue
       if (!folder.lastCid || hasSharedFolderChangesSinceLastShare(snapshotValue, folder)) {
-        syncLog('announce found local changes: scheduling storage_add', folderLogDetails(folder))
-        scheduleFolderSync(folder.id, 'announce found local changes')
+        if (options.publishLocalChangesImmediately) {
+          syncLog('announce found local changes: publishing storage_add immediately', folderLogDetails(folder))
+          void publishSharedFolder(folder.id)
+        } else {
+          syncLog('announce found local changes: scheduling storage_add', folderLogDetails(folder))
+          scheduleFolderSync(folder.id, 'announce found local changes')
+        }
         continue
       }
       syncLog('sending folder-state cid over send_message', { ...folderLogDetails(folder), signatureLength: sharedFolderSignature(snapshotValue, folder.id).length })

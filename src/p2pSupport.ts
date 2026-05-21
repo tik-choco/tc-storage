@@ -5,6 +5,7 @@ import type { BroadcastSharePayload, MistModule, NetworkState, ShareEnvelope, Sh
 export const initialNetworkState: NetworkState = {
   mode: 'idle',
   peers: [],
+  stablePeers: [],
   lastEvent: '設定待機中',
   messagesSent: 0,
   messagesReceived: 0,

@@ -149,7 +149,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
       helloTimerRef.current = undefined
     }
     clearMistSession()
-    setState((current) => ({ ...current, mode: 'connecting', peers: [], lastEvent: 'mistlib 接続中' }))
+    setState((current) => ({ ...current, mode: 'connecting', peers: [], stablePeers: [], lastEvent: 'mistlib 接続中' }))
 
     const settingsValue = settingsRef.current
     const channelName = `tc-storage-${settingsValue.roomId}`
@@ -200,6 +200,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
             ...current,
             mode: 'mistlib',
             peers,
+            stablePeers: peerObservation.stablePeers,
             lastEvent: peers.length > 0 ? 'mistlib 共有ルーム接続中' : 'mistlib 共有ルーム待機中',
           }))
           if (peerObservation.stablePeers.length > 0 && (!hadPeers || changed || stableChanged)) queueHello()
@@ -220,6 +221,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
             ...current,
             mode: channel ? 'local-gossip' : 'offline',
             peers: [],
+            stablePeers: [],
             lastEvent: `mistlib再接続待機中: ${describeError(error, 'unknown error')}`,
           }))
         }
@@ -232,6 +234,8 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
       setState((current) => ({
         ...current,
         mode: channel ? 'local-gossip' : 'offline',
+        peers: [],
+        stablePeers: [],
         lastEvent: `mistlib未接続: ${describeError(error, 'unknown error')}`,
       }))
     }
@@ -251,7 +255,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
     clearMistSession()
     channelRef.current?.close()
     channelRef.current = null
-    setState((current) => ({ ...current, mode: 'idle', peers: [], lastEvent: '切断しました' }))
+    setState((current) => ({ ...current, mode: 'idle', peers: [], stablePeers: [], lastEvent: '切断しました' }))
   }, [])
 
   useEffect(() => {

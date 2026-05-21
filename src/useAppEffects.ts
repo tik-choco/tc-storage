@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type Dispatch, type StateUpdater } from 'preact/hooks'
+import { useCallback, useEffect, useRef, type Dispatch, type StateUpdater } from 'preact/hooks'
 import type { BrowserViewMode, Notice, PendingShare } from './appTypes.js'
 import { activeAncestorFolderId, canPreloadThumbnail, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import { ensureDidIdentity, publicDidIdentity } from './didIdentity.js'
@@ -18,9 +18,21 @@ import { useShareLinkImport, type LinkedShare } from './shareLinks.js'
 type MutableRef<T> = { current: T }
 type MistShare = ReturnType<typeof useMistShare>
 
+export function immediateConnectionAnnounceKey(options: {
+  autoConnect: boolean
+  networkMode: string
+  nodeId: string
+  roomId: string
+  stablePeerCount: number
+  stablePeerKey: string
+}): string {
+  if (!options.autoConnect || options.networkMode !== 'mistlib' || options.stablePeerCount === 0 || !options.stablePeerKey) return ''
+  return `${options.roomId}:${options.nodeId}:${options.stablePeerKey}`
+}
+
 interface AppEffectsOptions {
   acceptLinkedShare: (share: LinkedShare) => void
-  announceSharedFolders: () => void
+  announceSharedFolders: (options?: { publishLocalChangesImmediately?: boolean }) => void
   autoImportFolderShare: (share: PendingShare, passphrase: string) => Promise<void>
   autoImportInFlightRef: MutableRef<Set<string>>
   autoImportCidsRef: MutableRef<Set<string>>
@@ -80,6 +92,8 @@ interface AppEffectsOptions {
   syncTimersRef: MutableRef<Record<string, number>>
   networkMode: string
   peerCount: number
+  stablePeerCount: number
+  stablePeerKey: string
   selectFolder: (folderId: string | null) => void
 }
 
@@ -94,8 +108,9 @@ export function useAppEffects(options: AppEffectsOptions): void {
     previewFiles, profileOpen, scheduleFolderSync, selectedFile, selectedFileId, selectedPreviewFile,
     selectFolder, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setNotice, setSelectedFileId, setSettings, setSettingsDraft, settings, settingsOpen,
-    setSnapshot, settingsRef, snapshot, snapshotRef, syncSignaturesRef, syncTimersRef,
+    setSnapshot, settingsRef, snapshot, snapshotRef, stablePeerCount, stablePeerKey, syncSignaturesRef, syncTimersRef,
   } = options
+  const lastConnectionAnnounceKeyRef = useRef('')
 
   useEffect(() => { snapshotRef.current = snapshot }, [snapshot])
   useEffect(() => { folderKeysRef.current = folderKeys }, [folderKeys])
@@ -216,6 +231,24 @@ export function useAppEffects(options: AppEffectsOptions): void {
     const timer = window.setInterval(announceSharedFolders, 8000)
     return () => window.clearInterval(timer)
   }, [settings.autoConnect])
+  useEffect(() => {
+    const key = immediateConnectionAnnounceKey({
+      autoConnect: settings.autoConnect,
+      networkMode,
+      nodeId: settings.nodeId,
+      roomId: settings.roomId,
+      stablePeerCount,
+      stablePeerKey,
+    })
+    if (!key) {
+      lastConnectionAnnounceKeyRef.current = ''
+      return
+    }
+    if (lastConnectionAnnounceKeyRef.current === key) return
+    lastConnectionAnnounceKeyRef.current = key
+    syncLog('stable peer connected: announcing shared folders immediately', { roomId: settings.roomId, stablePeerCount })
+    announceSharedFolders({ publishLocalChangesImmediately: true })
+  }, [networkMode, settings.autoConnect, settings.nodeId, settings.roomId, stablePeerCount, stablePeerKey])
   useEffect(() => { if (selectedFileId && !files.some((file) => file.id === selectedFileId)) { setSelectedFileId(null); setExpandedPreviewOpen(false) } }, [files, selectedFileId])
   useEffect(() => { if (detailFileId && !files.some((file) => file.id === detailFileId)) setDetailFileId(null) }, [detailFileId, files])
   useEffect(() => {
