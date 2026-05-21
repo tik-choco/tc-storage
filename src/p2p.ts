@@ -12,7 +12,8 @@ export { configureMistRoom, dropFailedMistPeers, observeStableMistPeers, peerIds
 export { signShareEnvelope, verifyShareEnvelope } from './p2pEnvelope.js'
 
 const encoder = new TextEncoder()
-const stablePeerDelayMs = 5000
+const stablePeerDelayMs = 1000
+const peerRefreshIntervalMs = 1000
 
 export function useMistShare(settings: AppSettings, onEnvelope: (envelope: ShareEnvelope) => void) {
   const settingsRef = useRef(settings)
@@ -227,7 +228,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
         }
       }
       refreshPeers()
-      peerTimerRef.current = window.setInterval(refreshPeers, 4000)
+      peerTimerRef.current = window.setInterval(refreshPeers, peerRefreshIntervalMs)
     } catch (error) {
       if (connectionSeqRef.current !== connectionSeq) return
       p2pWarn('connect failed', { connectionSeq, error: describeError(error, 'unknown error') })
