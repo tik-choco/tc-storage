@@ -8,13 +8,23 @@ import { createInitialSnapshot, makeFileFromDataUrl, makeFolder, stripFileConten
 
 type StateUpdate<T> = T | ((current: T) => T)
 
-test('child file lastCid is enough to skip shared-root content re-save', async () => {
-  const { childFileWithCid, sharedRoot, snapshot } = snapshotWithSharedChildFile()
-  const actions = createContentActionsForSnapshot(snapshot)
+test('child file lastCid with the same folder key skips shared-root content re-save', async () => {
+  const { childFileWithCid, childFolder, sharedRoot, snapshot } = snapshotWithSharedChildFile()
+  const actions = createContentActionsForSnapshot(snapshot, { [childFolder.id]: 'folder-secret' })
 
   const stored = await actions.ensureFolderFilesStored(sharedRoot, [childFileWithCid], 'folder-secret')
 
   assert.deepEqual(stored, [childFileWithCid])
+})
+
+test('child file lastCid is not reused only because the shared root has a cid', async () => {
+  const { childFileWithCid, sharedRoot, snapshot } = snapshotWithSharedChildFile()
+  const actions = createContentActionsForSnapshot(snapshot)
+
+  await assert.rejects(
+    () => actions.ensureFolderFilesStored(sharedRoot, [childFileWithCid], 'folder-secret'),
+    /CIDまたは復号キーがありません/,
+  )
 })
 
 test('child file lastCid is not reused for a shared root that has not been saved yet', async () => {
@@ -125,7 +135,7 @@ test('evidence gap: folder-share import snapshot normalizes the shared root pare
   assert.equal(remote.folders.find((item) => item.id === sharedFolder.id)?.parentId, null)
 })
 
-function createContentActionsForSnapshot(snapshot: StorageSnapshot) {
+function createContentActionsForSnapshot(snapshot: StorageSnapshot, folderKeys: Record<string, string> = {}) {
   let cache: Record<string, string> = {}
   let snapshotValue = snapshot
   return createFileContentActions({
@@ -136,7 +146,7 @@ function createContentActionsForSnapshot(snapshot: StorageSnapshot) {
     fileShareKeysRef: { current: {} },
     finishDownloadProgress: () => {},
     finishFileLoadProgress: () => {},
-    folderKeysRef: { current: {} },
+    folderKeysRef: { current: folderKeys },
     setFileContentCache: (update) => {
       cache = applyStateUpdate(cache, update)
     },
@@ -205,7 +215,7 @@ function createEnvelopeHarness(snapshot: StorageSnapshot) {
   return { actions, snapshot: () => snapshotValue }
 }
 
-function snapshotWithSharedChildFile(options: { rootLastCid?: boolean } = {}): { childFileWithCid: FileRecord; sharedRoot: FolderRecord; snapshot: StorageSnapshot } {
+function snapshotWithSharedChildFile(options: { rootLastCid?: boolean } = {}): { childFileWithCid: FileRecord; childFolder: FolderRecord; sharedRoot: FolderRecord; snapshot: StorageSnapshot } {
   const now = '2026-05-21T00:00:00.000Z'
   const sharedRoot = stampFolderPatch(
     makeFolder({ id: 'folder-root', name: 'Root', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: 'node-a' }),
@@ -218,6 +228,7 @@ function snapshotWithSharedChildFile(options: { rootLastCid?: boolean } = {}): {
   const childFileWithCid = stripFileContent(stampFilePatch(childFile, { lastCid: 'cid-child' }, now, 'node-a'))
   return {
     childFileWithCid,
+    childFolder,
     sharedRoot,
     snapshot: { ...createInitialSnapshot('node-a'), folders: [sharedRoot, childFolder], files: [childFileWithCid], activity: [] },
   }

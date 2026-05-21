@@ -3,11 +3,12 @@ import type { MoveActions, MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
 import { nearestSharedAncestorFolder } from './appUtils.js'
 import { stampFilePatch, stampFolderPatch } from './crdt.js'
-import { addActivity, compareFilesForDisplay, compareFoldersForDisplay, touchSnapshot, type FolderRecord, type StorageSnapshot } from './domain.js'
+import { addActivity, compareFilesForDisplay, compareFoldersForDisplay, touchSnapshot, type FileRecord, type FolderRecord, type StorageSnapshot } from './domain.js'
 import { hasBrowserDragItem, hasExternalFiles, readBrowserDragItems, writeBrowserDragItems } from './dragDrop.js'
 import type { AppSettings } from './localSettings.js'
 
 interface DragDropOptions {
+  announceFolderChange: (folder: FolderRecord, changeType: 'file-upserted' | 'folder-upserted', file?: FileRecord, changedFolder?: FolderRecord) => void
   browserViewMode: 'grid' | 'list'
   currentFolderId: string | null
   dragItemRef: MutableRef<BrowserDragItem | null>
@@ -29,7 +30,7 @@ interface DragDropOptions {
 
 export function createDragDropActions(options: DragDropOptions) {
   const {
-    browserViewMode, currentFolderId, dragItemRef, dragItemsRef, moveActions, scheduleFolderSync, selectedItems, setDragActive, setDragItem,
+    announceFolderChange, browserViewMode, currentFolderId, dragItemRef, dragItemsRef, moveActions, scheduleFolderSync, selectedItems, setDragActive, setDragItem,
     setDropTargetFolderId, setNotice, setReorderTarget, setSelectedItems, setSnapshot, settings, snapshotRef, uploadFiles,
   } = options
 
@@ -170,11 +171,15 @@ export function createDragDropActions(options: DragDropOptions) {
       const nextIds = reorderIds(currentRows.map((file) => file.id), item.id, target.id, target.position)
       const orderById = new Map(nextIds.map((id, index) => [id, (index + 1) * 1000]))
       const movedFile = currentRows.find((file) => file.id === item.id)
-      setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((file) => {
+      const changedFiles = currentRows.flatMap((file) => {
         const sortOrder = orderById.get(file.id)
-        return sortOrder === undefined || file.sortOrder === sortOrder ? file : stampFilePatch(file, { sortOrder }, now, settings.nodeId)
+        return sortOrder === undefined || file.sortOrder === sortOrder ? [] : [stampFilePatch(file, { sortOrder }, now, settings.nodeId)]
+      })
+      const changedFilesById = new Map(changedFiles.map((file) => [file.id, file]))
+      setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((file) => {
+        return changedFilesById.get(file.id) ?? file
       }) }, { actorNodeId: settings.nodeId, folderId: currentFolderId ?? undefined, fileId: item.id, action: 'file.reorder', detail: `${movedFile?.name ?? 'ファイル'} を並び替え` }, now), settings.nodeId))
-      scheduleReorderedSharedFolder(item, 'local file reorder')
+      announceReorderedSharedFiles(changedFiles)
       setNotice({ tone: 'success', text: 'ファイルの並び順を更新しました' })
       return
     }
@@ -182,27 +187,45 @@ export function createDragDropActions(options: DragDropOptions) {
     const nextIds = reorderIds(currentRows.map((folder) => folder.id), item.id, target.id, target.position)
     const orderById = new Map(nextIds.map((id, index) => [id, (index + 1) * 1000]))
     const movedFolder = currentRows.find((folder) => folder.id === item.id)
-    setSnapshot((current) => touchSnapshot(addActivity({ ...current, folders: current.folders.map((folder) => {
+    const changedFolders = currentRows.flatMap((folder) => {
       const sortOrder = orderById.get(folder.id)
-      return sortOrder === undefined || folder.sortOrder === sortOrder ? folder : stampFolderPatch(folder, { sortOrder }, now, settings.nodeId)
+      return sortOrder === undefined || folder.sortOrder === sortOrder ? [] : [stampFolderPatch(folder, { sortOrder }, now, settings.nodeId)]
+    })
+    const changedFoldersById = new Map(changedFolders.map((folder) => [folder.id, folder]))
+    setSnapshot((current) => touchSnapshot(addActivity({ ...current, folders: current.folders.map((folder) => {
+      return changedFoldersById.get(folder.id) ?? folder
     }) }, { actorNodeId: settings.nodeId, folderId: item.id, action: 'folder.reorder', detail: `${movedFolder?.name ?? 'フォルダー'} を並び替え` }, now), settings.nodeId))
-    scheduleReorderedSharedFolder(item, 'local folder reorder')
+    announceReorderedSharedFolders(changedFolders)
     setNotice({ tone: 'success', text: 'フォルダーの並び順を更新しました' })
   }
 
-  function scheduleReorderedSharedFolder(item: BrowserDragItem, reason: string): void {
-    const folder = sharedFolderForReorder(item)
+  function announceReorderedSharedFiles(files: FileRecord[]): void {
+    const folder = nearestSharedAncestorFolder(snapshotRef.current, currentFolderId)
     if (!folder) return
-    scheduleFolderSync(folder.id, reason)
+    scheduleFolderSync(folder.id, 'local file reorder')
+    for (const file of files) announceFolderChange(folder, 'file-upserted', file)
   }
 
-  function sharedFolderForReorder(item: BrowserDragItem): FolderRecord | undefined {
+  function announceReorderedSharedFolders(folders: FolderRecord[]): void {
     const snapshotValue = snapshotRef.current
-    if (item.type === 'folder') {
-      const folder = snapshotValue.folders.find((value) => value.id === item.id)
-      return nearestSharedAncestorFolder(snapshotValue, folder?.id ?? currentFolderId)
+    const containerSharedFolder = nearestSharedAncestorFolder(snapshotValue, currentFolderId)
+    if (containerSharedFolder) {
+      scheduleFolderSync(containerSharedFolder.id, 'local folder reorder')
+      for (const folder of folders) announceFolderChange(containerSharedFolder, 'folder-upserted', undefined, folder)
+      return
     }
-    return nearestSharedAncestorFolder(snapshotValue, currentFolderId)
+    const groups = new Map<string, { folder: FolderRecord; changedFolders: FolderRecord[] }>()
+    for (const folder of folders) {
+      const sharedFolder = nearestSharedAncestorFolder(snapshotValue, folder.id)
+      if (!sharedFolder) continue
+      const group = groups.get(sharedFolder.id)
+      if (group) group.changedFolders.push(folder)
+      else groups.set(sharedFolder.id, { folder: sharedFolder, changedFolders: [folder] })
+    }
+    for (const group of groups.values()) {
+      scheduleFolderSync(group.folder.id, 'local folder reorder')
+      for (const folder of group.changedFolders) announceFolderChange(group.folder, 'folder-upserted', undefined, folder)
+    }
   }
 
   function handleDrag(event: DragEvent) {

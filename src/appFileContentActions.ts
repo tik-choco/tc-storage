@@ -58,8 +58,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     if (!file.lastCid) return false
     if (file.folderId === folder.id) return true
     if (folderKeysRef.current[file.folderId] === passphrase) return true
-    const sharedRoot = nearestSharedAncestorFolder(snapshotRef.current, file.folderId)
-    return sharedRoot?.id === folder.id && Boolean(folder.lastCid)
+    return false
   }
 
   async function materializeFolderBundleFiles(bundle: FolderBundle, passphrase: string): Promise<FolderBundle> {
