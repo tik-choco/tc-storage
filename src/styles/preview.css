@@ -225,10 +225,73 @@
   gap: 8px;
 }
 
+.preview-actions .secondary {
+  border-color: #cbd5e1;
+  background: #fff;
+  color: #334155;
+}
+
+.preview-actions .secondary:hover {
+  background: #e2e8f0;
+}
+
 .file-share-key {
   display: grid;
   gap: 6px;
   color: #475569;
   font-size: 13px;
   font-weight: 700;
+}
+
+.file-detail-panel .key-display {
+  min-width: 0;
+}
+
+.file-detail-panel .key-display input {
+  height: 38px;
+  padding: 0 10px;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-detail-panel .key-display button:disabled {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.file-name-field .key-display button:not(:disabled) {
+  border-color: #99f6e4;
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.file-name-field .key-display button:not(:disabled):hover {
+  background: #99f6e4;
+}
+
+.technical-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.technical-toggle:hover {
+  background: #e2e8f0;
+}
+
+.technical-details {
+  display: grid;
+  gap: 12px;
 }

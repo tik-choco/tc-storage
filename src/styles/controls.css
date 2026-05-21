@@ -48,6 +48,7 @@
 .settings-panel input,
 .folder-settings input,
 .folder-settings select,
+.file-detail-panel input,
 .share-item input {
   width: 100%;
   min-width: 0;
@@ -66,6 +67,7 @@
 .settings-panel input:focus,
 .folder-settings input:focus,
 .folder-settings select:focus,
+.file-detail-panel input:focus,
 .share-item input:focus {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.16);

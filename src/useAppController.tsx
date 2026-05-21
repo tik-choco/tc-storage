@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { descendantFolderIds, filterByName } from './appHelpers.js'
-import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, DeleteRequest, FolderAccessRequest, Notice, PendingShare } from './appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, DeleteRequest, FolderAccessRequest, FolderPanelMode, Notice, PendingShare } from './appTypes.js'
 import { createAccessActions, type RequestKeyEntry } from './appAccessActions.js'
 import { createDragDropActions } from './appDragDropActions.js'
 import { createEnvelopeActions } from './appEnvelopeActions.js'
@@ -49,7 +49,7 @@ export function useAppController() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [folderPanelOpen, setFolderPanelOpen] = useState(false)
-  const [folderPanelAccessOnly, setFolderPanelAccessOnly] = useState(false)
+  const [folderPanelMode, setFolderPanelMode] = useState<FolderPanelMode>('details')
   const [folderPanelFolderId, setFolderPanelFolderId] = useState<string | null>(null)
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
   const [detailFileId, setDetailFileId] = useState<string | null>(null)
@@ -142,8 +142,8 @@ export function useAppController() {
     folderKeysRef,
     networkRef,
     openFolderAccessRequests: (folderId) => {
-      setFolderPanelAccessOnly(true)
       setFolderPanelFolderId(folderId)
+      setFolderPanelMode('access')
       setFolderPanelOpen(true)
       setSettingsOpen(false)
       setProfileOpen(false)
@@ -158,7 +158,7 @@ export function useAppController() {
     snapshotRef,
   })
   const shareImport = createShareImportActions({ autoImportCidsRef, autoImportInFlightRef, clearFolderSyncTimer: folderSync.clearFolderSyncTimer, importKeys, materializeFolderBundleFiles: fileContent.materializeFolderBundleFiles, pendingSharesRef, rememberFolderPeer: peerActions.rememberFolderPeer, setBusy, setCurrentFolderId, setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setImportKeys, setNotice, setPendingShares, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef })
-  const panel = createPanelActions({ previewFiles, profileImageFiles, selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderNameDraft, setFolderPanelAccessOnly, setFolderPanelFolderId, setFolderPanelOpen, setImportKeys, setNotice, setPendingShares, setPopoverPositions, setProfileOpen, setSelectedFileId, setSettings, setSettingsOpen, settings, settingsDraft })
+  const panel = createPanelActions({ previewFiles, profileImageFiles, selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelMode, setFolderPanelOpen, setImportKeys, setNotice, setPendingShares, setPopoverPositions, setProfileOpen, setSelectedFileId, setSettings, setSettingsOpen, settings, settingsDraft })
   const envelope = createEnvelopeActions({ announceSharedFolders: folderSync.announceSharedFolders, autoImportCidsRef, autoImportFolderShare: shareImport.autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare: shareImport.autoImportLinkedShare, currentFolderId, detailFileId, folderKeysRef, folderPanelFolderId, handleFolderAccessDenied: access.handleFolderAccessDenied, handleFolderAccessGrant: access.handleFolderAccessGrant, handleFolderAccessRequest: access.handleFolderAccessRequest, helloResponseAtRef, importKeysRef, pendingSharesRef, preloadFileContent: fileContent.preloadFileContent, rememberFolderPeer: peerActions.rememberFolderPeer, scheduleFolderSync: folderSync.scheduleFolderSync, selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setPendingShares, setSelectedFileId, setSnapshot, snapshotRef })
   envelopeHandlerRef.current = envelope.handleEnvelope
   const folderActions = createFolderActions({ announceFolderChange: folderSync.announceFolderChange, clearFolderSyncTimer: folderSync.clearFolderSyncTimer, currentFolder, currentFolderId, currentFolderKey, ensureFolderFilesStored: fileContent.ensureFolderFilesStored, folderKeysRef, folderPanelFolder, folderPanelFolderId, folders, networkRef, scheduleFolderSync: folderSync.scheduleFolderSync, setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setExpandedPreviewOpen, setFolderKeys, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setProfileOpen, setSelectedFileId, setSettingsOpen, setSnapshot, settings, shareProfile, snapshot, snapshotRef, syncSignaturesRef })
@@ -274,8 +274,8 @@ export function useAppController() {
     fileShareUrl,
     files,
     folderNameDraft,
-    folderPanelAccessOnly,
     folderPanelFolder,
+    folderPanelMode,
     folderPanelOpen,
     folderPanelAccessMode,
     folderPanelAccessRequests,
@@ -298,6 +298,7 @@ export function useAppController() {
     notice,
     openFile: panel.openFile,
     openFolderPanel: panel.openFolderPanel,
+    openFolderSharePanel: panel.openFolderSharePanel,
     openProfile: panel.openProfile,
     openProfileAvatarImages: avatarPicker.openProfileAvatarImages,
     openSettings: panel.openSettings,
@@ -334,6 +335,7 @@ export function useAppController() {
     rejectFolderAccess: access.rejectFolderAccess,
     showFileDetails: panel.showFileDetails,
     showFolderDetails: panel.showFolderDetails,
+    showFolderShare: panel.showFolderShare,
     snapshot,
     storageUsed,
     uploadFiles: fileActions.uploadFiles,

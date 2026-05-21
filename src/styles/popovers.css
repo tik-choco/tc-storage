@@ -24,6 +24,7 @@
   box-sizing: border-box;
   max-height: inherit;
   overflow: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   padding: 14px;
   border-radius: inherit;

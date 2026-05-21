@@ -1,14 +1,15 @@
-import { Check, Copy, Download, KeyRound, ShieldCheck, Trash2, UserRound, X } from 'lucide-preact'
-import type { FolderAccessMode, FolderAccessRequest, SyncPeer } from '../appTypes.js'
+import { Check, Copy, Download, ShieldCheck, Trash2, UserRound, X } from 'lucide-preact'
+import { useState } from 'preact/hooks'
+import type { FolderAccessMode, FolderAccessRequest, FolderPanelMode, SyncPeer } from '../appTypes.js'
 import type { FolderColor, FolderRecord } from '../domain.js'
-import { dateLabel, shortCid, shortNode } from '../format.js'
+import { dateLabel, shortNode } from '../format.js'
 import { ShareQrCode } from './ShareQrCode.js'
 
 const folderColors: FolderColor[] = ['teal', 'blue', 'amber', 'rose', 'slate']
 
 export function FolderPanel(props: {
   folder: FolderRecord | null
-  accessOnly: boolean
+  mode: FolderPanelMode
   accessMode: FolderAccessMode
   accessRequests: FolderAccessRequest[]
   shareUrl: string
@@ -21,36 +22,31 @@ export function FolderPanel(props: {
   onPatchFolder: (patch: Partial<FolderRecord>) => void
   onRejectAccess: (request: FolderAccessRequest) => void
 }) {
+  const title = props.mode === 'share' ? 'Sharing' : props.mode === 'access' ? 'Access request' : 'Folder details'
   return (
     <section class="folder-panel">
       <div class="panel-title">
         <div>
-          <span>{props.accessOnly ? 'Access request' : 'Folder'}</span>
+          <span>{title}</span>
           <strong>{props.folder ? props.folder.name : 'My Drive'}</strong>
         </div>
       </div>
       {props.folder ? (
-        props.accessOnly
+        props.mode === 'access'
           ? <AccessOnlyPanel requests={props.accessRequests} onApprove={props.onApproveAccess} onReject={props.onRejectAccess} />
-          : <FolderSettings {...props} folder={props.folder} />
+          : props.mode === 'share'
+            ? <FolderShareSettings {...props} folder={props.folder} />
+            : <FolderDetails {...props} folder={props.folder} />
       ) : <div class="empty-detail">Select a folder to manage sharing.</div>}
-      {props.folder && !props.accessOnly ? <SyncPeers peers={props.syncPeers} /> : null}
     </section>
   )
 }
 
-function FolderSettings(props: {
+function FolderDetails(props: {
   folder: FolderRecord
-  accessMode: FolderAccessMode
-  accessRequests: FolderAccessRequest[]
-  shareUrl: string
-  onAccessModeChange: (mode: FolderAccessMode) => void
-  onApproveAccess: (request: FolderAccessRequest) => void
-  onCopy: (value: string, label: string) => void
   onDownloadFolder: (folder: FolderRecord) => void
   onDeleteFolder: () => void
   onPatchFolder: (patch: Partial<FolderRecord>) => void
-  onRejectAccess: (request: FolderAccessRequest) => void
 }) {
   return (
     <form class="folder-settings" onSubmit={(event) => event.preventDefault()}>
@@ -64,41 +60,6 @@ function FolderSettings(props: {
           {folderColors.map((color) => <option value={color} key={color}>{color}</option>)}
         </select>
       </label>
-      <label class="check-line">
-        <input type="checkbox" checked={props.folder.shareEnabled} onChange={(event) => props.onPatchFolder({ shareEnabled: event.currentTarget.checked })} />
-        <span>Shared folder</span>
-      </label>
-      {props.folder.shareEnabled ? (
-        <label>
-          <span>Access</span>
-          <select value={props.accessMode} onChange={(event) => props.onAccessModeChange(event.currentTarget.value as FolderAccessMode)}>
-            <option value="approval">承認制</option>
-            <option value="open">無制限受け入れ</option>
-          </select>
-        </label>
-      ) : null}
-      <div class="security-box">
-        <KeyRound size={18} />
-        <div>
-          <strong>mistlib</strong>
-          <span>{props.folder.lastCid ? `CID ${shortCid(props.folder.lastCid)}` : 'Not saved'}</span>
-        </div>
-      </div>
-      {props.shareUrl ? (
-        <div class="share-link-block">
-          <label>
-            <span>Share URL</span>
-            <div class="key-display one-action">
-              <input value={props.shareUrl} readOnly onFocus={(event) => event.currentTarget.select()} onClick={(event) => event.currentTarget.select()} />
-              <button type="button" onClick={() => props.onCopy(props.shareUrl, '共有URL')} title="Copy URL"><Copy size={16} /></button>
-            </div>
-          </label>
-          <ShareQrCode label="Folder share" value={props.shareUrl} />
-        </div>
-      ) : null}
-      {props.folder.shareEnabled && props.accessRequests.length > 0 ? (
-        <AccessRequests requests={props.accessRequests} onApprove={props.onApproveAccess} onReject={props.onRejectAccess} />
-      ) : null}
       <button class="primary wide" type="button" onClick={() => props.onDownloadFolder(props.folder)}>
         <Download size={17} />
         <span>Download ZIP</span>
@@ -108,6 +69,75 @@ function FolderSettings(props: {
         <span>Delete folder</span>
       </button>
     </form>
+  )
+}
+
+function FolderShareSettings(props: {
+  folder: FolderRecord
+  accessMode: FolderAccessMode
+  accessRequests: FolderAccessRequest[]
+  shareUrl: string
+  syncPeers: SyncPeer[]
+  onAccessModeChange: (mode: FolderAccessMode) => void
+  onApproveAccess: (request: FolderAccessRequest) => void
+  onCopy: (value: string, label: string) => void
+  onPatchFolder: (patch: Partial<FolderRecord>) => void
+  onRejectAccess: (request: FolderAccessRequest) => void
+}) {
+  return (
+    <form class="folder-settings" onSubmit={(event) => event.preventDefault()}>
+      {props.folder.shareEnabled ? (
+        <>
+          {props.shareUrl ? <ShareUrlField shareUrl={props.shareUrl} onCopy={props.onCopy} /> : null}
+          <label>
+            <span>Access</span>
+            <select value={props.accessMode} onChange={(event) => props.onAccessModeChange(event.currentTarget.value as FolderAccessMode)}>
+              <option value="approval">承認制</option>
+              <option value="open">無制限受け入れ</option>
+            </select>
+          </label>
+          {props.accessRequests.length > 0 ? (
+            <AccessRequests requests={props.accessRequests} onApprove={props.onApproveAccess} onReject={props.onRejectAccess} />
+          ) : null}
+          <SyncPeers peers={props.syncPeers} />
+          <label class="check-line">
+            <input type="checkbox" checked={props.folder.shareEnabled} onChange={(event) => props.onPatchFolder({ shareEnabled: event.currentTarget.checked })} />
+            <span>Shared folder</span>
+          </label>
+        </>
+      ) : (
+        <label class="check-line">
+          <input type="checkbox" checked={props.folder.shareEnabled} onChange={(event) => props.onPatchFolder({ shareEnabled: event.currentTarget.checked })} />
+          <span>Shared folder</span>
+        </label>
+      )}
+    </form>
+  )
+}
+
+function ShareUrlField(props: {
+  shareUrl: string
+  onCopy: (value: string, label: string) => void
+}) {
+  const [copied, setCopied] = useState(false)
+
+  function copyShareUrl() {
+    props.onCopy(props.shareUrl, '共有URL')
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1400)
+  }
+
+  return (
+    <div class="share-link-block">
+      <label>
+        <span>Share URL</span>
+        <div class="key-display one-action">
+          <input value={props.shareUrl} readOnly onFocus={(event) => event.currentTarget.select()} onClick={(event) => event.currentTarget.select()} />
+          <button type="button" class={copied ? 'copied' : ''} onClick={copyShareUrl} title={copied ? 'Copied' : 'Copy URL'}>{copied ? <Check size={16} /> : <Copy size={16} />}</button>
+        </div>
+      </label>
+      <ShareQrCode label="Folder share" value={props.shareUrl} />
+    </div>
   )
 }
 

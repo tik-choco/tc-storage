@@ -40,7 +40,7 @@ export type BrowserTableProps = {
   onPreloadFile: (file: FileRecord) => void
   onSelectFolder: (folderId: string | null) => void
   onShareFile: (file: FileRecord) => void
-  onShareFolder: (folder: FolderRecord) => void
+  onShareFolder: (folder: FolderRecord, anchor?: HTMLElement) => void
   onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
   onShowFolderDetails: (folder: FolderRecord, anchor?: HTMLElement) => void
 }

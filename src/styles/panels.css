@@ -108,6 +108,16 @@
   background: #e2e8f0;
 }
 
+.key-display button.copied {
+  border-color: #99f6e4;
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.key-display button.copied:hover {
+  background: #99f6e4;
+}
+
 .security-box {
   display: flex;
   align-items: center;

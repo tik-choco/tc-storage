@@ -34,6 +34,7 @@ export type SyncPeer = {
 }
 
 export type FolderAccessMode = 'approval' | 'open'
+export type FolderPanelMode = 'details' | 'share' | 'access'
 
 export type FolderAccessRequest = {
   id: string
