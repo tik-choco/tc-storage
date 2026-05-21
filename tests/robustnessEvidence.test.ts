@@ -230,7 +230,6 @@ function createEnvelopeHarness(snapshot: StorageSnapshot) {
     helloResponseAtRef: { current: {} },
     importKeysRef: { current: {} },
     pendingSharesRef: { current: [] },
-    preloadFileContent: () => {},
     rememberFolderPeer: () => {},
     scheduleFolderSync: () => {},
     selectedFileId: null,

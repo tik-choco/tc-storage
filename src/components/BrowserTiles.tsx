@@ -1,6 +1,7 @@
 import { Check, Download, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, X } from 'lucide-preact'
-import { useEffect } from 'preact/hooks'
+import { useEffect, useRef } from 'preact/hooks'
 import type { BrowserDragItem, BrowserReorderTarget, PendingShare, ProgressStatus } from '../appTypes.js'
+import { shouldPreloadVisibleThumbnail } from '../appUtils.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
 import { dateLabel } from '../format.js'
 import type { DraftFolderProps } from './BrowserTableTypes.js'
@@ -137,18 +138,38 @@ export function FileTile(props: {
   onShareFile: (file: FileRecord) => void
   onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
 }) {
+  const tileRef = useRef<HTMLDivElement>(null)
   const isDragSource = props.dragItem?.type === 'file' && props.dragItem.id === props.file.id
   const reorderClass = reorderTargetClass(props.reorderTarget, 'file', props.file.id)
 
   useEffect(() => {
-    if (!props.dataUrl && isMediaFile(props.file) && (props.file.lastCid || props.file.lastShareCid)) {
+    if (!shouldPreloadVisibleThumbnail({ dataUrl: props.dataUrl, file: props.file, visible: true })) return
+    const element = tileRef.current
+    if (!element) return
+    let requested = false
+    const requestPreload = () => {
+      if (requested || !shouldPreloadVisibleThumbnail({ dataUrl: props.dataUrl, file: props.file, visible: true })) return
+      requested = true
       props.onPreloadFile(props.file)
     }
-  }, [props.dataUrl, props.file.id, props.file.lastCid, props.file.lastShareCid, props.file.mimeType])
+    if (typeof IntersectionObserver !== 'function') {
+      const frame = window.requestAnimationFrame(requestPreload)
+      return () => window.cancelAnimationFrame(frame)
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        requestPreload()
+        observer.disconnect()
+      }
+    }, { rootMargin: '160px 0px' })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [props.dataUrl, props.file.id, props.file.lastCid, props.file.lastShareCid, props.file.mimeType, props.file.deletedAt, props.onPreloadFile])
 
   if (isMediaFile(props.file)) {
     return (
       <div
+        ref={tileRef}
         class={`tile-card file-tile media-only-tile movable-item selectable-item ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
         data-select-id={props.file.id}
         data-select-type="file"
@@ -182,6 +203,7 @@ export function FileTile(props: {
 
   return (
     <div
+      ref={tileRef}
       class={`tile-card file-tile movable-item selectable-item ${props.selected ? 'selected-item' : ''} ${isDragSource ? 'drag-source' : ''} ${reorderClass}`}
       data-select-id={props.file.id}
       data-select-type="file"

@@ -1,7 +1,7 @@
 import { pendingShareKey, type Notice, type PendingShare } from './appTypes.js'
-import type { FileContentActions, MutableRef, SetState } from './appControllerTypes.js'
+import type { MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
-import { canPreloadThumbnail, envelopeLogDetails, folderLogDetails, shortLogValue, syncLog } from './appUtils.js'
+import { envelopeLogDetails, folderLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import { mergeSnapshots, stampFilePatch, stampFolderPatch } from './crdt.js'
 import { addActivity, stripFileContent, type FileRecord, type StorageSnapshot } from './domain.js'
 import { canAutoImportFolderState, sharedFolderSignature, shouldDeferRemoteFolderStateImport } from './folderSync.js'
@@ -18,7 +18,6 @@ interface EnvelopeOptions {
   helloResponseAtRef: MutableRef<Record<string, number>>
   importKeysRef: MutableRef<Record<string, string>>
   pendingSharesRef: MutableRef<PendingShare[]>
-  preloadFileContent: FileContentActions['preloadFileContent']
   rememberFolderPeer: (envelope: Pick<ShareEnvelope, 'folderId' | 'from' | 'senderProfile' | 'sentAt'>) => void
   scheduleFolderSync: (folderId: string, reason: string) => void
   handleFolderAccessDenied: (envelope: ShareEnvelope) => void
@@ -44,7 +43,7 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
   const {
     announceSharedFolders, autoImportCidsRef, autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare,
     currentFolderId, detailFileId, folderKeysRef, folderPanelFolderId, helloResponseAtRef,
-    importKeysRef, pendingSharesRef, preloadFileContent, rememberFolderPeer, scheduleFolderSync,
+    importKeysRef, pendingSharesRef, rememberFolderPeer, scheduleFolderSync,
     handleFolderAccessDenied, handleFolderAccessGrant, handleFolderAccessRequest,
     selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderPanelFolderId, setFolderPanelOpen, setNotice, setPendingShares, setSelectedFileId,
@@ -190,7 +189,6 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
     if (!snapshotValue.folders.some((item) => item.id === envelope.folderId && !item.deletedAt)) return syncLog('folder-change upsert skipped: local folder not found', envelopeLogDetails(envelope))
     const file = stripFileContent({ ...envelope.file, folderId: envelope.file.folderId || envelope.folderId })
     setSnapshot((current) => addActivity(mergeSnapshots(current, remoteSnapshot(envelope, [file], [])), { actorNodeId: envelope.from, folderId: envelope.folderId, fileId: file.id, action: 'file.remote-upsert', detail: `${file.name} がリモートで追加/更新` }, envelope.sentAt))
-    if (canPreloadThumbnail(file)) preloadFileContent(file)
   }
 
   function applyRemoteFileDelete(envelope: ShareEnvelope) {

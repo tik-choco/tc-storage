@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type Dispatch, type StateUpdater } from 'preact/hooks'
 import type { BrowserViewMode, FolderAccessMode, Notice, PendingShare } from './appTypes.js'
-import { activeAncestorFolderId, canPreloadThumbnail, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
+import { activeAncestorFolderId, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import { ensureDidIdentity, publicDidIdentity } from './didIdentity.js'
 import type { FileRecord, FolderRecord, StorageSnapshot } from './domain.js'
 import { describeError } from './errors.js'
@@ -19,6 +19,8 @@ import { useShareLinkImport, type LinkedShare } from './shareLinks.js'
 type MutableRef<T> = { current: T }
 type MistShare = ReturnType<typeof useMistShare>
 
+export const sharedFolderReannounceIntervalMs = 60_000
+
 export function immediateConnectionAnnounceKey(options: {
   autoConnect: boolean
   networkMode: string
@@ -29,6 +31,24 @@ export function immediateConnectionAnnounceKey(options: {
 }): string {
   if (!options.autoConnect || options.networkMode !== 'mistlib' || options.stablePeerCount === 0 || !options.stablePeerKey) return ''
   return `${options.roomId}:${options.nodeId}:${options.stablePeerKey}`
+}
+
+export function shouldRunSharedFolderReannounce(options: {
+  autoConnect: boolean
+  networkMode: string
+  stablePeerCount: number
+}): boolean {
+  if (!options.autoConnect) return false
+  if (options.networkMode === 'mistlib') return options.stablePeerCount > 0
+  return options.networkMode === 'local-gossip'
+}
+
+export function shouldPreloadProfileAvatar(options: {
+  avatarFileId: string
+  hasDataUrl: boolean
+  profileOpen: boolean
+}): boolean {
+  return options.profileOpen && Boolean(options.avatarFileId) && !options.hasDataUrl
 }
 
 interface AppEffectsOptions {
@@ -50,7 +70,6 @@ interface AppEffectsOptions {
   fileContentCacheRef: MutableRef<Record<string, string>>
   fileContentCache: Record<string, string>
   fileDataUrls: Record<string, string>
-  fileRows: FileRecord[]
   fileShareKeys: Record<string, string>
   fileShareKeysRef: MutableRef<Record<string, string>>
   files: FileRecord[]
@@ -106,7 +125,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
     acceptLinkedShare, announceSharedFolders, autoImportCidsRef, autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare,
     browserViewMode, browserViewModeKey, canResolveFileContent, clearFolderSyncTimer, currentFolder,
     currentFolderId, detailFileId, ensureFileContent, expandedPreviewOpen, fileContentCache, fileContentCacheRef, fileDataUrls,
-    fileRows, fileShareKeys, fileShareKeysRef, files, folderAccessModes, folderAccessModesRef, folderKeys, folderKeysRef, folderPeers, folders,
+    fileShareKeys, fileShareKeysRef, files, folderAccessModes, folderAccessModesRef, folderKeys, folderKeysRef, folderPeers, folders,
     handlePreviewKey, importKeys, importKeysRef, isPendingShareAlreadyImported, markPendingShareImported,
     network, networkRef, networkMode, peerCount, pendingShares, pendingSharesRef, preloadFileContent,
     previewFiles, profileOpen, requestFolderAccess, scheduleFolderSync, selectedFile, selectedFileId, selectedPreviewFile,
@@ -168,17 +187,10 @@ export function useAppEffects(options: AppEffectsOptions): void {
     setFolderNameDraft(null)
   }, [currentFolder, currentFolderId, snapshot])
   useEffect(() => {
-    if (browserViewMode !== 'grid') return
-    for (const file of fileRows.filter((item) => canPreloadThumbnail(item) && canResolveFileContent(item)).slice(0, 24)) {
-      if (file.dataUrl || fileDataUrls[file.id]) continue
-      preloadFileContent(file)
-    }
-  }, [browserViewMode, fileDataUrls, fileRows, fileShareKeys, folderKeys])
-  useEffect(() => {
-    if (!settings.avatarFileId || fileDataUrls[settings.avatarFileId]) return
+    if (!shouldPreloadProfileAvatar({ avatarFileId: settings.avatarFileId, hasDataUrl: Boolean(fileDataUrls[settings.avatarFileId]), profileOpen })) return
     const file = files.find((item) => item.id === settings.avatarFileId)
     if (file && canResolveFileContent(file)) preloadFileContent(file)
-  }, [fileDataUrls, fileShareKeys, files, folderKeys, settings.avatarFileId])
+  }, [fileDataUrls, fileShareKeys, files, folderKeys, profileOpen, settings.avatarFileId])
   useShareLinkImport(useCallback(acceptLinkedShare, []))
   useEffect(() => {
     const sharedFolders = snapshot.folders.filter((folder) => folder.shareEnabled && folderKeys[folder.id])
@@ -237,10 +249,10 @@ export function useAppEffects(options: AppEffectsOptions): void {
     for (const timer of Object.values(syncTimersRef.current)) window.clearTimeout(timer)
   }, [])
   useEffect(() => {
-    if (!settings.autoConnect) return undefined
-    const timer = window.setInterval(announceSharedFolders, 8000)
+    if (!shouldRunSharedFolderReannounce({ autoConnect: settings.autoConnect, networkMode, stablePeerCount })) return undefined
+    const timer = window.setInterval(announceSharedFolders, sharedFolderReannounceIntervalMs)
     return () => window.clearInterval(timer)
-  }, [settings.autoConnect])
+  }, [networkMode, settings.autoConnect, stablePeerCount, stablePeerKey])
   useEffect(() => {
     const key = immediateConnectionAnnounceKey({
       autoConnect: settings.autoConnect,

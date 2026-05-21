@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { immediateConnectionAnnounceKey } from '../src/useAppEffects.js'
+import { immediateConnectionAnnounceKey, sharedFolderReannounceIntervalMs, shouldPreloadProfileAvatar, shouldRunSharedFolderReannounce } from '../src/useAppEffects.js'
 
 test('immediateConnectionAnnounceKey waits for stable mist peers', () => {
   const base = {
@@ -28,4 +28,20 @@ test('immediateConnectionAnnounceKey does not fire while disabled or outside mis
 
   assert.equal(immediateConnectionAnnounceKey(base), '')
   assert.equal(immediateConnectionAnnounceKey({ ...base, autoConnect: false, networkMode: 'mistlib' }), '')
+})
+
+test('periodic shared-folder reannounce runs only as a slow reconciliation path', () => {
+  assert.equal(sharedFolderReannounceIntervalMs, 60_000)
+  assert.equal(shouldRunSharedFolderReannounce({ autoConnect: false, networkMode: 'mistlib', stablePeerCount: 1 }), false)
+  assert.equal(shouldRunSharedFolderReannounce({ autoConnect: true, networkMode: 'mistlib', stablePeerCount: 0 }), false)
+  assert.equal(shouldRunSharedFolderReannounce({ autoConnect: true, networkMode: 'mistlib', stablePeerCount: 1 }), true)
+  assert.equal(shouldRunSharedFolderReannounce({ autoConnect: true, networkMode: 'local-gossip', stablePeerCount: 0 }), true)
+  assert.equal(shouldRunSharedFolderReannounce({ autoConnect: true, networkMode: 'offline', stablePeerCount: 0 }), false)
+})
+
+test('profile avatar preload is gated behind the profile panel', () => {
+  assert.equal(shouldPreloadProfileAvatar({ avatarFileId: 'file-a', hasDataUrl: false, profileOpen: false }), false)
+  assert.equal(shouldPreloadProfileAvatar({ avatarFileId: '', hasDataUrl: false, profileOpen: true }), false)
+  assert.equal(shouldPreloadProfileAvatar({ avatarFileId: 'file-a', hasDataUrl: true, profileOpen: true }), false)
+  assert.equal(shouldPreloadProfileAvatar({ avatarFileId: 'file-a', hasDataUrl: false, profileOpen: true }), true)
 })

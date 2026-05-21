@@ -24,8 +24,16 @@ export function isSeededLegacySnapshot(snapshot: StorageSnapshot): boolean {
   )
 }
 
-export function canPreloadThumbnail(file: FileRecord): boolean {
+export function canPreloadThumbnail(file: Pick<FileRecord, 'deletedAt' | 'mimeType'>): boolean {
   return !file.deletedAt && (file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/'))
+}
+
+export function shouldPreloadVisibleThumbnail(options: {
+  dataUrl: string | undefined
+  file: Pick<FileRecord, 'deletedAt' | 'lastCid' | 'lastShareCid' | 'mimeType'>
+  visible: boolean
+}): boolean {
+  return options.visible && !options.dataUrl && canPreloadThumbnail(options.file) && Boolean(options.file.lastCid || options.file.lastShareCid)
 }
 
 export function nearestSharedAncestorFolder(snapshot: StorageSnapshot, folderId: string | null): FolderRecord | undefined {

@@ -39,7 +39,6 @@ test('folder-share cid after fixed invite uses the granted folder key for immedi
     helloResponseAtRef: { current: {} },
     importKeysRef: { current: {} },
     pendingSharesRef,
-    preloadFileContent: () => {},
     rememberFolderPeer: () => {},
     scheduleFolderSync: () => {},
     selectedFileId: null,
