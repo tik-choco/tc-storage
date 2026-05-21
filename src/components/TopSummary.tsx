@@ -26,13 +26,13 @@ export function TopSummary(props: {
           </>
         ) : null}
       </div>
-      {props.downloadProgress ? (
-        <div class="status-download" title={`${props.downloadProgress.fileName} ${props.downloadProgress.percent}%`}>
+      {props.downloadProgress?.percent !== undefined && props.downloadProgress.percent !== 100 ? (
+        <div class={`status-download ${props.downloadProgress.percent === undefined ? 'indeterminate' : ''}`} title={downloadTitle(props.downloadProgress)}>
           <span>{props.downloadProgress.fileName}</span>
           <div class="status-download-bar" aria-hidden="true">
-            <i style={{ width: `${props.downloadProgress.percent}%` }} />
+            <i style={props.downloadProgress.percent === undefined ? undefined : { width: `${props.downloadProgress.percent}%` }} />
           </div>
-          <strong>{props.downloadProgress.percent}%</strong>
+          <strong>{props.downloadProgress.percent === undefined ? props.downloadProgress.label : `${props.downloadProgress.percent}%`}</strong>
         </div>
       ) : null}
       <div class="status-storage" title={`${props.currentFolderName}: ${formatBytes(props.currentFolderStorageUsed)} / Total: ${formatBytes(props.storageUsed)}`}>
@@ -49,4 +49,8 @@ export function TopSummary(props: {
       </div>
     </footer>
   )
+}
+
+function downloadTitle(progress: DownloadProgress): string {
+  return progress.percent === undefined ? `${progress.fileName}: ${progress.label}` : `${progress.fileName}: ${progress.label} ${progress.percent}%`
 }

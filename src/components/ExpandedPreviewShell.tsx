@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, Download, X } from 'lucide-preact'
+import type { ProgressStatus } from '../appTypes.js'
 import { formatBytes, type FileRecord } from '../domain.js'
 import { PreviewContent } from './PreviewContent.js'
 
@@ -21,8 +22,8 @@ interface ExpandedPreviewShellProps {
   handleWheel: (event: WheelEvent) => void
   imageStyle?: Record<string, string | undefined>
   index: number
-  loadingProgress: number
-  loadingProgressByFileId: Record<string, number>
+  loadingProgress?: ProgressStatus
+  loadingProgressByFileId: Record<string, ProgressStatus>
   mode: 'single' | 'flow'
   onClose: () => void
   onDownload: (file: FileRecord) => void | Promise<void>

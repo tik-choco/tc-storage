@@ -1,9 +1,11 @@
 import { FileText } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
+import type { ProgressStatus } from '../appTypes.js'
 import { formatBytes, type FileRecord } from '../domain.js'
 import { isTextLike } from '../format.js'
+import { ProgressIndicator } from './ProgressIndicator.js'
 
-export function PreviewContent(props: { file: FileRecord; expanded?: boolean; imageStyle?: Record<string, string | undefined>; loadingProgress: number; zoomable?: boolean }) {
+export function PreviewContent(props: { file: FileRecord; expanded?: boolean; imageStyle?: Record<string, string | undefined>; loadingProgress?: ProgressStatus; zoomable?: boolean }) {
   const [text, setText] = useState('')
   const [textError, setTextError] = useState('')
   const isImage = props.file.mimeType.startsWith('image/')
@@ -13,7 +15,7 @@ export function PreviewContent(props: { file: FileRecord; expanded?: boolean; im
   const isText = isTextLike(props.file)
   const isInlinePreview = isImage || isVideo || isAudio || isPdf || isText
   const dataUrl = props.file.dataUrl
-  const isLoading = !dataUrl && (props.loadingProgress > 0 || Boolean(props.file.lastCid))
+  const isLoading = !dataUrl && (Boolean(props.loadingProgress) || Boolean(props.file.lastCid))
 
   useEffect(() => {
     let cancelled = false
@@ -35,7 +37,7 @@ export function PreviewContent(props: { file: FileRecord; expanded?: boolean; im
 
   return (
     <div class={`preview-frame ${props.expanded ? 'expanded' : ''}`}>
-      {isLoading ? <BinaryPreview file={props.file} loadingProgress={props.loadingProgress} message="Loading from mistlib..." /> : null}
+      {isLoading ? <BinaryPreview file={props.file} progress={props.loadingProgress ?? { label: 'Loading' }} message="Loading from mistlib..." /> : null}
       {dataUrl && isImage ? <img class={props.zoomable ? 'zoomable-preview-image' : ''} src={dataUrl} alt={props.file.name} style={props.imageStyle} /> : null}
       {dataUrl && isVideo ? <video src={dataUrl} controls /> : null}
       {dataUrl && isAudio ? <audio src={dataUrl} controls /> : null}
@@ -47,20 +49,13 @@ export function PreviewContent(props: { file: FileRecord; expanded?: boolean; im
   )
 }
 
-function BinaryPreview(props: { file: FileRecord; loadingProgress?: number; message?: string }) {
-  const hasProgress = typeof props.loadingProgress === 'number'
-
+function BinaryPreview(props: { file: FileRecord; progress?: ProgressStatus; message?: string }) {
   return (
     <div class="binary-preview">
       <FileText size={34} />
       <strong>{props.file.mimeType || 'application/octet-stream'}</strong>
       <span>{props.message ?? formatBytes(props.file.size)}</span>
-      {hasProgress ? (
-        <div class="binary-preview-progress" aria-label={`Loading ${props.loadingProgress}%`}>
-          <i style={{ width: `${props.loadingProgress}%` }} />
-          <em>{props.loadingProgress}%</em>
-        </div>
-      ) : null}
+      <ProgressIndicator className="binary-preview-progress" progress={props.progress} />
     </div>
   )
 }

@@ -29,7 +29,7 @@ interface FileContentOptions {
   snapshotRef: MutableRef<StorageSnapshot>
   startDownloadProgress: (file: DownloadTarget, cached: boolean) => number
   startFileLoadProgress: (file: FileRecord) => string
-  updateDownloadProgress: (file: DownloadTarget, percent: number, requestId: number) => void
+  updateDownloadProgress: (file: DownloadTarget, percent: number, requestId: number, label?: string) => void
 }
 
 export function createFileContentActions(options: FileContentOptions): FileContentActions {
@@ -119,7 +119,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   function preloadFileContent(file: FileRecord): void {
     if (file.dataUrl || fileContentCacheRef.current[file.id] || !canResolveFileContent(file)) return
     syncLog('thumbnail preload requested', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
-    void ensureFileContent(file).then(() => {
+    void ensureFileContent(file, { trackProgress: true }).then(() => {
       syncLog('thumbnail preload complete', { fileId: file.id, fileName: file.name })
     }).catch((error) => {
       syncWarn('thumbnail preload failed', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid), error: describeError(error, 'unknown error') })
@@ -176,8 +176,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   async function downloadStoredFile(file: FileRecord): Promise<void> {
     const progressRequestId = startDownloadProgress(file, Boolean(file.dataUrl ?? fileContentCacheRef.current[file.id]))
     try {
-      const fileWithContent = await ensureFileContent(file)
-      updateDownloadProgress(file, 96, progressRequestId)
+      const fileWithContent = await ensureFileContent(file, { trackProgress: true })
       downloadFile(fileWithContent)
       finishDownloadProgress(file, progressRequestId)
     } catch (error) {
@@ -198,16 +197,16 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       const zipLayout = makeFolderZipLayout(snapshot, folder, folderIds)
       const entries = zipLayout.entries
       for (const [index, file] of filesForDownload.entries()) {
-        const fileWithContent = await ensureFileContent(file)
+        const fileWithContent = await ensureFileContent(file, { trackProgress: true })
         if (!fileWithContent.dataUrl) throw new Error(`${file.name} の本文がローカルにありません`)
         entries.push({
           data: dataUrlToBytes(fileWithContent.dataUrl),
           modifiedAt: fileWithContent.updatedAt,
           path: zipFilePath(entries, zipLayout.folderPathById, folder, fileWithContent),
         })
-        updateDownloadProgress(target, 8 + ((index + 1) / Math.max(filesForDownload.length, 1)) * 76, progressRequestId)
+        updateDownloadProgress(target, 8 + ((index + 1) / Math.max(filesForDownload.length, 1)) * 76, progressRequestId, 'Preparing ZIP')
       }
-      updateDownloadProgress(target, 90, progressRequestId)
+      updateDownloadProgress(target, 90, progressRequestId, 'Building ZIP')
       downloadBlob(createZipBlob(entries), target.name)
       finishDownloadProgress(target, progressRequestId)
       setNotice({ tone: 'success', text: `${folder.name} をZIPでダウンロードしました` })

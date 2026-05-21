@@ -1,0 +1,85 @@
+.progress-indicator {
+  display: grid;
+  grid-template-columns: minmax(42px, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.progress-track {
+  position: relative;
+  display: block;
+  height: 4px;
+  min-width: 42px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbe8ef;
+}
+
+.progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0f766e;
+  transition: width 180ms ease;
+}
+
+.progress-indicator.indeterminate .progress-track i {
+  width: 42%;
+  animation: progress-slide 1.1s ease-in-out infinite;
+}
+
+.progress-indicator em {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-progress {
+  width: 100%;
+}
+
+.media-progress {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  z-index: 3;
+  padding: 6px 7px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.media-progress em {
+  color: #e2e8f0;
+}
+
+.row-progress {
+  width: min(148px, 100%);
+}
+
+.binary-preview-progress {
+  width: min(210px, 100%);
+  margin-top: 2px;
+}
+
+.preview-frame.expanded .binary-preview-progress .progress-track {
+  background: #334155;
+}
+
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  100% {
+    transform: translateX(240%);
+  }
+}

@@ -24,7 +24,13 @@ export type DeleteRequest =
 export type DownloadProgress = {
   fileId: string
   fileName: string
-  percent: number
+  label: string
+  percent?: number
+}
+
+export type ProgressStatus = {
+  label: string
+  percent?: number
 }
 
 export type SyncPeer = {

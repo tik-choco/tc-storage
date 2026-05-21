@@ -1,10 +1,11 @@
 import { Check, Download, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, X } from 'lucide-preact'
 import { selectFromPointerEvent } from '../appSelectionActions.js'
-import type { BrowserDragItem, BrowserReorderTarget, PendingShare } from '../appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, PendingShare, ProgressStatus } from '../appTypes.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
 import { dateLabel } from '../format.js'
 import type { DraftFolderProps } from './BrowserTableTypes.js'
 import { DraftFolderInput } from './DraftFolderInput.js'
+import { ProgressIndicator } from './ProgressIndicator.js'
 
 export function NewFolderRow(props: DraftFolderProps) {
   function handleKeyDown(event: KeyboardEvent) {
@@ -123,6 +124,7 @@ export function FileRow(props: {
   busy: boolean
   dragItem: BrowserDragItem | null
   file: FileRecord
+  progress?: ProgressStatus
   reorderTarget: BrowserReorderTarget | null
   selected: boolean
   onDeleteFile: (file: FileRecord) => void
@@ -163,7 +165,7 @@ export function FileRow(props: {
           <span>{props.file.name}</span>
         </button>
       </div>
-      <span class="status-cell"><ShieldCheck size={15} />v{props.file.version}</span>
+      <span class="status-cell">{props.progress ? <ProgressIndicator className="row-progress" progress={props.progress} /> : <><ShieldCheck size={15} />v{props.file.version}</>}</span>
       <span>{formatBytes(props.file.size)}</span>
       <span>{dateLabel(props.file.updatedAt)}</span>
       <span class="row-actions">

@@ -13,7 +13,7 @@ import {
 } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
 import { useRef } from 'preact/hooks'
-import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare } from '../appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare, ProgressStatus } from '../appTypes.js'
 import { emptySelectionActions, type SelectionActions } from '../appSelectionActions.js'
 import { folderPath, type FileRecord, type FolderRecord, type StorageSnapshot } from '../domain.js'
 import { FileTable } from './BrowserTable.js'
@@ -29,6 +29,7 @@ export function BrowserPanel(props: {
   reorderTarget: BrowserReorderTarget | null
   fileRows: FileRecord[]
   fileDataUrls: Record<string, string>
+  fileLoadProgress: Record<string, ProgressStatus>
   folderRows: FolderRecord[]
   pendingFolderShares: PendingShare[]
   files: FileRecord[]

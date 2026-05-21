@@ -1,4 +1,4 @@
-import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare } from '../appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare, ProgressStatus } from '../appTypes.js'
 import type { SelectionActions } from '../appSelectionActions.js'
 import type { FileRecord, FolderRecord } from '../domain.js'
 
@@ -12,6 +12,7 @@ export type BrowserTableProps = {
   reorderTarget: BrowserReorderTarget | null
   fileRows: FileRecord[]
   fileDataUrls: Record<string, string>
+  fileLoadProgress: Record<string, ProgressStatus>
   folderRows: FolderRecord[]
   pendingFolderShares: PendingShare[]
   selection?: SelectionActions

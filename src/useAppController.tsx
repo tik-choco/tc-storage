@@ -73,7 +73,7 @@ export function useAppController() {
   const previewFiles = useMemo(() => (selectedFile ? filesInFolder(snapshot, selectedFile.folderId) : fileRows), [fileRows, selectedFile, snapshot])
   const previewFilesWithContent = useMemo(() => previewFiles.map((file) => ({ ...file, dataUrl: fileDataUrls[file.id] })), [fileDataUrls, previewFiles])
   const selectedFileIndex = selectedFile ? previewFiles.findIndex((file) => file.id === selectedFile.id) : -1
-  const selectedPreviewProgress = selectedPreviewFile && !selectedPreviewFile.dataUrl ? transfer.fileLoadProgress[selectedPreviewFile.id] ?? 0 : 0
+  const selectedPreviewProgress = selectedPreviewFile && !selectedPreviewFile.dataUrl ? transfer.fileLoadProgress[selectedPreviewFile.id] : undefined
   const storageUsed = files.reduce((total, file) => total + file.size, 0)
   const currentFolderStorageUsed = currentFolderId ? files.filter((file) => descendantFolderIds(folders, currentFolderId).has(file.folderId)).reduce((total, file) => total + file.size, 0) : storageUsed
 

@@ -132,53 +132,8 @@
   white-space: nowrap;
 }
 
-.binary-preview-progress {
-  display: grid;
-  grid-template-columns: minmax(96px, 1fr) 34px;
-  align-items: center;
-  gap: 8px;
-  width: min(210px, 100%);
-  margin-top: 2px;
-}
-
-.binary-preview-progress i {
-  display: block;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #0f766e;
-  transition: width 180ms ease;
-}
-
-.binary-preview-progress::before {
-  display: block;
-  grid-column: 1;
-  grid-row: 1;
-  height: 4px;
-  border-radius: 999px;
-  background: #dbe8ef;
-  content: "";
-}
-
-.binary-preview-progress i {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.binary-preview-progress em {
-  color: #64748b;
-  font-size: 11px;
-  font-style: normal;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-
 .preview-frame.expanded .binary-preview {
   color: #cbd5e1;
-}
-
-.preview-frame.expanded .binary-preview-progress::before {
-  background: #334155;
 }
 
 .preview-frame.expanded .binary-preview-progress em {

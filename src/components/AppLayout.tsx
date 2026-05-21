@@ -39,6 +39,7 @@ export function AppLayout({ controller: c }: AppLayoutProps) {
           dragItem={c.dragItem}
           dropTargetFolderId={c.dropTargetFolderId}
           fileDataUrls={c.fileDataUrls}
+          fileLoadProgress={c.fileLoadProgress}
           fileRows={c.fileRows}
           folderNameDraft={c.folderNameDraft}
           folderRows={c.folderRows}

@@ -1,10 +1,11 @@
 import { Check, Download, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, X } from 'lucide-preact'
 import { useEffect } from 'preact/hooks'
-import type { BrowserDragItem, BrowserReorderTarget, PendingShare } from '../appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, PendingShare, ProgressStatus } from '../appTypes.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
 import { dateLabel } from '../format.js'
 import type { DraftFolderProps } from './BrowserTableTypes.js'
 import { DraftFolderInput } from './DraftFolderInput.js'
+import { ProgressIndicator } from './ProgressIndicator.js'
 
 export function NewFolderTile(props: DraftFolderProps) {
   function handleKeyDown(event: KeyboardEvent) {
@@ -121,6 +122,7 @@ export function FileTile(props: {
   dataUrl: string | undefined
   dragItem: BrowserDragItem | null
   file: FileRecord
+  progress?: ProgressStatus
   reorderTarget: BrowserReorderTarget | null
   selected: boolean
   onDeleteFile: (file: FileRecord) => void
@@ -164,6 +166,7 @@ export function FileTile(props: {
         <button class="media-only-button" onClick={() => props.onOpenFile(props.file)} aria-label={`Open preview for ${props.file.name}`}>
           <FileTilePreview dataUrl={props.dataUrl} file={props.file} mediaOnly={true} />
         </button>
+        <ProgressIndicator className="tile-progress media-progress" progress={props.progress} />
         <div class="media-only-overlay">
           <strong class="media-only-name">{props.file.name}</strong>
           <span class="media-only-actions">
@@ -201,6 +204,7 @@ export function FileTile(props: {
         <span class="status-cell"><ShieldCheck size={15} />v{props.file.version}</span>
         <span>{formatBytes(props.file.size)}</span>
       </div>
+      <ProgressIndicator className="tile-progress" progress={props.progress} />
       <span class="tile-date">{dateLabel(props.file.updatedAt)}</span>
       <span class="row-actions tile-actions">
         <button onClick={(event) => { event.stopPropagation(); props.onShowFileDetails(props.file, event.currentTarget) }} title="Details"><Info size={16} /></button>

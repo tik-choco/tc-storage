@@ -1,6 +1,7 @@
 @import "./styles/base.css";
 @import "./styles/shell.css";
 @import "./styles/controls.css";
+@import "./styles/progress.css";
 @import "./styles/browser.css";
 @import "./styles/browser-table.css";
 @import "./styles/browser-grid.css";

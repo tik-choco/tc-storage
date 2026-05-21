@@ -102,6 +102,11 @@
   transition: width 180ms ease;
 }
 
+.status-download.indeterminate .status-download-bar i {
+  width: 42%;
+  animation: progress-slide 1.1s ease-in-out infinite;
+}
+
 .status-storage {
   flex: 0 0 auto;
   margin-left: auto;
