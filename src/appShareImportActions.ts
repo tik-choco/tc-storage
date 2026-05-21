@@ -49,10 +49,12 @@ export function createShareImportActions(options: ShareImportOptions) {
       syncLog('storage_get start for folder-share', shareLogDetails(share))
       const bundle = await materializeFolderBundleFiles(await loadEncryptedFolderFromMist(cid, passphrase), passphrase)
       syncLog('storage_get complete for folder-share', { ...shareLogDetails(share), folderId: bundle.folder.id, folderName: bundle.folder.name, fileCount: bundle.files.length })
-      const remoteSnapshot = remoteFolderSnapshot(bundle, share)
       const now = new Date().toISOString()
       clearFolderSyncTimer(bundle.folder.id)
       setSnapshot((current) => {
+        const remoteSnapshot = remoteFolderSnapshot(bundle, share, {
+          preserveRootFolder: current.folders.find((item) => item.id === bundle.folder.id && !item.deletedAt),
+        })
         const merged = mergeSnapshots(current, remoteSnapshot)
         const next = addActivity(merged, { actorNodeId: settingsRef.current.nodeId, folderId: bundle.folder.id, action: 'folder.sync', detail: `${bundle.folder.name} を自動同期` }, now)
         rememberImportedFolderSignature(bundle.folder.id, next, remoteSnapshot)
@@ -139,9 +141,11 @@ export function createShareImportActions(options: ShareImportOptions) {
 
   async function importFolderShare(share: PendingShare, passphrase: string) {
     const bundle = await materializeFolderBundleFiles(await loadEncryptedFolderFromMist(share.cid ?? '', passphrase), passphrase)
-    const remoteSnapshot = remoteFolderSnapshot(bundle, share)
     clearFolderSyncTimer(bundle.folder.id)
     setSnapshot((current) => {
+      const remoteSnapshot = remoteFolderSnapshot(bundle, share, {
+        preserveRootFolder: current.folders.find((item) => item.id === bundle.folder.id && !item.deletedAt),
+      })
       const next = addActivity(mergeSnapshots(current, remoteSnapshot), { actorNodeId: settingsRef.current.nodeId, folderId: bundle.folder.id, action: 'folder.import', detail: `${bundle.folder.name} を復号して取り込み` })
       rememberImportedFolderSignature(bundle.folder.id, next, remoteSnapshot)
       return next

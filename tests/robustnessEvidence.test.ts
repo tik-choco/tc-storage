@@ -105,7 +105,7 @@ test('remote folder delete uses envelope folder deletedAt so a newer move upsert
   assert.equal(mergedFolder?.deletedAt, undefined)
 })
 
-test('evidence gap: folder-share import snapshot normalizes the shared root parent to null', () => {
+test('initial folder-share import snapshot normalizes the shared root parent to null', () => {
   const now = '2026-05-21T00:00:00.000Z'
   const parent = makeFolder({ id: 'folder-parent', name: 'Parent', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: 'node-a' })
   const sharedFolder = makeFolder({ id: 'folder-shared', name: 'Shared', parentId: parent.id, color: 'blue', roomId: 'tc-storage-main', now, nodeId: 'node-a' })
@@ -133,6 +133,46 @@ test('evidence gap: folder-share import snapshot normalizes the shared root pare
   )
 
   assert.equal(remote.folders.find((item) => item.id === sharedFolder.id)?.parentId, null)
+})
+
+test('folder-share import preserves an existing local shared-root parent', () => {
+  const now = '2026-05-21T00:00:00.000Z'
+  const movedAt = '2026-05-21T00:00:01.000Z'
+  const sharedAt = '2026-05-21T00:00:03.000Z'
+  const parent = makeFolder({ id: 'folder-parent', name: 'Parent', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: 'node-b' })
+  const bundleRoot = makeFolder({ id: 'folder-shared', name: 'Shared', parentId: null, color: 'blue', roomId: 'tc-storage-main', now, nodeId: 'node-a' })
+  const localSharedFolder = stampFolderPatch(bundleRoot, { parentId: parent.id, shareEnabled: true, lastCid: 'cid-before-move' }, movedAt, 'node-b')
+  const local = { ...createInitialSnapshot('node-b'), folders: [parent, localSharedFolder], files: [], activity: [] }
+
+  const remote = remoteFolderSnapshot(
+    {
+      version: 1,
+      exportedAt: sharedAt,
+      originNode: 'node-a',
+      folder: bundleRoot,
+      folders: [bundleRoot],
+      files: [],
+    },
+    {
+      type: 'folder-share',
+      from: 'node-a',
+      roomId: 'tc-storage-main',
+      sentAt: sharedAt,
+      receivedAt: '2026-05-21T00:00:04.000Z',
+      clock: 3,
+      folderId: bundleRoot.id,
+      folderName: bundleRoot.name,
+      cid: 'cid-after-sync',
+    },
+    { preserveRootFolder: localSharedFolder },
+  )
+
+  const merged = mergeSnapshots(local, remote)
+  const mergedFolder = merged.folders.find((item) => item.id === bundleRoot.id)
+
+  assert.equal(remote.folders.find((item) => item.id === bundleRoot.id)?.parentId, parent.id)
+  assert.equal(mergedFolder?.parentId, parent.id)
+  assert.equal(mergedFolder?.lastCid, 'cid-after-sync')
 })
 
 function createContentActionsForSnapshot(snapshot: StorageSnapshot, folderKeys: Record<string, string> = {}) {

@@ -14,25 +14,29 @@ export function mergeUploadedFiles(currentFiles: FileRecord[], uploaded: FileRec
   return filesNext
 }
 
-export function remoteFolderSnapshot(bundle: FolderBundle, share: PendingShare): StorageSnapshot {
+export function remoteFolderSnapshot(bundle: FolderBundle, share: PendingShare, options: { preserveRootFolder?: FolderRecord } = {}): StorageSnapshot {
   const sharedAt = share.sentAt || bundle.exportedAt
+  const rootPatch: Partial<FolderRecord> = {
+    shareEnabled: true,
+    sharedRoomId: share.roomId,
+    lastCid: share.cid,
+    lastSavedAt: bundle.exportedAt,
+    lastSharedAt: sharedAt,
+  }
+  if (!options.preserveRootFolder) rootPatch.parentId = null
   const rootFolder = stampFolderPatch(
     bundle.folder,
-    {
-      parentId: null,
-      shareEnabled: true,
-      sharedRoomId: share.roomId,
-      lastCid: share.cid,
-      lastSavedAt: bundle.exportedAt,
-      lastSharedAt: sharedAt,
-    },
+    rootPatch,
     sharedAt,
     bundle.originNode,
   )
+  const preservedRootFolder = options.preserveRootFolder
+    ? preserveRootFolderParent(rootFolder, options.preserveRootFolder)
+    : rootFolder
   const bundledFolders = bundle.folders?.length ? bundle.folders : [bundle.folder]
   const folders = [
-    rootFolder,
-    ...bundledFolders.filter((folder) => folder.id !== rootFolder.id),
+    preservedRootFolder,
+    ...bundledFolders.filter((folder) => folder.id !== preservedRootFolder.id),
   ]
   return {
     folders,
@@ -41,6 +45,13 @@ export function remoteFolderSnapshot(bundle: FolderBundle, share: PendingShare):
     clock: share.clock,
     originNode: bundle.originNode,
   }
+}
+
+function preserveRootFolderParent(rootFolder: FolderRecord, localFolder: FolderRecord): FolderRecord {
+  const fieldVersions: NonNullable<FolderRecord['fieldVersions']> = { ...rootFolder.fieldVersions }
+  const localParentVersion = localFolder.fieldVersions?.parentId
+  if (localParentVersion) fieldVersions.parentId = localParentVersion
+  return { ...rootFolder, parentId: localFolder.parentId, fieldVersions }
 }
 
 export function remoteFileSnapshot(bundle: FileBundle, share: PendingShare): StorageSnapshot {
