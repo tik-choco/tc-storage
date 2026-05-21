@@ -106,8 +106,31 @@ export function createAccessActions(options: AccessOptions) {
   }
 
   function rejectFolderAccess(request: FolderAccessRequest): void {
+    networkRef.current.broadcastShare({
+      type: 'folder-access-denied',
+      clock: snapshotRef.current.clock,
+      folderId: request.folderId,
+      folderName: request.folderName,
+      targetNodeId: request.nodeId,
+      requestId: request.requestId,
+    })
     setFolderAccessRequests((current) => current.filter((item) => item.id !== request.id))
     setNotice({ tone: 'info', text: '参加リクエストを却下しました' })
+  }
+
+  function handleFolderAccessDenied(envelope: ShareEnvelope): void {
+    if (envelope.targetNodeId && envelope.targetNodeId !== settingsRef.current.nodeId) return
+    if (!envelope.folderId || !envelope.requestId) return
+    const entry = accessRequestKeysRef.current[envelope.requestId]
+    const roomId = entry?.roomId ?? envelope.roomId
+    const folderId = entry?.folderId ?? envelope.folderId
+    const shareKey = pendingShareKey({ type: 'folder-share', roomId, folderId })
+    accessRequestKeysRef.current = Object.fromEntries(Object.entries(accessRequestKeysRef.current).filter(([key]) => key !== envelope.requestId && key !== shareKey))
+    setPendingShares((current) => current.filter((share) => (
+      pendingShareKey(share) !== shareKey &&
+      !(share.type === 'folder-share' && share.folderId === folderId && share.roomId === roomId)
+    )))
+    setNotice({ tone: 'error', text: `${envelope.folderName ?? '共有フォルダー'} への参加リクエストが却下されました` })
   }
 
   async function handleFolderAccessGrant(envelope: ShareEnvelope): Promise<void> {
@@ -151,5 +174,5 @@ export function createAccessActions(options: AccessOptions) {
     }
   }
 
-  return { approveFolderAccess, handleFolderAccessGrant, handleFolderAccessRequest, rejectFolderAccess, requestFolderAccess }
+  return { approveFolderAccess, handleFolderAccessDenied, handleFolderAccessGrant, handleFolderAccessRequest, rejectFolderAccess, requestFolderAccess }
 }

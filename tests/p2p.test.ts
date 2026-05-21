@@ -137,4 +137,5 @@ test('parseEnvelope accepts folder access request and grant envelopes', () => {
 
   assert.equal(parseEnvelope({ ...base, type: 'folder-access-request', accessPublicKey: 'pub-a' })?.type, 'folder-access-request')
   assert.equal(parseEnvelope({ ...base, type: 'folder-access-grant', targetNodeId: 'node-b', accessGrantPublicKey: 'pub-b', accessGrantIv: 'iv', accessGrantCipherText: 'cipher' })?.type, 'folder-access-grant')
+  assert.equal(parseEnvelope({ ...base, type: 'folder-access-denied', targetNodeId: 'node-b' })?.type, 'folder-access-denied')
 })

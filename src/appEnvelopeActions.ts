@@ -21,6 +21,7 @@ interface EnvelopeOptions {
   preloadFileContent: FileContentActions['preloadFileContent']
   rememberFolderPeer: (envelope: Pick<ShareEnvelope, 'folderId' | 'from' | 'senderProfile' | 'sentAt'>) => void
   scheduleFolderSync: (folderId: string, reason: string) => void
+  handleFolderAccessDenied: (envelope: ShareEnvelope) => void
   handleFolderAccessGrant: (envelope: ShareEnvelope) => Promise<void>
   handleFolderAccessRequest: (envelope: ShareEnvelope) => void
   setCurrentFolderId: SetState<string | null>
@@ -44,7 +45,7 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
     announceSharedFolders, autoImportCidsRef, autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare,
     currentFolderId, detailFileId, folderKeysRef, folderPanelFolderId, helloResponseAtRef,
     importKeysRef, pendingSharesRef, preloadFileContent, rememberFolderPeer, scheduleFolderSync,
-    handleFolderAccessGrant, handleFolderAccessRequest,
+    handleFolderAccessDenied, handleFolderAccessGrant, handleFolderAccessRequest,
     selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderPanelFolderId, setFolderPanelOpen, setNotice, setPendingShares, setSelectedFileId,
     setSnapshot, snapshotRef,
@@ -77,6 +78,10 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
     }
     if (envelope.type === 'folder-access-grant') {
       void handleFolderAccessGrant(envelope)
+      return
+    }
+    if (envelope.type === 'folder-access-denied') {
+      handleFolderAccessDenied(envelope)
       return
     }
     if ((envelope.type !== 'folder-share' && envelope.type !== 'file-share') || !envelope.cid) return
