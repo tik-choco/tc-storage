@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { useCallback, useEffect, useMemo, useRef } from 'preact/hooks'
 import { descendantFolderIds, filterByName } from './appHelpers.js'
-import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, DeleteRequest, FolderAccessRequest, FolderPanelMode, Notice, PendingShare } from './appTypes.js'
-import { createAccessActions, type RequestKeyEntry } from './appAccessActions.js'
+import { createAccessActions } from './appAccessActions.js'
 import { createDragDropActions } from './appDragDropActions.js'
 import { createEnvelopeActions } from './appEnvelopeActions.js'
 import { createFileActions } from './appFileActions.js'
@@ -13,63 +12,28 @@ import { createPanelActions } from './appPanelActions.js'
 import { createPeerActions } from './appPeerActions.js'
 import { createSelectionActions } from './appSelectionActions.js'
 import { createShareImportActions } from './appShareImportActions.js'
-import { browserViewModeKey, loadBrowserViewMode } from './appUtils.js'
-import { initialPopoverPosition, type PopoverKind, type PopoverPosition } from './components/FloatingPopover.js'
-import { activeFiles, activeFolders, childFolders, filesInFolder, type StorageSnapshot } from './domain.js'
-import { loadFileShareKeys } from './fileShareKeys.js'
+import { browserViewModeKey } from './appUtils.js'
+import { activeFiles, activeFolders, childFolders, filesInFolder } from './domain.js'
 import { isEd25519DidKey } from './didIdentity.js'
-import { loadFolderSyncPeers, type FolderSyncPeers } from './folderPeers.js'
-import { readFolderRoute } from './folderRoute.js'
-import { loadFolderKeys } from './folderKeys.js'
-import { loadFolderAccessModes } from './folderAccess.js'
-import { loadSettings, type AppSettings } from './localSettings.js'
-import { loadStoredSnapshot } from './localSnapshot.js'
 import { useMistShare, type ShareEnvelope, type ShareProfile } from './p2p.js'
-import { loadImportKeys, loadPendingShares } from './pendingShares.js'
 import { makeFileShareUrl, makeFolderShareUrl } from './shareLinks.js'
+import { useAppControllerRefs } from './useAppControllerRefs.js'
+import { useAppControllerState } from './useAppControllerState.js'
 import { useAppEffects } from './useAppEffects.js'
 import { useProfileAvatarPicker } from './useProfileAvatarPicker.js'
 import { useTransferProgress } from './useTransferProgress.js'
 
 export function useAppController() {
-  const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
-  const [settingsDraft, setSettingsDraft] = useState<AppSettings>(settings)
-  const [snapshot, setSnapshot] = useState<StorageSnapshot>(() => loadStoredSnapshot(settings.nodeId))
-  const [folderKeys, setFolderKeys] = useState<Record<string, string>>(() => loadFolderKeys())
-  const [fileShareKeys, setFileShareKeys] = useState<Record<string, string>>(() => loadFileShareKeys())
-  const [folderPeers, setFolderPeers] = useState<FolderSyncPeers>(() => loadFolderSyncPeers())
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(() => readFolderRoute())
-  const [query, setQuery] = useState('')
-  const [folderNameDraft, setFolderNameDraft] = useState<string | null>(null)
-  const [importKeys, setImportKeys] = useState<Record<string, string>>(() => loadImportKeys())
-  const [browserViewMode, setBrowserViewMode] = useState<BrowserViewMode>(() => loadBrowserViewMode())
-  const [pendingShares, setPendingShares] = useState<PendingShare[]>(() => loadPendingShares())
-  const [folderAccessModes, setFolderAccessModes] = useState(() => loadFolderAccessModes())
-  const [folderAccessRequests, setFolderAccessRequests] = useState<FolderAccessRequest[]>([])
-  const [fileContentCache, setFileContentCache] = useState<Record<string, string>>({})
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
-  const [folderPanelOpen, setFolderPanelOpen] = useState(false)
-  const [folderPanelMode, setFolderPanelMode] = useState<FolderPanelMode>('details')
-  const [folderPanelFolderId, setFolderPanelFolderId] = useState<string | null>(null)
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
-  const [detailFileId, setDetailFileId] = useState<string | null>(null)
-  const [expandedPreviewOpen, setExpandedPreviewOpen] = useState(false)
-  const [dragActive, setDragActive] = useState(false)
-  const [dragItem, setDragItem] = useState<BrowserDragItem | null>(null)
-  const [selectedItems, setSelectedItems] = useState<BrowserDragItem[]>([])
-  const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null | undefined>(undefined)
-  const [reorderTarget, setReorderTarget] = useState<BrowserReorderTarget | null>(null)
-  const [notice, setNotice] = useState<Notice>({ tone: 'info', text: '' })
-  const [busy, setBusy] = useState('')
-  const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null)
-  const [popoverPositions, setPopoverPositions] = useState<Record<PopoverKind, PopoverPosition>>(() => ({
-    profile: initialPopoverPosition('profile'),
-    settings: initialPopoverPosition('settings'),
-    detail: initialPopoverPosition('detail'),
-    folder: initialPopoverPosition('folder'),
-    confirm: initialPopoverPosition('confirm'),
-  }))
+  const {
+    settings, setSettings, settingsDraft, setSettingsDraft, snapshot, setSnapshot, folderKeys, setFolderKeys, fileShareKeys, setFileShareKeys,
+    folderPeers, setFolderPeers, currentFolderId, setCurrentFolderId, query, setQuery, folderNameDraft, setFolderNameDraft, importKeys, setImportKeys,
+    browserViewMode, setBrowserViewMode, pendingShares, setPendingShares, folderAccessModes, setFolderAccessModes, folderAccessRequests, setFolderAccessRequests,
+    fileContentCache, setFileContentCache, settingsOpen, setSettingsOpen, profileOpen, setProfileOpen, folderPanelOpen, setFolderPanelOpen,
+    folderPanelMode, setFolderPanelMode, folderPanelFolderId, setFolderPanelFolderId, selectedFileId, setSelectedFileId, detailFileId, setDetailFileId,
+    expandedPreviewOpen, setExpandedPreviewOpen, dragActive, setDragActive, dragItem, setDragItem, selectedItems, setSelectedItems,
+    dropTargetFolderId, setDropTargetFolderId, reorderTarget, setReorderTarget, notice, setNotice, busy, setBusy, deleteRequest, setDeleteRequest,
+    popoverPositions, setPopoverPositions,
+  } = useAppControllerState()
   const transfer = useTransferProgress()
 
   const folders = useMemo(() => activeFolders(snapshot), [snapshot])
@@ -115,25 +79,12 @@ export function useAppController() {
 
   const envelopeHandlerRef = useRef<(envelope: ShareEnvelope) => void>(() => {})
   const network = useMistShare(settings, useCallback((envelope: ShareEnvelope) => envelopeHandlerRef.current(envelope), []))
-  const snapshotRef = useRef(snapshot)
-  const folderKeysRef = useRef(folderKeys)
-  const folderAccessModesRef = useRef(folderAccessModes)
-  const fileShareKeysRef = useRef(fileShareKeys)
-  const fileContentCacheRef = useRef(fileContentCache)
-  const importKeysRef = useRef(importKeys)
-  const pendingSharesRef = useRef(pendingShares)
-  const fileContentLoadsRef = useRef<Record<string, Promise<string>>>({})
-  const settingsRef = useRef(settings)
-  const networkRef = useRef(network)
-  const syncSignaturesRef = useRef<Record<string, string>>({})
-  const syncTimersRef = useRef<Record<string, number>>({})
-  const syncInFlightRef = useRef<Set<string>>(new Set())
-  const autoImportCidsRef = useRef<Set<string>>(new Set())
-  const autoImportInFlightRef = useRef<Set<string>>(new Set())
-  const helloResponseAtRef = useRef<Record<string, number>>({})
-  const accessRequestKeysRef = useRef<Record<string, RequestKeyEntry>>({})
-  const dragItemRef = useRef<BrowserDragItem | null>(null)
-  const dragItemsRef = useRef<BrowserDragItem[]>([])
+  const {
+    accessRequestKeysRef, autoImportCidsRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
+    fileContentCacheRef, fileContentLoadsRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
+    helloResponseAtRef, importKeysRef, networkRef, pendingSharesRef, settingsRef, snapshotRef,
+    syncInFlightRef, syncSignaturesRef, syncTimersRef,
+  } = useAppControllerRefs({ fileContentCache, fileShareKeys, folderAccessModes, folderKeys, importKeys, network, pendingShares, settings, snapshot })
 
   const peerActions = createPeerActions({ setFolderPeers, settingsRef })
   const fileContent = createFileContentActions({ ...transfer, fileContentCacheRef, fileContentLoadsRef, fileShareKeysRef, folderKeysRef, setFileContentCache, setNotice, setSnapshot, settingsRef, snapshotRef })

@@ -1,5 +1,6 @@
 import type { BrowserDragItem, BrowserReorderTarget, Notice } from './appTypes.js'
 import type { MoveActions, MutableRef, SetState } from './appControllerTypes.js'
+import { reorderIds, sameItem, uniqueItems } from './appDragDropUtils.js'
 import { descendantFolderIds } from './appHelpers.js'
 import { nearestSharedAncestorFolder } from './appUtils.js'
 import { stampFilePatch, stampFolderPatch } from './crdt.js'
@@ -258,14 +259,6 @@ export function createDragDropActions(options: DragDropOptions) {
     handleMoveTargetDrop(currentFolderId, event)
   }
 
-  function reorderIds(ids: string[], sourceId: string, targetId: string, position: BrowserReorderTarget['position']): string[] {
-    const withoutSource = ids.filter((id) => id !== sourceId)
-    const targetIndex = withoutSource.indexOf(targetId)
-    if (targetIndex < 0) return ids
-    const insertIndex = position === 'before' ? targetIndex : targetIndex + 1
-    return [...withoutSource.slice(0, insertIndex), sourceId, ...withoutSource.slice(insertIndex)]
-  }
-
   function currentDragItems(dataTransfer: DataTransfer | null): BrowserDragItem[] {
     return dragItemsRef.current.length ? dragItemsRef.current : readBrowserDragItems(dataTransfer)
   }
@@ -291,20 +284,6 @@ export function createDragDropActions(options: DragDropOptions) {
     if (item.type === 'folder') return selectedFolders.some((folder) => folder.id !== item.id && descendantFolderIds(snapshotValue.folders, folder.id).has(item.id))
     const file = snapshotValue.files.find((value) => value.id === item.id && !value.deletedAt)
     return Boolean(file && selectedFolders.some((folder) => descendantFolderIds(snapshotValue.folders, folder.id).has(file.folderId)))
-  }
-
-  function uniqueItems(items: BrowserDragItem[]): BrowserDragItem[] {
-    const seen = new Set<string>()
-    return items.filter((item) => {
-      const key = `${item.type}:${item.id}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-  }
-
-  function sameItem(a: BrowserDragItem, b: BrowserDragItem): boolean {
-    return a.type === b.type && a.id === b.id
   }
 
   return { beginItemDrag, endItemDrag, handleBrowserItemDragLeave, handleBrowserItemDragOver, handleBrowserItemDrop, handleDrag, handleDrop, handleMoveTargetDragLeave, handleMoveTargetDragOver, handleMoveTargetDrop }
