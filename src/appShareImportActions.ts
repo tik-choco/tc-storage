@@ -7,12 +7,14 @@ import { describeError } from './errors.js'
 import { loadEncryptedFileFromMist, loadEncryptedFolderFromMist } from './mistStorage.js'
 import type { AppSettings } from './localSettings.js'
 import { remoteFileSnapshot, remoteFolderSnapshot } from './appHelpers.js'
+import { folderKeyHash } from './folderKeyProof.js'
 import { folderKeyUpdatesForBundle, shareLogDetails, syncLog, syncWarn, withoutRecordKey } from './appUtils.js'
 import { sharedFolderSignature } from './folderSync.js'
 
 interface ShareImportOptions {
   accessRequestKeysRef?: MutableRef<Record<string, { folderId: string; roomId: string }>>
   autoImportCidsRef: MutableRef<Set<string>>
+  autoImportFailuresRef?: MutableRef<Record<string, { retryAfter: number; signature: string }>>
   autoImportInFlightRef: MutableRef<Set<string>>
   clearFolderSyncTimer: (folderId: string) => void
   importKeys: Record<string, string>
@@ -34,10 +36,12 @@ interface ShareImportOptions {
   syncSignaturesRef: MutableRef<Record<string, string>>
 }
 
+const failedShareRetryMs = 30_000
+
 export function createShareImportActions(options: ShareImportOptions) {
   const {
-    accessRequestKeysRef, autoImportCidsRef, autoImportInFlightRef, clearFolderSyncTimer, importKeys,
-    materializeFolderBundleFiles, pendingSharesRef, rememberFolderPeer, setBusy, setCurrentFolderId,
+    accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, clearFolderSyncTimer,
+    importKeys, materializeFolderBundleFiles, pendingSharesRef, rememberFolderPeer, setBusy, setCurrentFolderId,
     setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setImportKeys, setNotice,
     setPendingShares, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef,
   } = options
@@ -45,6 +49,7 @@ export function createShareImportActions(options: ShareImportOptions) {
   async function autoImportFolderShare(share: PendingShare, passphrase: string) {
     const cid = share.cid
     if (!cid) return
+    if (isShareFailureCoolingDown(share, passphrase)) return
     autoImportInFlightRef.current.add(cid)
     try {
       syncLog('storage_get start for folder-share', shareLogDetails(share))
@@ -64,8 +69,10 @@ export function createShareImportActions(options: ShareImportOptions) {
       setFolderKeys((current) => ({ ...current, ...folderKeyUpdatesForBundle(bundle, passphrase) }))
       rememberFolderPeer(share)
       markPendingShareImported(share)
+      clearShareFailure(share)
       setNotice({ tone: 'success', text: `${bundle.folder.name} を自動同期しました` })
     } catch (error) {
+      rememberShareFailure(share, passphrase)
       syncWarn('storage_get failed for folder-share', { ...shareLogDetails(share), error: describeError(error, 'unknown error') })
       setNotice({ tone: 'error', text: describeError(error, '共有フォルダーの自動同期に失敗しました') })
     } finally {
@@ -75,14 +82,17 @@ export function createShareImportActions(options: ShareImportOptions) {
 
   async function autoImportLinkedShare(share: PendingShare, passphrase: string) {
     if (!share.cid) return
+    if (isShareFailureCoolingDown(share, passphrase)) return
     autoImportInFlightRef.current.add(share.cid)
     try {
       syncLog('storage_get start for linked share', shareLogDetails(share))
       if (share.type === 'file-share') await importFileShare(share, passphrase)
       else await importFolderShare(share, passphrase)
       markPendingShareImported(share)
+      clearShareFailure(share)
       syncLog('storage_get complete for linked share', shareLogDetails(share))
     } catch (error) {
+      rememberShareFailure(share, passphrase)
       syncWarn('storage_get failed for linked share; keeping pending for retry', { ...shareLogDetails(share), error: describeError(error, 'unknown error') })
       setNotice({ tone: 'info', text: '共有データを待機中です。送り主がオンラインになったら自動的に再試行します' })
     } finally {
@@ -182,6 +192,32 @@ export function createShareImportActions(options: ShareImportOptions) {
     if (imported.type === 'folder-share' && pending.type === 'folder-share' && imported.folderId && pending.folderId === imported.folderId) return true
     if (imported.type === 'file-share' && pending.type === 'file-share' && imported.fileId && pending.fileId === imported.fileId) return true
     return false
+  }
+
+  function isShareFailureCoolingDown(share: PendingShare, passphrase: string): boolean {
+    const key = pendingShareKey(share)
+    const failure = autoImportFailuresRef?.current[key]
+    return Boolean(failure && failure.signature === shareFailureSignature(share, passphrase) && failure.retryAfter > Date.now())
+  }
+
+  function rememberShareFailure(share: PendingShare, passphrase: string): void {
+    if (!autoImportFailuresRef) return
+    autoImportFailuresRef.current[pendingShareKey(share)] = { retryAfter: Date.now() + failedShareRetryMs, signature: shareFailureSignature(share, passphrase) }
+  }
+
+  function clearShareFailure(share: PendingShare): void {
+    if (autoImportFailuresRef) delete autoImportFailuresRef.current[pendingShareKey(share)]
+  }
+
+  function shareFailureSignature(share: PendingShare, passphrase: string): string {
+    return JSON.stringify({
+      cid: share.cid ?? '',
+      folderId: share.folderId ?? '',
+      fileId: share.fileId ?? '',
+      passphraseHash: folderKeyHash(share.folderId ?? share.fileId ?? share.cid ?? share.roomId, passphrase),
+      roomId: share.roomId,
+      type: share.type,
+    })
   }
 
   return { autoImportFolderShare, autoImportLinkedShare, cancelPendingShare, importShare, isPendingShareAlreadyImported, markPendingShareImported }

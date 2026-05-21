@@ -11,6 +11,7 @@ import { folderLogDetails, shortLogValue, syncLog, syncWarn } from './appUtils.j
 
 interface FolderSyncOptions {
   ensureFolderFilesStored: FileContentActions['ensureFolderFilesStored']
+  hasUntrustedFolderContent: FileContentActions['hasUntrustedFolderContent']
   folderKeysRef: MutableRef<Record<string, string>>
   networkRef: MutableRef<MistShare>
   setNotice: SetState<Notice>
@@ -24,7 +25,7 @@ interface FolderSyncOptions {
 
 export function createFolderSyncActions(options: FolderSyncOptions) {
   const {
-    ensureFolderFilesStored, folderKeysRef, networkRef, setNotice, setSnapshot, settingsRef,
+    ensureFolderFilesStored, folderKeysRef, hasUntrustedFolderContent, networkRef, setNotice, setSnapshot, settingsRef,
     snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef,
   } = options
 
@@ -37,13 +38,14 @@ export function createFolderSyncActions(options: FolderSyncOptions) {
     })
     for (const folder of snapshotValue.folders) {
       if (!folder.shareEnabled || !folderKeysValue[folder.id]) continue
-      if (!folder.lastCid || hasSharedFolderChangesSinceLastShare(snapshotValue, folder)) {
+      const shouldPublishContent = hasUntrustedFolderContent(folder.id)
+      if (!folder.lastCid || hasSharedFolderChangesSinceLastShare(snapshotValue, folder) || shouldPublishContent) {
         if (options.publishLocalChangesImmediately) {
-          syncLog('announce found local changes: publishing storage_add immediately', folderLogDetails(folder))
+          syncLog('announce found publishable folder content: publishing storage_add immediately', { ...folderLogDetails(folder), shouldPublishContent })
           void publishSharedFolder(folder.id)
         } else {
-          syncLog('announce found local changes: scheduling storage_add', folderLogDetails(folder))
-          scheduleFolderSync(folder.id, 'announce found local changes')
+          syncLog('announce found publishable folder content: scheduling storage_add', { ...folderLogDetails(folder), shouldPublishContent })
+          scheduleFolderSync(folder.id, shouldPublishContent ? 'announce found untrusted local content' : 'announce found local changes')
         }
         continue
       }

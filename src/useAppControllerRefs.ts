@@ -22,11 +22,14 @@ export function useAppControllerRefs<TNetwork>(options: AppControllerRefsOptions
   const folderAccessModesRef = useRef(options.folderAccessModes)
   const fileShareKeysRef = useRef(options.fileShareKeys)
   const fileContentCacheRef = useRef(options.fileContentCache)
+  const fileContentFailuresRef = useRef<Record<string, { retryAfter: number; signature: string }>>({})
   const importKeysRef = useRef(options.importKeys)
   const pendingSharesRef = useRef(options.pendingShares)
   const fileContentLoadsRef = useRef<Record<string, Promise<string>>>({})
+  const fileContentStorageRef = useRef<Record<string, string>>({})
   const settingsRef = useRef(options.settings)
   const networkRef = useRef(options.network)
+  const autoImportFailuresRef = useRef<Record<string, { retryAfter: number; signature: string }>>({})
   const syncSignaturesRef = useRef<Record<string, string>>({})
   const syncTimersRef = useRef<Record<string, number>>({})
   const syncInFlightRef = useRef<Set<string>>(new Set())
@@ -38,8 +41,8 @@ export function useAppControllerRefs<TNetwork>(options: AppControllerRefsOptions
   const dragItemsRef = useRef<BrowserDragItem[]>([])
 
   return {
-    accessRequestKeysRef, autoImportCidsRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
-    fileContentCacheRef, fileContentLoadsRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
+    accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
+    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentStorageRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
     helloResponseAtRef, importKeysRef, networkRef, pendingSharesRef, settingsRef, snapshotRef,
     syncInFlightRef, syncSignaturesRef, syncTimersRef,
   }

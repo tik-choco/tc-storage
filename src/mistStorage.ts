@@ -1,5 +1,6 @@
 import { decryptJson, encryptJson, type EncryptedPayload } from './crypto.js'
 import { stripFileContent, type FileBundle, type FileRecord, type FolderBundle, type FolderRecord } from './domain.js'
+import { describeError } from './errors.js'
 import { debugInfo, debugWarn } from './logging.js'
 
 type MistModule = typeof import('./vendor/mistlib-wasm/mistlib_wasm.js')
@@ -148,6 +149,5 @@ function mistStorageUnavailableMessage(): string {
 }
 
 function describeStorageError(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return String(error)
+  return describeError(error, 'unknown storage error')
 }

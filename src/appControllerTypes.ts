@@ -13,6 +13,7 @@ export interface FileContentActions {
   downloadStoredFile: (file: FileRecord) => Promise<void>
   ensureFileContent: (file: FileRecord, options?: { trackProgress?: boolean }) => Promise<FileRecord>
   ensureFolderFilesStored: (folder: FolderRecord, filesForSave: FileRecord[], passphrase: string) => Promise<FileRecord[]>
+  hasUntrustedFolderContent: (folderId: string) => boolean
   materializeFolderBundleFiles: (bundle: import('./domain.js').FolderBundle, passphrase: string) => Promise<import('./domain.js').FolderBundle>
   preloadFileContent: (file: FileRecord) => void
 }

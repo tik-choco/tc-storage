@@ -175,9 +175,13 @@ test('folder-share import preserves an existing local shared-root parent', () =>
   assert.equal(mergedFolder?.lastCid, 'cid-after-sync')
 })
 
-function createContentActionsForSnapshot(snapshot: StorageSnapshot, folderKeys: Record<string, string> = {}) {
+function createContentActionsForSnapshot(
+  snapshot: StorageSnapshot,
+  folderKeys: Record<string, string> = {},
+) {
   let cache: Record<string, string> = {}
   let snapshotValue = snapshot
+  const snapshotRef = { current: snapshotValue }
   return createFileContentActions({
     failDownloadProgress: () => {},
     failFileLoadProgress: () => {},
@@ -193,20 +197,10 @@ function createContentActionsForSnapshot(snapshot: StorageSnapshot, folderKeys: 
     setNotice: () => {},
     setSnapshot: (update) => {
       snapshotValue = applyStateUpdate(snapshotValue, update)
+      snapshotRef.current = snapshotValue
     },
-    settingsRef: {
-      current: {
-        roomId: 'tc-storage-main',
-        signalingUrl: 'https://rtc.example.test/signaling',
-        nodeId: 'node-a',
-        identity: null,
-        autoConnect: false,
-        profileName: 'Test user',
-        avatarUrl: '',
-        avatarFileId: '',
-      },
-    },
-    snapshotRef: { current: snapshotValue },
+    settingsRef: { current: { roomId: 'tc-storage-main', signalingUrl: 'https://rtc.example.test/signaling', nodeId: 'node-a', identity: null, autoConnect: false, profileName: 'Test user', avatarUrl: '', avatarFileId: '' } },
+    snapshotRef,
     startDownloadProgress: () => 0,
     startFileLoadProgress: () => '',
     updateDownloadProgress: () => {},

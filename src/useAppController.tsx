@@ -80,15 +80,15 @@ export function useAppController() {
   const envelopeHandlerRef = useRef<(envelope: ShareEnvelope) => void>(() => {})
   const network = useMistShare(settings, useCallback((envelope: ShareEnvelope) => envelopeHandlerRef.current(envelope), []))
   const {
-    accessRequestKeysRef, autoImportCidsRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
-    fileContentCacheRef, fileContentLoadsRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
+    accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
+    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentStorageRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
     helloResponseAtRef, importKeysRef, networkRef, pendingSharesRef, settingsRef, snapshotRef,
     syncInFlightRef, syncSignaturesRef, syncTimersRef,
   } = useAppControllerRefs({ fileContentCache, fileShareKeys, folderAccessModes, folderKeys, importKeys, network, pendingShares, settings, snapshot })
 
   const peerActions = createPeerActions({ setFolderPeers, settingsRef })
-  const fileContent = createFileContentActions({ ...transfer, fileContentCacheRef, fileContentLoadsRef, fileShareKeysRef, folderKeysRef, setFileContentCache, setNotice, setSnapshot, settingsRef, snapshotRef })
-  const folderSync = createFolderSyncActions({ ensureFolderFilesStored: fileContent.ensureFolderFilesStored, folderKeysRef, networkRef, setNotice, setSnapshot, settingsRef, snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef })
+  const fileContent = createFileContentActions({ ...transfer, fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentStorageRef, fileShareKeysRef, folderKeysRef, setFileContentCache, setNotice, setSnapshot, settingsRef, snapshotRef })
+  const folderSync = createFolderSyncActions({ ensureFolderFilesStored: fileContent.ensureFolderFilesStored, folderKeysRef, hasUntrustedFolderContent: fileContent.hasUntrustedFolderContent, networkRef, setNotice, setSnapshot, settingsRef, snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef })
   const access = createAccessActions({
     accessRequestKeysRef,
     folderAccessModesRef,
@@ -110,7 +110,7 @@ export function useAppController() {
     settingsRef,
     snapshotRef,
   })
-  const shareImport = createShareImportActions({ accessRequestKeysRef, autoImportCidsRef, autoImportInFlightRef, clearFolderSyncTimer: folderSync.clearFolderSyncTimer, importKeys, materializeFolderBundleFiles: fileContent.materializeFolderBundleFiles, pendingSharesRef, rememberFolderPeer: peerActions.rememberFolderPeer, setBusy, setCurrentFolderId, setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setImportKeys, setNotice, setPendingShares, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef })
+  const shareImport = createShareImportActions({ accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, clearFolderSyncTimer: folderSync.clearFolderSyncTimer, importKeys, materializeFolderBundleFiles: fileContent.materializeFolderBundleFiles, pendingSharesRef, rememberFolderPeer: peerActions.rememberFolderPeer, setBusy, setCurrentFolderId, setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setImportKeys, setNotice, setPendingShares, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef })
   const panel = createPanelActions({ previewFiles, profileImageFiles, selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelMode, setFolderPanelOpen, setImportKeys, setNotice, setPendingShares, setPopoverPositions, setProfileOpen, setSelectedFileId, setSettings, setSettingsOpen, settings, settingsDraft })
   const envelope = createEnvelopeActions({ announceSharedFolders: folderSync.announceSharedFolders, autoImportCidsRef, autoImportFolderShare: shareImport.autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare: shareImport.autoImportLinkedShare, currentFolderId, detailFileId, folderKeysRef, folderPanelFolderId, handleFolderAccessDenied: access.handleFolderAccessDenied, handleFolderAccessGrant: access.handleFolderAccessGrant, handleFolderAccessRequest: access.handleFolderAccessRequest, helloResponseAtRef, importKeysRef, pendingSharesRef, preloadFileContent: fileContent.preloadFileContent, rememberFolderPeer: peerActions.rememberFolderPeer, scheduleFolderSync: folderSync.scheduleFolderSync, selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setPendingShares, setSelectedFileId, setSnapshot, snapshotRef })
   envelopeHandlerRef.current = envelope.handleEnvelope

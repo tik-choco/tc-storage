@@ -10,12 +10,13 @@
 
 .tile-card {
   position: relative;
-  display: grid;
-  grid-template-rows: auto auto auto auto;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  aspect-ratio: 1 / 1;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   padding: 12px;
   border: 1px solid #d8e1e8;
   border-radius: 8px;
@@ -260,7 +261,7 @@
 
 .tile-actions {
   justify-content: flex-start;
-  margin-top: 4px;
+  margin-top: auto;
 }
 
 .tile-actions button {
