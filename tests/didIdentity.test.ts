@@ -84,3 +84,18 @@ test('P2P rejects malformed did:key senders', async () => {
     clock: 0,
   }), false)
 })
+
+test('P2P rejects unsigned legacy node senders', async () => {
+  const envelope: ShareEnvelope = {
+    type: 'folder-state',
+    from: 'node-legacy',
+    roomId: 'tc-storage-main',
+    sentAt: new Date('2026-05-19T00:00:00.000Z').toISOString(),
+    clock: 1,
+    folderId: 'folder-a',
+    cid: 'cid-a',
+  }
+
+  assert.equal(await verifyShareEnvelope(envelope), false)
+  await assert.rejects(() => signShareEnvelope(envelope), /did:key/)
+})

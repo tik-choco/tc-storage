@@ -1,4 +1,4 @@
-import type { DeleteRequest, Notice } from './appTypes.js'
+import type { DeleteRequest, FolderAccessMode, Notice } from './appTypes.js'
 import type { FileContentActions, MistShare, MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds, nextFolderName } from './appHelpers.js'
 import { folderColors, nearestSharedAncestorFolder } from './appUtils.js'
@@ -8,6 +8,7 @@ import { addActivity, childFolders, makeFolder, stripFileContent, touchSnapshot,
 import { describeError } from './errors.js'
 import { folderFilesForSync, foldersForSync, sharedFolderSignature } from './folderSync.js'
 import { generateFolderKey } from './folderKeys.js'
+import { isEd25519DidKey } from './didIdentity.js'
 import type { AppSettings } from './localSettings.js'
 import { saveEncryptedFolderToMist } from './mistStorage.js'
 import type { ShareProfile } from './p2p.js'
@@ -23,6 +24,7 @@ interface FolderActionOptions {
   folderPanelFolder: FolderRecord | null
   folderPanelFolderId: string | null
   folderKeysRef: MutableRef<Record<string, string>>
+  folderAccessModes: Record<string, FolderAccessMode>
   folders: FolderRecord[]
   networkRef: MutableRef<MistShare>
   scheduleFolderSync: (folderId: string, reason: string) => void
@@ -50,7 +52,7 @@ interface FolderActionOptions {
 export function createFolderActions(options: FolderActionOptions) {
   const {
     announceFolderChange, clearFolderSyncTimer, currentFolder, currentFolderId, currentFolderKey,
-    ensureFolderFilesStored, folderKeysRef, folderPanelFolder, folderPanelFolderId, folders, networkRef,
+    ensureFolderFilesStored, folderAccessModes, folderKeysRef, folderPanelFolder, folderPanelFolderId, folders, networkRef,
     scheduleFolderSync, setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setProfileOpen,
     setSelectedFileId, setSettingsOpen, setSnapshot, settings, shareProfile, snapshot, snapshotRef,
@@ -120,6 +122,10 @@ export function createFolderActions(options: FolderActionOptions) {
   }
 
   async function saveFolder(folder: FolderRecord, folderKey: string, shareAfterSave: boolean) {
+    if (shareAfterSave && !isEd25519DidKey(settings.nodeId)) {
+      setNotice({ tone: 'error', text: 'フォルダー共有には署名用DIDが必要です。DID生成後にもう一度共有してください' })
+      return
+    }
     const sourceSnapshot = snapshotRef.current
     const targetFolder = sourceSnapshot.folders.find((item) => item.id === folder.id && !item.deletedAt)
     if (!targetFolder) return setNotice({ tone: 'error', text: '保存するフォルダーを選択してください' })
@@ -147,7 +153,7 @@ export function createFolderActions(options: FolderActionOptions) {
       syncSignaturesRef.current[targetFolder.id] = sharedFolderSignature({ ...sourceSnapshot, folders: sourceSnapshot.folders.map((item) => (item.id === targetFolder.id ? folderForSave : item)), files: sourceSnapshot.files.map((file) => filesForSaveById.get(file.id) ?? file) }, targetFolder.id)
       markFolderSaved(targetFolder, cid, now, shareAfterSave, filesForSave)
       if (shareAfterSave) networkRef.current.broadcastShare({ clock: sourceSnapshot.clock + 1, folderId: targetFolder.id, folderName: targetFolder.name, cid })
-      const copied = shareAfterSave ? await writeReservedClipboard(makeFolderShareUrl(targetFolder, settings.roomId, shareProfile, settings.nodeId), clipboard) : false
+      const copied = shareAfterSave ? await writeReservedClipboard(makeFolderShareUrl(targetFolder, settings.roomId, shareProfile, settings.nodeId, passphrase, folderAccessModes[targetFolder.id] ?? 'approval'), clipboard) : false
       setNotice({ tone: 'success', text: shareAfterSave ? copied ? '共有URLをコピーしました' : '共有URLを作成しました' : '暗号化してmistlibへ保存しました' })
     } catch (error) {
       clipboard?.cancel()

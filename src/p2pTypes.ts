@@ -27,9 +27,12 @@ export type ShareEnvelope = {
   senderProfile?: ShareProfile
   signature?: string
   ownerNodeId?: string
+  accessGrantMode?: 'owner' | 'shared'
+  folderKeyHash?: string
   targetNodeId?: string
   requestId?: string
   accessPublicKey?: string
+  accessGrantProof?: string
   accessGrantPublicKey?: string
   accessGrantIv?: string
   accessGrantCipherText?: string

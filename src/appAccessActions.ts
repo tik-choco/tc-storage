@@ -3,11 +3,15 @@ import { pendingShareKey, type FolderAccessMode, type FolderAccessRequest, type 
 import type { MistShare, MutableRef, SetState } from './appControllerTypes.js'
 import type { FolderRecord, StorageSnapshot } from './domain.js'
 import { describeError } from './errors.js'
+import { isEd25519DidKey } from './didIdentity.js'
+import { folderAccessGrantProof, matchesFolderAccessGrantProof, matchesFolderKeyHash } from './folderKeyProof.js'
 import type { AppSettings } from './localSettings.js'
 import type { ShareEnvelope } from './p2p.js'
 
 export type RequestKeyEntry = AccessRequestKey & {
+  accessGrantMode?: 'owner' | 'shared'
   folderId: string
+  folderKeyHash?: string
   ownerNodeId?: string
   roomId: string
   requestId: string
@@ -36,12 +40,21 @@ export function createAccessActions(options: AccessOptions) {
 
   async function requestFolderAccess(share: PendingShare): Promise<void> {
     if (share.type !== 'folder-share' || !share.folderId) return
+    const accessGrantMode: NonNullable<ShareEnvelope['accessGrantMode']> = share.accessGrantMode === 'shared' ? 'shared' : 'owner'
+    if (!share.ownerNodeId || !isEd25519DidKey(share.ownerNodeId)) {
+      setNotice({ tone: 'error', text: '署名された共有URLではないため、参加リクエストを送れません' })
+      return
+    }
+    if (!share.folderKeyHash) {
+      setNotice({ tone: 'error', text: 'フォルダーキー検証情報のない共有URLでは参加リクエストを送れません' })
+      return
+    }
     const key = pendingShareKey(share)
     if (accessRequestKeysRef.current[key]) return
     try {
       const accessKey = await createAccessRequestKey()
       const requestId = `access-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-      const entry = { ...accessKey, folderId: share.folderId, ownerNodeId: share.ownerNodeId, requestId, roomId: share.roomId }
+      const entry = { ...accessKey, accessGrantMode, folderId: share.folderId, folderKeyHash: share.folderKeyHash, ownerNodeId: share.ownerNodeId, requestId, roomId: share.roomId }
       accessRequestKeysRef.current = {
         ...accessRequestKeysRef.current,
         [key]: entry,
@@ -52,7 +65,9 @@ export function createAccessActions(options: AccessOptions) {
         clock: 0,
         folderId: share.folderId,
         folderName: share.folderName,
-        targetNodeId: share.ownerNodeId,
+        accessGrantMode,
+        folderKeyHash: share.folderKeyHash,
+        targetNodeId: accessGrantMode === 'shared' ? undefined : share.ownerNodeId,
         requestId,
         accessPublicKey: accessKey.publicKey,
       })
@@ -64,10 +79,14 @@ export function createAccessActions(options: AccessOptions) {
 
   function handleFolderAccessRequest(envelope: ShareEnvelope): void {
     if (envelope.targetNodeId && envelope.targetNodeId !== settingsRef.current.nodeId) return
+    if (!isEd25519DidKey(envelope.from)) return
     if (!envelope.folderId || !envelope.requestId || !envelope.accessPublicKey) return
+    const requestGrantMode = envelope.accessGrantMode === 'shared' ? 'shared' : 'owner'
+    if (requestGrantMode !== 'shared' && envelope.targetNodeId !== settingsRef.current.nodeId) return
     const folder = snapshotRef.current.folders.find((item) => item.id === envelope.folderId && !item.deletedAt)
     const folderKey = folder ? folderKeysRef.current[folder.id] : ''
     if (!folder?.shareEnabled || !folderKey) return
+    if (!matchesFolderKeyHash(folder.id, folderKey, envelope.folderKeyHash)) return
     const request = accessRequestFromEnvelope(envelope, folder)
     if (folderAccessModesRef.current[folder.id] === 'open') {
       void approveFolderAccess(request)
@@ -98,6 +117,7 @@ export function createAccessActions(options: AccessOptions) {
         cid: folder.lastCid,
         targetNodeId: request.nodeId,
         requestId: request.requestId,
+        accessGrantProof: folderAccessGrantProof(folderKey, folder.id, request.requestId, request.nodeId),
         accessGrantPublicKey: grant.publicKey,
         accessGrantIv: grant.iv,
         accessGrantCipherText: grant.cipherText,
@@ -128,7 +148,9 @@ export function createAccessActions(options: AccessOptions) {
     const entry = accessRequestKeysRef.current[envelope.requestId]
     const roomId = entry?.roomId ?? envelope.roomId
     const folderId = entry?.folderId ?? envelope.folderId
-    if (entry?.ownerNodeId && envelope.from !== entry.ownerNodeId) return
+    const accessGrantMode = entry?.accessGrantMode === 'shared' ? 'shared' : 'owner'
+    if (accessGrantMode === 'shared') return
+    if (!entry?.ownerNodeId || !isEd25519DidKey(entry.ownerNodeId) || envelope.from !== entry.ownerNodeId) return
     const shareKey = pendingShareKey({ type: 'folder-share', roomId, folderId })
     accessRequestKeysRef.current = Object.fromEntries(Object.entries(accessRequestKeysRef.current).filter(([key]) => key !== envelope.requestId && key !== shareKey))
     setPendingShares((current) => current.filter((share) => (
@@ -139,11 +161,15 @@ export function createAccessActions(options: AccessOptions) {
   }
 
   async function handleFolderAccessGrant(envelope: ShareEnvelope): Promise<void> {
+    if (!envelope.folderId || !envelope.requestId) return
+    clearGrantedAccessRequest(envelope)
     if (envelope.targetNodeId && envelope.targetNodeId !== settingsRef.current.nodeId) return
-    if (!envelope.folderId || !envelope.requestId || !envelope.accessGrantPublicKey || !envelope.accessGrantIv || !envelope.accessGrantCipherText) return
+    if (!envelope.accessGrantPublicKey || !envelope.accessGrantIv || !envelope.accessGrantCipherText) return
     const entry = accessRequestKeysRef.current[envelope.requestId]
     if (!entry || entry.folderId !== envelope.folderId) return
-    if (entry.ownerNodeId && envelope.from !== entry.ownerNodeId) return
+    const accessGrantMode = entry.accessGrantMode === 'shared' ? 'shared' : 'owner'
+    if (accessGrantMode === 'owner' && (!entry.ownerNodeId || !isEd25519DidKey(entry.ownerNodeId) || envelope.from !== entry.ownerNodeId)) return
+    if (accessGrantMode === 'shared' && !isEd25519DidKey(envelope.from)) return
     try {
       const passphrase = await decryptFolderKeyGrant({
         cipherText: envelope.accessGrantCipherText,
@@ -151,6 +177,10 @@ export function createAccessActions(options: AccessOptions) {
         privateKey: entry.privateKey,
         publicKey: envelope.accessGrantPublicKey,
       })
+      if (!matchesFolderKeyHash(envelope.folderId, passphrase, entry.folderKeyHash)) {
+        setNotice({ tone: 'error', text: '承認レスポンスのフォルダーキー検証に失敗しました' })
+        return
+      }
       folderKeysRef.current = { ...folderKeysRef.current, [envelope.folderId]: passphrase }
       setFolderKeys((current) => ({ ...current, [envelope.folderId ?? '']: passphrase }))
       setPendingShares((current) => current.map((share) => (
@@ -159,7 +189,9 @@ export function createAccessActions(options: AccessOptions) {
           : share
       )))
       if (envelope.cid) setImportKeys((current) => ({ ...current, [envelope.cid ?? '']: passphrase }))
-      accessRequestKeysRef.current = Object.fromEntries(Object.entries(accessRequestKeysRef.current).filter(([key]) => key !== envelope.requestId && key !== pendingShareKey({ type: 'folder-share', roomId: entry.roomId, folderId: entry.folderId })))
+      if (accessGrantMode !== 'shared') {
+        accessRequestKeysRef.current = Object.fromEntries(Object.entries(accessRequestKeysRef.current).filter(([key]) => key !== envelope.requestId && key !== pendingShareKey({ type: 'folder-share', roomId: entry.roomId, folderId: entry.folderId })))
+      }
       setNotice({ tone: 'success', text: '参加が承認されました。共有フォルダーを同期します' })
     } catch (error) {
       setNotice({ tone: 'error', text: describeError(error, '承認レスポンスを復号できませんでした') })
@@ -175,9 +207,24 @@ export function createAccessActions(options: AccessOptions) {
       nodeId: envelope.from,
       profile: envelope.senderProfile,
       publicKey: envelope.accessPublicKey ?? '',
+      folderKeyHash: envelope.folderKeyHash,
       requestedAt: envelope.sentAt,
       requestId,
     }
+  }
+
+  function clearGrantedAccessRequest(envelope: ShareEnvelope): void {
+    if (!envelope.folderId || !envelope.requestId || !envelope.targetNodeId || !envelope.accessGrantProof) return
+    if (!isEd25519DidKey(envelope.from)) return
+    const folder = snapshotRef.current.folders.find((item) => item.id === envelope.folderId && !item.deletedAt)
+    const folderKey = folder ? folderKeysRef.current[folder.id] : ''
+    if (!folder?.shareEnabled || !folderKey) return
+    if (!matchesFolderAccessGrantProof(folderKey, folder.id, envelope.requestId, envelope.targetNodeId, envelope.accessGrantProof)) return
+    setFolderAccessRequests((current) => current.filter((request) => (
+      request.folderId !== envelope.folderId ||
+      request.requestId !== envelope.requestId ||
+      request.nodeId !== envelope.targetNodeId
+    )))
   }
 
   return { approveFolderAccess, handleFolderAccessDenied, handleFolderAccessGrant, handleFolderAccessRequest, rejectFolderAccess, requestFolderAccess }

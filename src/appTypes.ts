@@ -33,7 +33,7 @@ export type SyncPeer = {
   lastSeenAt: string
 }
 
-export type FolderAccessMode = 'approval' | 'open'
+export type FolderAccessMode = 'approval' | 'shared-approval' | 'open'
 export type FolderPanelMode = 'details' | 'share' | 'access'
 
 export type FolderAccessRequest = {
@@ -43,6 +43,7 @@ export type FolderAccessRequest = {
   nodeId: string
   profile?: ShareProfile
   publicKey: string
+  folderKeyHash?: string
   requestedAt: string
   requestId: string
 }

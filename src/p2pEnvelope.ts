@@ -45,15 +45,13 @@ export function parseEnvelope(value: unknown): ShareEnvelope | undefined {
 }
 
 export async function signShareEnvelope(envelope: ShareEnvelope): Promise<ShareEnvelope> {
-  if (!envelope.from.startsWith('did:key:')) return envelope
-  if (!isEd25519DidKey(envelope.from)) throw new Error('DID must be an Ed25519 did:key')
+  if (!isEd25519DidKey(envelope.from)) throw new Error('P2P sender must be an Ed25519 did:key')
   const identity = loadStoredDidIdentity()
   if (!identity || identity.did !== envelope.from) throw new Error('DID private key is missing')
   return { ...envelope, signature: await signStringWithDidIdentity(identity, envelopeSigningPayload(envelope)) }
 }
 
 export async function verifyShareEnvelope(envelope: ShareEnvelope): Promise<boolean> {
-  if (!envelope.from.startsWith('did:key:')) return true
   if (!isEd25519DidKey(envelope.from)) return false
   if (!envelope.signature) return false
   return verifyStringWithDid(envelope.from, envelopeSigningPayload(envelope), envelope.signature)

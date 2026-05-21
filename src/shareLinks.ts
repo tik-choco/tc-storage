@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'preact/hooks'
-import type { PendingShare } from './appTypes.js'
+import type { FolderAccessMode, PendingShare } from './appTypes.js'
 import { base64ToBytes, bytesToBase64 } from './cryptoEncoding.js'
+import { isEd25519DidKey } from './didIdentity.js'
 import type { FileRecord, FolderRecord } from './domain.js'
+import { folderKeyHash } from './folderKeyProof.js'
 import { removeFolderRouteFromUrl } from './folderRoute.js'
 import type { ShareProfile } from './p2p.js'
 
@@ -19,6 +21,8 @@ type ShareLinkPayload = {
   fileId?: string
   fileName?: string
   ownerNodeId?: string
+  accessGrantMode?: 'owner' | 'shared'
+  folderKeyHash?: string
   senderProfile?: ShareProfile
 }
 
@@ -30,8 +34,11 @@ export type LinkedShare = {
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-export function makeFolderShareUrl(folder: FolderRecord, roomId: string, senderProfile: ShareProfile, ownerNodeId?: string): string {
-  return makeShareUrl({ v: 1, type: 'folder-share', roomId, folderId: folder.id, folderName: folder.name, ownerNodeId, senderProfile })
+export function makeFolderShareUrl(folder: FolderRecord, roomId: string, senderProfile: ShareProfile, ownerNodeId: string, folderKey: string, accessMode: FolderAccessMode = 'approval'): string {
+  if (!isEd25519DidKey(ownerNodeId)) throw new Error('フォルダー共有URLには署名用DIDが必要です')
+  const trimmedKey = folderKey.trim()
+  if (!trimmedKey) throw new Error('フォルダー共有URLにはフォルダーキーの検証情報が必要です')
+  return makeShareUrl({ v: 1, type: 'folder-share', roomId, folderId: folder.id, folderName: folder.name, ownerNodeId, accessGrantMode: folderAccessGrantMode(accessMode), folderKeyHash: folderKeyHash(folder.id, trimmedKey), senderProfile })
 }
 
 export function makeFileShareUrl(file: FileRecord, folder: FolderRecord, roomId: string, clock: number, cid: string, key: string, senderProfile: ShareProfile): string {
@@ -83,6 +90,8 @@ export function readShareLink(hash: string): LinkedShare | undefined {
         fileId: payload.fileId,
         fileName: payload.fileName,
         ownerNodeId: payload.ownerNodeId,
+        accessGrantMode: payload.accessGrantMode,
+        folderKeyHash: payload.folderKeyHash,
         cid: payload.cid,
         senderProfile: payload.senderProfile,
       },
@@ -100,11 +109,19 @@ function isShareLinkPayload(value: unknown): value is ShareLinkPayload {
       (payload.type === 'folder-share' || payload.type === 'file-share') &&
       typeof payload.roomId === 'string' &&
       (payload.clock === undefined || typeof payload.clock === 'number') &&
-      (payload.ownerNodeId === undefined || typeof payload.ownerNodeId === 'string') &&
+      (payload.accessGrantMode === undefined || payload.accessGrantMode === 'owner' || payload.accessGrantMode === 'shared') &&
       (payload.type === 'folder-share'
-        ? payload.cid === undefined && payload.key === undefined
+        ? typeof payload.ownerNodeId === 'string' && isEd25519DidKey(payload.ownerNodeId) && isFolderKeyHash(payload.folderKeyHash) && payload.cid === undefined && payload.key === undefined
         : typeof payload.cid === 'string' && payload.cid.length > 0 && typeof payload.key === 'string' && payload.key.length > 0),
   )
+}
+
+function folderAccessGrantMode(mode: FolderAccessMode): 'owner' | 'shared' {
+  return mode === 'shared-approval' ? 'shared' : 'owner'
+}
+
+function isFolderKeyHash(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
 }
 
 function toBase64Url(value: string): string {

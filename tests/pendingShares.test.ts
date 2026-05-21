@@ -82,6 +82,8 @@ test('fixed folder invite pending shares survive without a cid', () => {
     folderId: 'folder-fixed',
     folderName: 'Fixed invite',
     ownerNodeId: 'node-owner',
+    accessGrantMode: 'shared',
+    folderKeyHash: 'a'.repeat(64),
     autoImport: true,
     senderProfile: { name: 'Owner' },
   }
@@ -111,7 +113,7 @@ test('pending share storage ignores malformed records', () => {
 })
 
 test('folder access modes survive a reload and normalize invalid modes', () => {
-  saveFolderAccessModes({ 'folder-approval': 'approval', 'folder-open': 'open' })
+  saveFolderAccessModes({ 'folder-approval': 'approval', 'folder-shared': 'shared-approval', 'folder-open': 'open' })
   localStorage.setItem('tc-storage-folder-access-modes-v1', JSON.stringify({
     ...loadFolderAccessModes(),
     'folder-invalid': 'anything',
@@ -119,6 +121,7 @@ test('folder access modes survive a reload and normalize invalid modes', () => {
 
   assert.deepEqual(loadFolderAccessModes(), {
     'folder-approval': 'approval',
+    'folder-shared': 'shared-approval',
     'folder-open': 'open',
     'folder-invalid': 'approval',
   })

@@ -11,6 +11,7 @@ import { folderKeyUpdatesForBundle, shareLogDetails, syncLog, syncWarn, withoutR
 import { sharedFolderSignature } from './folderSync.js'
 
 interface ShareImportOptions {
+  accessRequestKeysRef?: MutableRef<Record<string, { folderId: string; roomId: string }>>
   autoImportCidsRef: MutableRef<Set<string>>
   autoImportInFlightRef: MutableRef<Set<string>>
   clearFolderSyncTimer: (folderId: string) => void
@@ -35,7 +36,7 @@ interface ShareImportOptions {
 
 export function createShareImportActions(options: ShareImportOptions) {
   const {
-    autoImportCidsRef, autoImportInFlightRef, clearFolderSyncTimer, importKeys,
+    accessRequestKeysRef, autoImportCidsRef, autoImportInFlightRef, clearFolderSyncTimer, importKeys,
     materializeFolderBundleFiles, pendingSharesRef, rememberFolderPeer, setBusy, setCurrentFolderId,
     setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setImportKeys, setNotice,
     setPendingShares, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef,
@@ -114,6 +115,9 @@ export function createShareImportActions(options: ShareImportOptions) {
       }
       return next
     })
+    if (accessRequestKeysRef && share.type === 'folder-share' && share.folderId) {
+      accessRequestKeysRef.current = Object.fromEntries(Object.entries(accessRequestKeysRef.current).filter(([, entry]) => !(entry.folderId === share.folderId && entry.roomId === share.roomId)))
+    }
   }
 
   function cancelPendingShare(share: PendingShare): void {

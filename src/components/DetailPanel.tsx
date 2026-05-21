@@ -92,7 +92,8 @@ function FolderShareSettings(props: {
           <label>
             <span>Access</span>
             <select value={props.accessMode} onChange={(event) => props.onAccessModeChange(event.currentTarget.value as FolderAccessMode)}>
-              <option value="approval">承認制</option>
+              <option value="approval">Owner承認</option>
+              <option value="shared-approval">共有者承認</option>
               <option value="open">無制限受け入れ</option>
             </select>
           </label>

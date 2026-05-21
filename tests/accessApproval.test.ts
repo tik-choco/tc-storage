@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
 import { webcrypto } from 'node:crypto'
 import { test } from 'node:test'
-import type { PendingShare } from '../src/appTypes.js'
+import type { FolderAccessRequest, PendingShare } from '../src/appTypes.js'
 import { createAccessActions, type RequestKeyEntry } from '../src/appAccessActions.js'
 import { createEnvelopeActions } from '../src/appEnvelopeActions.js'
 import { createAccessRequestKey, encryptFolderKeyForRequest } from '../src/accessGrantCrypto.js'
+import { didKeyFromEd25519PublicKey } from '../src/didIdentity.js'
 import { createInitialSnapshot, makeFolder } from '../src/domain.js'
+import { folderAccessGrantProof, folderKeyHash } from '../src/folderKeyProof.js'
 import type { NetworkState } from '../src/p2p.js'
 
 type StateUpdate<T> = T | ((current: T) => T)
@@ -13,6 +15,14 @@ type StateUpdate<T> = T | ((current: T) => T)
 if (!globalThis.crypto) {
   Object.defineProperty(globalThis, 'crypto', { value: webcrypto })
 }
+
+const ownerDid = didFromSeed(1)
+const requesterDid = didFromSeed(2)
+const attackerDid = didFromSeed(3)
+const otherDid = didFromSeed(4)
+const fixedFolderId = 'folder-fixed'
+const folderSecret = 'folder-secret'
+const expectedFolderKeyHash = folderKeyHash(fixedFolderId, folderSecret)
 
 test('folder-share cid after fixed invite uses the granted folder key for immediate import', () => {
   let pendingShares: PendingShare[] = [{
@@ -22,7 +32,7 @@ test('folder-share cid after fixed invite uses the granted folder key for immedi
     sentAt: '2026-05-21T00:00:00.000Z',
     receivedAt: '2026-05-21T00:00:01.000Z',
     clock: 0,
-    folderId: 'folder-fixed',
+    folderId: fixedFolderId,
     folderName: 'Fixed invite',
     autoImport: true,
   }]
@@ -40,7 +50,7 @@ test('folder-share cid after fixed invite uses the granted folder key for immedi
     },
     currentFolderId: null,
     detailFileId: null,
-    folderKeysRef: { current: { 'folder-fixed': 'folder-secret' } },
+    folderKeysRef: { current: { [fixedFolderId]: folderSecret } },
     folderPanelFolderId: null,
     handleFolderAccessDenied: () => {},
     handleFolderAccessGrant: async () => {},
@@ -74,12 +84,12 @@ test('folder-share cid after fixed invite uses the granted folder key for immedi
     roomId: 'tc-storage-main',
     sentAt: '2026-05-21T00:00:02.000Z',
     clock: 2,
-    folderId: 'folder-fixed',
+    folderId: fixedFolderId,
     folderName: 'Fixed invite',
     cid: 'cid-folder',
   })
 
-  assert.equal(imported?.passphrase, 'folder-secret')
+  assert.equal(imported?.passphrase, folderSecret)
   assert.equal(imported?.share.cid, 'cid-folder')
   assert.equal(pendingShares.length, 1)
   assert.equal(pendingShares[0]?.autoImport, true)
@@ -99,8 +109,8 @@ test('folder access request targets the owner pinned in the fixed invite', async
     setImportKeys: () => {},
     setNotice: () => {},
     setPendingShares: () => {},
-    settingsRef: { current: settingsStub('node-b') },
-    snapshotRef: { current: createInitialSnapshot('node-b') },
+    settingsRef: { current: settingsStub(requesterDid) },
+    snapshotRef: { current: createInitialSnapshot(requesterDid) },
   })
 
   await actions.requestFolderAccess({
@@ -110,30 +120,73 @@ test('folder access request targets the owner pinned in the fixed invite', async
     sentAt: '2026-05-21T00:00:00.000Z',
     receivedAt: '2026-05-21T00:00:01.000Z',
     clock: 0,
-    folderId: 'folder-fixed',
+    folderId: fixedFolderId,
     folderName: 'Fixed invite',
-    ownerNodeId: 'node-owner',
+    ownerNodeId: ownerDid,
+    folderKeyHash: expectedFolderKeyHash,
     autoImport: true,
   })
 
   assert.equal((broadcasts[0] as { type?: string }).type, 'folder-access-request')
-  assert.equal((broadcasts[0] as { targetNodeId?: string }).targetNodeId, 'node-owner')
-  assert.equal(Object.values(accessRequestKeysRef.current)[0]?.ownerNodeId, 'node-owner')
+  assert.equal((broadcasts[0] as { targetNodeId?: string }).targetNodeId, ownerDid)
+  assert.equal((broadcasts[0] as { folderKeyHash?: string }).folderKeyHash, expectedFolderKeyHash)
+  assert.equal(Object.values(accessRequestKeysRef.current)[0]?.ownerNodeId, ownerDid)
+  assert.equal(Object.values(accessRequestKeysRef.current)[0]?.folderKeyHash, expectedFolderKeyHash)
 })
 
-test('folder owner ignores access requests targeted at another owner', () => {
+test('shared-approval access request broadcasts to connected shared peers', async () => {
+  const broadcasts: unknown[] = []
+  const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }
+  const actions = createAccessActions({
+    accessRequestKeysRef,
+    folderAccessModesRef: { current: {} },
+    folderKeysRef: { current: {} },
+    networkRef: { current: networkStub(broadcasts) },
+    openFolderAccessRequests: () => {},
+    setFolderAccessRequests: () => {},
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: () => {},
+    setPendingShares: () => {},
+    settingsRef: { current: settingsStub(requesterDid) },
+    snapshotRef: { current: createInitialSnapshot(requesterDid) },
+  })
+
+  await actions.requestFolderAccess({
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    ownerNodeId: ownerDid,
+    accessGrantMode: 'shared',
+    folderKeyHash: expectedFolderKeyHash,
+    autoImport: true,
+  })
+
+  assert.equal((broadcasts[0] as { type?: string }).type, 'folder-access-request')
+  assert.equal((broadcasts[0] as { targetNodeId?: string }).targetNodeId, undefined)
+  assert.equal((broadcasts[0] as { accessGrantMode?: string }).accessGrantMode, 'shared')
+  assert.equal((broadcasts[0] as { folderKeyHash?: string }).folderKeyHash, expectedFolderKeyHash)
+  assert.equal(Object.values(accessRequestKeysRef.current)[0]?.accessGrantMode, 'shared')
+})
+
+test('shared-approval access request is shown to a connected holder with the folder key', () => {
   const now = '2026-05-21T00:00:00.000Z'
   const folder = {
-    ...makeFolder({ id: 'folder-fixed', name: 'Fixed invite', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: 'node-owner' }),
+    ...makeFolder({ id: fixedFolderId, name: 'Fixed invite', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: otherDid }),
     shareEnabled: true,
   }
-  const snapshot = { ...createInitialSnapshot('node-owner'), folders: [folder], files: [], activity: [] }
+  const snapshot = { ...createInitialSnapshot(otherDid), folders: [folder], files: [], activity: [] }
   let requests = 0
   let opened = 0
   const actions = createAccessActions({
     accessRequestKeysRef: { current: {} },
-    folderAccessModesRef: { current: {} },
-    folderKeysRef: { current: { [folder.id]: 'folder-secret' } },
+    folderAccessModesRef: { current: { [folder.id]: 'shared-approval' } },
+    folderKeysRef: { current: { [folder.id]: folderSecret } },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {
       opened += 1
@@ -145,19 +198,112 @@ test('folder owner ignores access requests targeted at another owner', () => {
     setImportKeys: () => {},
     setNotice: () => {},
     setPendingShares: () => {},
-    settingsRef: { current: settingsStub('node-owner') },
+    settingsRef: { current: settingsStub(otherDid) },
     snapshotRef: { current: snapshot },
   })
 
   actions.handleFolderAccessRequest({
     type: 'folder-access-request',
-    from: 'node-b',
+    from: requesterDid,
     roomId: 'tc-storage-main',
     sentAt: '2026-05-21T00:00:02.000Z',
     clock: 2,
     folderId: folder.id,
     folderName: folder.name,
-    targetNodeId: 'node-other',
+    accessGrantMode: 'shared',
+    folderKeyHash: expectedFolderKeyHash,
+    requestId: 'request-a',
+    accessPublicKey: 'public-a',
+  })
+
+  assert.equal(requests, 1)
+  assert.equal(opened, 1)
+})
+
+test('shared-approval access request is ignored when the holder key does not match the invite', () => {
+  const now = '2026-05-21T00:00:00.000Z'
+  const folder = {
+    ...makeFolder({ id: fixedFolderId, name: 'Fixed invite', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: otherDid }),
+    shareEnabled: true,
+  }
+  const snapshot = { ...createInitialSnapshot(otherDid), folders: [folder], files: [], activity: [] }
+  let requests = 0
+  let opened = 0
+  const actions = createAccessActions({
+    accessRequestKeysRef: { current: {} },
+    folderAccessModesRef: { current: { [folder.id]: 'shared-approval' } },
+    folderKeysRef: { current: { [folder.id]: 'different-secret' } },
+    networkRef: { current: networkStub() },
+    openFolderAccessRequests: () => {
+      opened += 1
+    },
+    setFolderAccessRequests: (update) => {
+      requests = applyStateUpdate([], update).length
+    },
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: () => {},
+    setPendingShares: () => {},
+    settingsRef: { current: settingsStub(otherDid) },
+    snapshotRef: { current: snapshot },
+  })
+
+  actions.handleFolderAccessRequest({
+    type: 'folder-access-request',
+    from: requesterDid,
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:02.000Z',
+    clock: 2,
+    folderId: folder.id,
+    folderName: folder.name,
+    accessGrantMode: 'shared',
+    folderKeyHash: expectedFolderKeyHash,
+    requestId: 'request-a',
+    accessPublicKey: 'public-a',
+  })
+
+  assert.equal(requests, 0)
+  assert.equal(opened, 0)
+})
+
+test('folder owner ignores access requests targeted at another owner', () => {
+  const now = '2026-05-21T00:00:00.000Z'
+  const folder = {
+    ...makeFolder({ id: fixedFolderId, name: 'Fixed invite', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: ownerDid }),
+    shareEnabled: true,
+  }
+  const snapshot = { ...createInitialSnapshot(ownerDid), folders: [folder], files: [], activity: [] }
+  let requests = 0
+  let opened = 0
+  const actions = createAccessActions({
+    accessRequestKeysRef: { current: {} },
+    folderAccessModesRef: { current: {} },
+    folderKeysRef: { current: { [folder.id]: folderSecret } },
+    networkRef: { current: networkStub() },
+    openFolderAccessRequests: () => {
+      opened += 1
+    },
+    setFolderAccessRequests: (update) => {
+      requests = applyStateUpdate([], update).length
+    },
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: () => {},
+    setPendingShares: () => {},
+    settingsRef: { current: settingsStub(ownerDid) },
+    snapshotRef: { current: snapshot },
+  })
+
+  actions.handleFolderAccessRequest({
+    type: 'folder-access-request',
+    from: requesterDid,
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:02.000Z',
+    clock: 2,
+    folderId: folder.id,
+    folderName: folder.name,
+    folderKeyHash: expectedFolderKeyHash,
+    targetNodeId: otherDid,
     requestId: 'request-a',
     accessPublicKey: 'public-a',
   })
@@ -174,9 +320,10 @@ test('folder access grant is accepted only from the owner pinned in the invite',
     sentAt: '2026-05-21T00:00:00.000Z',
     receivedAt: '2026-05-21T00:00:01.000Z',
     clock: 0,
-    folderId: 'folder-fixed',
+    folderId: fixedFolderId,
     folderName: 'Fixed invite',
-    ownerNodeId: 'node-owner',
+    ownerNodeId: ownerDid,
+    folderKeyHash: expectedFolderKeyHash,
     autoImport: true,
   }]
   let folderKeys: Record<string, string> = {}
@@ -184,15 +331,16 @@ test('folder access grant is accepted only from the owner pinned in the invite',
   const requestKey = await createAccessRequestKey()
   const entry = {
     ...requestKey,
-    folderId: 'folder-fixed',
-    ownerNodeId: 'node-owner',
+    folderId: fixedFolderId,
+    folderKeyHash: expectedFolderKeyHash,
+    ownerNodeId: ownerDid,
     roomId: 'tc-storage-main',
     requestId: 'request-a',
   } satisfies RequestKeyEntry
   const accessRequestKeysRef = {
     current: {
       'request-a': entry,
-      'tc-storage-main:folder:folder-fixed': entry,
+      [`tc-storage-main:folder:${fixedFolderId}`]: entry,
     },
   }
   const actions = createAccessActions({
@@ -212,20 +360,20 @@ test('folder access grant is accepted only from the owner pinned in the invite',
     setPendingShares: (update) => {
       pendingShares = applyStateUpdate(pendingShares, update)
     },
-    settingsRef: { current: settingsStub('node-b') },
-    snapshotRef: { current: createInitialSnapshot('node-b') },
+    settingsRef: { current: settingsStub(requesterDid) },
+    snapshotRef: { current: createInitialSnapshot(requesterDid) },
   })
   const attackerGrant = await encryptFolderKeyForRequest('attacker-secret', requestKey.publicKey)
 
   await actions.handleFolderAccessGrant({
     type: 'folder-access-grant',
-    from: 'node-attacker',
+    from: attackerDid,
     roomId: 'tc-storage-main',
     sentAt: '2026-05-21T00:00:02.000Z',
     clock: 2,
-    folderId: 'folder-fixed',
+    folderId: fixedFolderId,
     folderName: 'Fixed invite',
-    targetNodeId: 'node-b',
+    targetNodeId: requesterDid,
     requestId: 'request-a',
     cid: 'cid-attacker',
     accessGrantPublicKey: attackerGrant.publicKey,
@@ -235,18 +383,18 @@ test('folder access grant is accepted only from the owner pinned in the invite',
 
   assert.deepEqual(folderKeys, {})
   assert.equal(pendingShares[0]?.cid, undefined)
-  assert.deepEqual(Object.keys(accessRequestKeysRef.current).sort(), ['request-a', 'tc-storage-main:folder:folder-fixed'])
+  assert.deepEqual(Object.keys(accessRequestKeysRef.current).sort(), ['request-a', `tc-storage-main:folder:${fixedFolderId}`])
 
-  const ownerGrant = await encryptFolderKeyForRequest('folder-secret', requestKey.publicKey)
+  const ownerGrant = await encryptFolderKeyForRequest(folderSecret, requestKey.publicKey)
   await actions.handleFolderAccessGrant({
     type: 'folder-access-grant',
-    from: 'node-owner',
+    from: ownerDid,
     roomId: 'tc-storage-main',
     sentAt: '2026-05-21T00:00:03.000Z',
     clock: 3,
-    folderId: 'folder-fixed',
+    folderId: fixedFolderId,
     folderName: 'Fixed invite',
-    targetNodeId: 'node-b',
+    targetNodeId: requesterDid,
     requestId: 'request-a',
     cid: 'cid-owner',
     accessGrantPublicKey: ownerGrant.publicKey,
@@ -254,10 +402,243 @@ test('folder access grant is accepted only from the owner pinned in the invite',
     accessGrantCipherText: ownerGrant.cipherText,
   })
 
-  assert.equal(folderKeys['folder-fixed'], 'folder-secret')
-  assert.equal(importKeys['cid-owner'], 'folder-secret')
+  assert.equal(folderKeys[fixedFolderId], folderSecret)
+  assert.equal(importKeys['cid-owner'], folderSecret)
   assert.equal(pendingShares[0]?.cid, 'cid-owner')
   assert.deepEqual(accessRequestKeysRef.current, {})
+})
+
+test('shared-approval access grant can come from a non-owner shared holder', async () => {
+  let pendingShares: PendingShare[] = [{
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    ownerNodeId: ownerDid,
+    accessGrantMode: 'shared',
+    folderKeyHash: expectedFolderKeyHash,
+    autoImport: true,
+  }]
+  let folderKeys: Record<string, string> = {}
+  let importKeys: Record<string, string> = {}
+  const requestKey = await createAccessRequestKey()
+  const entry = {
+    ...requestKey,
+    accessGrantMode: 'shared' as const,
+    folderId: fixedFolderId,
+    folderKeyHash: expectedFolderKeyHash,
+    ownerNodeId: ownerDid,
+    roomId: 'tc-storage-main',
+    requestId: 'request-a',
+  } satisfies RequestKeyEntry
+  const accessRequestKeysRef = {
+    current: {
+      'request-a': entry,
+      [`tc-storage-main:folder:${fixedFolderId}`]: entry,
+    },
+  }
+  const actions = createAccessActions({
+    accessRequestKeysRef,
+    folderAccessModesRef: { current: {} },
+    folderKeysRef: { current: folderKeys },
+    networkRef: { current: networkStub() },
+    openFolderAccessRequests: () => {},
+    setFolderAccessRequests: () => {},
+    setFolderKeys: (update) => {
+      folderKeys = applyStateUpdate(folderKeys, update)
+    },
+    setImportKeys: (update) => {
+      importKeys = applyStateUpdate(importKeys, update)
+    },
+    setNotice: () => {},
+    setPendingShares: (update) => {
+      pendingShares = applyStateUpdate(pendingShares, update)
+    },
+    settingsRef: { current: settingsStub(requesterDid) },
+    snapshotRef: { current: createInitialSnapshot(requesterDid) },
+  })
+  const wrongGrant = await encryptFolderKeyForRequest('attacker-secret', requestKey.publicKey)
+
+  await actions.handleFolderAccessGrant({
+    type: 'folder-access-grant',
+    from: attackerDid,
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:02.000Z',
+    clock: 2,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    targetNodeId: requesterDid,
+    requestId: 'request-a',
+    cid: 'cid-attacker',
+    accessGrantPublicKey: wrongGrant.publicKey,
+    accessGrantIv: wrongGrant.iv,
+    accessGrantCipherText: wrongGrant.cipherText,
+  })
+
+  assert.deepEqual(folderKeys, {})
+  assert.deepEqual(importKeys, {})
+  assert.equal(pendingShares[0]?.cid, undefined)
+
+  const grant = await encryptFolderKeyForRequest(folderSecret, requestKey.publicKey)
+
+  await actions.handleFolderAccessGrant({
+    type: 'folder-access-grant',
+    from: otherDid,
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:03.000Z',
+    clock: 3,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    targetNodeId: requesterDid,
+    requestId: 'request-a',
+    cid: 'cid-holder',
+    accessGrantPublicKey: grant.publicKey,
+    accessGrantIv: grant.iv,
+    accessGrantCipherText: grant.cipherText,
+  })
+
+  assert.equal(folderKeys[fixedFolderId], folderSecret)
+  assert.equal(importKeys['cid-holder'], folderSecret)
+  assert.equal(pendingShares[0]?.cid, 'cid-holder')
+  assert.deepEqual(Object.keys(accessRequestKeysRef.current).sort(), ['request-a', `tc-storage-main:folder:${fixedFolderId}`])
+})
+
+test('shared-approval grant proof clears the request on other approvers', async () => {
+  const now = '2026-05-21T00:00:00.000Z'
+  const folder = {
+    ...makeFolder({ id: fixedFolderId, name: 'Fixed invite', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: ownerDid }),
+    shareEnabled: true,
+  }
+  let accessRequests: FolderAccessRequest[] = [{
+    id: `${fixedFolderId}:${requesterDid}:request-a`,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    nodeId: requesterDid,
+    publicKey: 'public-a',
+    folderKeyHash: expectedFolderKeyHash,
+    requestedAt: '2026-05-21T00:00:02.000Z',
+    requestId: 'request-a',
+  }]
+  const actions = createAccessActions({
+    accessRequestKeysRef: { current: {} },
+    folderAccessModesRef: { current: { [folder.id]: 'shared-approval' } },
+    folderKeysRef: { current: { [folder.id]: folderSecret } },
+    networkRef: { current: networkStub() },
+    openFolderAccessRequests: () => {},
+    setFolderAccessRequests: (update) => {
+      accessRequests = applyStateUpdate(accessRequests, update)
+    },
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: () => {},
+    setPendingShares: () => {},
+    settingsRef: { current: settingsStub(ownerDid) },
+    snapshotRef: { current: { ...createInitialSnapshot(ownerDid), folders: [folder], files: [], activity: [] } },
+  })
+
+  await actions.handleFolderAccessGrant({
+    type: 'folder-access-grant',
+    from: otherDid,
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:03.000Z',
+    clock: 3,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    targetNodeId: requesterDid,
+    requestId: 'request-a',
+    accessGrantProof: folderAccessGrantProof('different-secret', fixedFolderId, 'request-a', requesterDid),
+    accessGrantPublicKey: 'grant-public',
+    accessGrantIv: 'grant-iv',
+    accessGrantCipherText: 'grant-cipher',
+  })
+
+  assert.equal(accessRequests.length, 1)
+
+  await actions.handleFolderAccessGrant({
+    type: 'folder-access-grant',
+    from: otherDid,
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:04.000Z',
+    clock: 4,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    targetNodeId: requesterDid,
+    requestId: 'request-a',
+    accessGrantProof: folderAccessGrantProof(folderSecret, fixedFolderId, 'request-a', requesterDid),
+    accessGrantPublicKey: 'grant-public',
+    accessGrantIv: 'grant-iv',
+    accessGrantCipherText: 'grant-cipher',
+  })
+
+  assert.deepEqual(accessRequests, [])
+})
+
+test('shared-approval denial does not cancel the waiting invite', () => {
+  let pendingShares: PendingShare[] = [{
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    ownerNodeId: ownerDid,
+    accessGrantMode: 'shared',
+    folderKeyHash: expectedFolderKeyHash,
+    autoImport: true,
+  }]
+  const entry = {
+    privateKey: {} as CryptoKey,
+    publicKey: 'public-a',
+    accessGrantMode: 'shared' as const,
+    folderId: fixedFolderId,
+    folderKeyHash: expectedFolderKeyHash,
+    ownerNodeId: ownerDid,
+    roomId: 'tc-storage-main',
+    requestId: 'request-a',
+  } satisfies RequestKeyEntry
+  const accessRequestKeysRef = {
+    current: {
+      'request-a': entry,
+      [`tc-storage-main:folder:${fixedFolderId}`]: entry,
+    },
+  }
+  const actions = createAccessActions({
+    accessRequestKeysRef,
+    folderAccessModesRef: { current: {} },
+    folderKeysRef: { current: {} },
+    networkRef: { current: networkStub() },
+    openFolderAccessRequests: () => {},
+    setFolderAccessRequests: () => {},
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: () => {},
+    setPendingShares: (update) => {
+      pendingShares = applyStateUpdate(pendingShares, update)
+    },
+    settingsRef: { current: settingsStub(requesterDid) },
+    snapshotRef: { current: createInitialSnapshot(requesterDid) },
+  })
+
+  actions.handleFolderAccessDenied({
+    type: 'folder-access-denied',
+    from: otherDid,
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:03.000Z',
+    clock: 3,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    targetNodeId: requesterDid,
+    requestId: 'request-a',
+  })
+
+  assert.equal(pendingShares.length, 1)
+  assert.deepEqual(Object.keys(accessRequestKeysRef.current).sort(), ['request-a', `tc-storage-main:folder:${fixedFolderId}`])
 })
 
 test('folder access denied clears the waiting fixed invite on the requester', () => {
@@ -268,9 +649,10 @@ test('folder access denied clears the waiting fixed invite on the requester', ()
     sentAt: '2026-05-21T00:00:00.000Z',
     receivedAt: '2026-05-21T00:00:01.000Z',
     clock: 0,
-    folderId: 'folder-fixed',
+    folderId: fixedFolderId,
     folderName: 'Fixed invite',
-    ownerNodeId: 'node-owner',
+    ownerNodeId: ownerDid,
+    folderKeyHash: expectedFolderKeyHash,
     autoImport: true,
   }]
   const pendingSharesRef = { current: pendingShares }
@@ -279,16 +661,18 @@ test('folder access denied clears the waiting fixed invite on the requester', ()
       'request-a': {
         privateKey: {} as CryptoKey,
         publicKey: 'public-a',
-        folderId: 'folder-fixed',
-        ownerNodeId: 'node-owner',
+        folderId: fixedFolderId,
+        folderKeyHash: expectedFolderKeyHash,
+        ownerNodeId: ownerDid,
         roomId: 'tc-storage-main',
         requestId: 'request-a',
       },
-      'tc-storage-main:folder:folder-fixed': {
+      [`tc-storage-main:folder:${fixedFolderId}`]: {
         privateKey: {} as CryptoKey,
         publicKey: 'public-a',
-        folderId: 'folder-fixed',
-        ownerNodeId: 'node-owner',
+        folderId: fixedFolderId,
+        folderKeyHash: expectedFolderKeyHash,
+        ownerNodeId: ownerDid,
         roomId: 'tc-storage-main',
         requestId: 'request-a',
       },
@@ -311,34 +695,34 @@ test('folder access denied clears the waiting fixed invite on the requester', ()
       pendingShares = applyStateUpdate(pendingShares, update)
       pendingSharesRef.current = pendingShares
     },
-    settingsRef: { current: settingsStub('node-b') },
-    snapshotRef: { current: createInitialSnapshot('node-b') },
+    settingsRef: { current: settingsStub(requesterDid) },
+    snapshotRef: { current: createInitialSnapshot(requesterDid) },
   })
 
   actions.handleFolderAccessDenied({
     type: 'folder-access-denied',
-    from: 'node-attacker',
+    from: attackerDid,
     roomId: 'tc-storage-main',
     sentAt: '2026-05-21T00:00:02.000Z',
     clock: 2,
-    folderId: 'folder-fixed',
+    folderId: fixedFolderId,
     folderName: 'Fixed invite',
-    targetNodeId: 'node-b',
+    targetNodeId: requesterDid,
     requestId: 'request-a',
   })
 
   assert.equal(pendingShares.length, 1)
-  assert.deepEqual(Object.keys(accessRequestKeysRef.current).sort(), ['request-a', 'tc-storage-main:folder:folder-fixed'])
+  assert.deepEqual(Object.keys(accessRequestKeysRef.current).sort(), ['request-a', `tc-storage-main:folder:${fixedFolderId}`])
 
   actions.handleFolderAccessDenied({
     type: 'folder-access-denied',
-    from: 'node-owner',
+    from: ownerDid,
     roomId: 'tc-storage-main',
     sentAt: '2026-05-21T00:00:03.000Z',
     clock: 3,
-    folderId: 'folder-fixed',
+    folderId: fixedFolderId,
     folderName: 'Fixed invite',
-    targetNodeId: 'node-b',
+    targetNodeId: requesterDid,
     requestId: 'request-a',
   })
 
@@ -374,4 +758,10 @@ function settingsStub(nodeId: string) {
     avatarUrl: '',
     avatarFileId: '',
   }
+}
+
+function didFromSeed(seed: number): string {
+  const bytes = new Uint8Array(32)
+  bytes.fill(seed)
+  return didKeyFromEd25519PublicKey(bytes)
 }
