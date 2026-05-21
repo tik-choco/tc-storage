@@ -190,6 +190,8 @@ function createEnvelopeHarness(snapshot: StorageSnapshot) {
     detailFileId: null,
     folderKeysRef: { current: {} },
     folderPanelFolderId: null,
+    handleFolderAccessGrant: async () => {},
+    handleFolderAccessRequest: () => {},
     helloResponseAtRef: { current: {} },
     importKeysRef: { current: {} },
     pendingSharesRef: { current: [] },

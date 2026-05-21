@@ -155,12 +155,26 @@
   background: #fff;
 }
 
+.access-request {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #d8e1e8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.access-request > div:nth-child(2),
 .sync-peer div:last-child {
   min-width: 0;
 }
 
 .sync-peer strong,
-.sync-peer span {
+.sync-peer span,
+.access-request strong,
+.access-request span {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -168,15 +182,44 @@
   white-space: nowrap;
 }
 
-.sync-peer strong {
+.sync-peer strong,
+.access-request strong {
   color: #111827;
   font-size: 13px;
 }
 
-.sync-peer span {
+.sync-peer span,
+.access-request span {
   margin-top: 2px;
   color: #64748b;
   font-size: 12px;
+}
+
+.access-request-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.access-request-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.access-request-actions .approve {
+  border-color: #99f6e4;
+  color: #0f766e;
+}
+
+.access-request-actions .reject {
+  border-color: #fecdd3;
+  color: #be123c;
 }
 
 .folder-stroke.teal {

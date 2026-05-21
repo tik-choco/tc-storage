@@ -1,0 +1,155 @@
+import { createAccessRequestKey, decryptFolderKeyGrant, encryptFolderKeyForRequest, type AccessRequestKey } from './accessGrantCrypto.js'
+import { pendingShareKey, type FolderAccessMode, type FolderAccessRequest, type Notice, type PendingShare } from './appTypes.js'
+import type { MistShare, MutableRef, SetState } from './appControllerTypes.js'
+import type { FolderRecord, StorageSnapshot } from './domain.js'
+import { describeError } from './errors.js'
+import type { AppSettings } from './localSettings.js'
+import type { ShareEnvelope } from './p2p.js'
+
+export type RequestKeyEntry = AccessRequestKey & {
+  folderId: string
+  roomId: string
+  requestId: string
+}
+
+interface AccessOptions {
+  accessRequestKeysRef: MutableRef<Record<string, RequestKeyEntry>>
+  folderAccessModesRef: MutableRef<Record<string, FolderAccessMode>>
+  folderKeysRef: MutableRef<Record<string, string>>
+  networkRef: MutableRef<MistShare>
+  openFolderAccessRequests: (folderId: string) => void
+  setFolderAccessRequests: SetState<FolderAccessRequest[]>
+  setFolderKeys: SetState<Record<string, string>>
+  setImportKeys: SetState<Record<string, string>>
+  setNotice: SetState<Notice>
+  setPendingShares: SetState<PendingShare[]>
+  settingsRef: MutableRef<AppSettings>
+  snapshotRef: MutableRef<StorageSnapshot>
+}
+
+export function createAccessActions(options: AccessOptions) {
+  const {
+    accessRequestKeysRef, folderAccessModesRef, folderKeysRef, networkRef, openFolderAccessRequests, setFolderAccessRequests,
+    setFolderKeys, setImportKeys, setNotice, setPendingShares, settingsRef, snapshotRef,
+  } = options
+
+  async function requestFolderAccess(share: PendingShare): Promise<void> {
+    if (share.type !== 'folder-share' || !share.folderId) return
+    const key = pendingShareKey(share)
+    if (accessRequestKeysRef.current[key]) return
+    try {
+      const accessKey = await createAccessRequestKey()
+      const requestId = `access-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      accessRequestKeysRef.current = {
+        ...accessRequestKeysRef.current,
+        [key]: { ...accessKey, folderId: share.folderId, requestId, roomId: share.roomId },
+        [requestId]: { ...accessKey, folderId: share.folderId, requestId, roomId: share.roomId },
+      }
+      networkRef.current.broadcastShare({
+        type: 'folder-access-request',
+        clock: 0,
+        folderId: share.folderId,
+        folderName: share.folderName,
+        requestId,
+        accessPublicKey: accessKey.publicKey,
+      })
+      setNotice({ tone: 'info', text: '共有フォルダーへの参加承認をリクエストしました' })
+    } catch (error) {
+      setNotice({ tone: 'error', text: describeError(error, '参加リクエストを作成できませんでした') })
+    }
+  }
+
+  function handleFolderAccessRequest(envelope: ShareEnvelope): void {
+    if (!envelope.folderId || !envelope.requestId || !envelope.accessPublicKey) return
+    const folder = snapshotRef.current.folders.find((item) => item.id === envelope.folderId && !item.deletedAt)
+    const folderKey = folder ? folderKeysRef.current[folder.id] : ''
+    if (!folder?.shareEnabled || !folderKey) return
+    const request = accessRequestFromEnvelope(envelope, folder)
+    if (folderAccessModesRef.current[folder.id] === 'open') {
+      void approveFolderAccess(request)
+      return
+    }
+    setFolderAccessRequests((current) => [
+      request,
+      ...current.filter((item) => item.id !== request.id),
+    ].slice(0, 24))
+    openFolderAccessRequests(folder.id)
+    setNotice({ tone: 'info', text: `${request.folderName ?? folder.name} への参加リクエストがあります` })
+  }
+
+  async function approveFolderAccess(request: FolderAccessRequest): Promise<void> {
+    const folder = snapshotRef.current.folders.find((item) => item.id === request.folderId && !item.deletedAt)
+    const folderKey = folder ? folderKeysRef.current[folder.id] : ''
+    if (!folder?.shareEnabled || !folderKey) {
+      setNotice({ tone: 'error', text: '承認できる共有フォルダーが見つかりません' })
+      return
+    }
+    try {
+      const grant = await encryptFolderKeyForRequest(folderKey, request.publicKey)
+      networkRef.current.broadcastShare({
+        type: 'folder-access-grant',
+        clock: snapshotRef.current.clock,
+        folderId: folder.id,
+        folderName: folder.name,
+        cid: folder.lastCid,
+        targetNodeId: request.nodeId,
+        requestId: request.requestId,
+        accessGrantPublicKey: grant.publicKey,
+        accessGrantIv: grant.iv,
+        accessGrantCipherText: grant.cipherText,
+      })
+      setFolderAccessRequests((current) => current.filter((item) => item.id !== request.id))
+      setNotice({ tone: 'success', text: `${request.profile?.name?.trim() || request.nodeId} を承認しました` })
+    } catch (error) {
+      setNotice({ tone: 'error', text: describeError(error, '参加承認を送信できませんでした') })
+    }
+  }
+
+  function rejectFolderAccess(request: FolderAccessRequest): void {
+    setFolderAccessRequests((current) => current.filter((item) => item.id !== request.id))
+    setNotice({ tone: 'info', text: '参加リクエストを却下しました' })
+  }
+
+  async function handleFolderAccessGrant(envelope: ShareEnvelope): Promise<void> {
+    if (envelope.targetNodeId && envelope.targetNodeId !== settingsRef.current.nodeId) return
+    if (!envelope.folderId || !envelope.requestId || !envelope.accessGrantPublicKey || !envelope.accessGrantIv || !envelope.accessGrantCipherText) return
+    const entry = accessRequestKeysRef.current[envelope.requestId]
+    if (!entry || entry.folderId !== envelope.folderId) return
+    try {
+      const passphrase = await decryptFolderKeyGrant({
+        cipherText: envelope.accessGrantCipherText,
+        iv: envelope.accessGrantIv,
+        privateKey: entry.privateKey,
+        publicKey: envelope.accessGrantPublicKey,
+      })
+      folderKeysRef.current = { ...folderKeysRef.current, [envelope.folderId]: passphrase }
+      setFolderKeys((current) => ({ ...current, [envelope.folderId ?? '']: passphrase }))
+      setPendingShares((current) => current.map((share) => (
+        share.type === 'folder-share' && share.folderId === envelope.folderId
+          ? { ...share, autoImport: true, cid: envelope.cid ?? share.cid, folderName: envelope.folderName ?? share.folderName }
+          : share
+      )))
+      if (envelope.cid) setImportKeys((current) => ({ ...current, [envelope.cid ?? '']: passphrase }))
+      accessRequestKeysRef.current = Object.fromEntries(Object.entries(accessRequestKeysRef.current).filter(([key]) => key !== envelope.requestId && key !== pendingShareKey({ type: 'folder-share', roomId: entry.roomId, folderId: entry.folderId })))
+      setNotice({ tone: 'success', text: '参加が承認されました。共有フォルダーを同期します' })
+    } catch (error) {
+      setNotice({ tone: 'error', text: describeError(error, '承認レスポンスを復号できませんでした') })
+    }
+  }
+
+  function accessRequestFromEnvelope(envelope: ShareEnvelope, folder: FolderRecord): FolderAccessRequest {
+    const requestId = envelope.requestId ?? ''
+    return {
+      id: `${folder.id}:${envelope.from}:${requestId}`,
+      folderId: folder.id,
+      folderName: envelope.folderName ?? folder.name,
+      nodeId: envelope.from,
+      profile: envelope.senderProfile,
+      publicKey: envelope.accessPublicKey ?? '',
+      requestedAt: envelope.sentAt,
+      requestId,
+    }
+  }
+
+  return { approveFolderAccess, handleFolderAccessGrant, handleFolderAccessRequest, rejectFolderAccess, requestFolderAccess }
+}

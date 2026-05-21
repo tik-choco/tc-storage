@@ -108,9 +108,9 @@ export function PendingFolderShareRow(props: {
       </div>
       <span class="status-cell">
         <Share2 size={15} />
-        {props.busy ? '読み込み中' : '読み込み待ち'}
+        {props.share.cid ? props.busy ? '読み込み中' : '読み込み待ち' : '承認待ち'}
       </span>
-      <span>共有待ち</span>
+      <span>{props.share.cid ? '共有待ち' : 'リクエスト中'}</span>
       <span>{dateLabel(props.share.receivedAt)}</span>
       <span class="row-actions">
         <button onClick={() => props.onCancelShare(props.share)} disabled={props.busy} title="Cancel pending share"><X size={16} /></button>

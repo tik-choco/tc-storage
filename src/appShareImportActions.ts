@@ -1,4 +1,4 @@
-import type { Notice, PendingShare } from './appTypes.js'
+import { pendingShareKey, type Notice, type PendingShare } from './appTypes.js'
 import type { FileContentActions, MutableRef, SetState } from './appControllerTypes.js'
 import { mergeSnapshots } from './crdt.js'
 import type { StorageSnapshot } from './domain.js'
@@ -88,12 +88,13 @@ export function createShareImportActions(options: ShareImportOptions) {
   }
 
   function isPendingShareAlreadyImported(share: PendingShare): boolean {
-    if (!share.cid) return true
     const snapshotValue = snapshotRef.current
     if (share.type === 'folder-share') {
       const folder = share.folderId ? snapshotValue.folders.find((item) => item.id === share.folderId && !item.deletedAt) : undefined
+      if (!share.cid) return Boolean(folder)
       return folder?.lastCid === share.cid
     }
+    if (!share.cid) return true
     const file = share.fileId ? snapshotValue.files.find((item) => item.id === share.fileId && !item.deletedAt) : undefined
     return Boolean(file && (file.lastShareCid === share.cid || file.lastCid === share.cid))
   }
@@ -114,15 +115,14 @@ export function createShareImportActions(options: ShareImportOptions) {
   }
 
   function cancelPendingShare(share: PendingShare): void {
-    const cid = share.cid
-    if (!cid) return
-    setPendingShares((current) => current.filter((item) => item.cid !== cid))
-    setImportKeys((current) => withoutRecordKey(current, cid))
+    const key = pendingShareKey(share)
+    setPendingShares((current) => current.filter((item) => pendingShareKey(item) !== key))
+    if (share.cid) setImportKeys((current) => withoutRecordKey(current, share.cid ?? ''))
     setNotice({ tone: 'info', text: '共有待ちをキャンセルしました' })
   }
 
   async function importShare(share: PendingShare) {
-    if (!share.cid) return
+    if (!share.cid) return setNotice({ tone: 'info', text: '共有元の承認を待っています' })
     const passphrase = importKeys[share.cid]?.trim() ?? ''
     if (!passphrase) return setNotice({ tone: 'error', text: share.type === 'file-share' ? '共有ファイルの復号キーを入力してください' : '共有フォルダーの復号キーを入力してください' })
     setBusy(`import-${share.cid}`)

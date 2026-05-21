@@ -1,10 +1,9 @@
-import type { PendingShare } from './appTypes.js'
+import { pendingShareKey, type Notice, type PendingShare } from './appTypes.js'
 import type { SetState } from './appControllerTypes.js'
 import { copyToClipboard } from './clipboard.js'
 import type { FileRecord, FolderRecord } from './domain.js'
 import type { AppSettings } from './localSettings.js'
 import type { LinkedShare } from './shareLinks.js'
-import type { Notice } from './appTypes.js'
 import type { PopoverKind, PopoverPosition } from './components/FloatingPopover.js'
 import { popoverPositionFromAnchor } from './components/FloatingPopover.js'
 
@@ -16,6 +15,7 @@ interface PanelOptions {
   setDetailFileId: SetState<string | null>
   setExpandedPreviewOpen: SetState<boolean>
   setFolderNameDraft: SetState<string | null>
+  setFolderPanelAccessOnly: SetState<boolean>
   setFolderPanelFolderId: SetState<string | null>
   setFolderPanelOpen: SetState<boolean>
   setImportKeys: SetState<Record<string, string>>
@@ -33,7 +33,7 @@ interface PanelOptions {
 export function createPanelActions(options: PanelOptions) {
   const {
     previewFiles, profileImageFiles, selectedFileId, setCurrentFolderId, setDetailFileId,
-    setExpandedPreviewOpen, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelOpen, setImportKeys,
+    setExpandedPreviewOpen, setFolderNameDraft, setFolderPanelAccessOnly, setFolderPanelFolderId, setFolderPanelOpen, setImportKeys,
     setNotice, setPendingShares, setPopoverPositions, setProfileOpen, setSelectedFileId,
     setSettings, setSettingsOpen, settings, settingsDraft,
   } = options
@@ -71,18 +71,20 @@ export function createPanelActions(options: PanelOptions) {
 
   function acceptLinkedShare({ share, key }: LinkedShare) {
     const linkedShare = { ...share, autoImport: true }
-    setPendingShares((current) => [linkedShare, ...current.filter((item) => item.cid !== share.cid)].slice(0, 12))
+    const keyValue = pendingShareKey(share)
+    setPendingShares((current) => [linkedShare, ...current.filter((item) => pendingShareKey(item) !== keyValue)].slice(0, 12))
     if (share.cid) setImportKeys((current) => ({ ...current, [share.cid ?? '']: key }))
     setSettings((current) => current.roomId === share.roomId ? current : { ...current, roomId: share.roomId })
     setCurrentFolderId(null)
     setSettingsOpen(false)
     setProfileOpen(false)
+    setFolderPanelAccessOnly(false)
     setFolderPanelFolderId(null)
     setFolderPanelOpen(false)
     setDetailFileId(null)
     setSelectedFileId(null)
     setExpandedPreviewOpen(false)
-    setNotice({ tone: 'info', text: '共有URLを読み込みました。取得を開始します' })
+    setNotice({ tone: 'info', text: share.type === 'folder-share' && !share.cid ? '共有URLを読み込みました。参加承認をリクエストします' : '共有URLを読み込みました。取得を開始します' })
   }
 
   function selectFolder(folderId: string | null) {
@@ -94,6 +96,7 @@ export function createPanelActions(options: PanelOptions) {
     setExpandedPreviewOpen(false)
     setSettingsOpen(false)
     setProfileOpen(false)
+    setFolderPanelAccessOnly(false)
     setFolderPanelOpen(false)
   }
 
@@ -102,6 +105,7 @@ export function createPanelActions(options: PanelOptions) {
     setExpandedPreviewOpen(true)
     setSettingsOpen(false)
     setProfileOpen(false)
+    setFolderPanelAccessOnly(false)
     setFolderPanelOpen(false)
     setDetailFileId(null)
   }
@@ -111,11 +115,13 @@ export function createPanelActions(options: PanelOptions) {
     setDetailFileId(file.id)
     setSettingsOpen(false)
     setProfileOpen(false)
+    setFolderPanelAccessOnly(false)
     setFolderPanelOpen(false)
   }
 
   function showFolderDetails(folder: FolderRecord, anchor?: HTMLElement) {
     if (anchor) movePopover('folder', popoverPositionFromAnchor(anchor, 360))
+    setFolderPanelAccessOnly(false)
     setFolderPanelFolderId(folder.id)
     setFolderPanelOpen(true)
     setSettingsOpen(false)
@@ -128,6 +134,7 @@ export function createPanelActions(options: PanelOptions) {
     setSettingsOpen(true)
     setProfileOpen(false)
     setDetailFileId(null)
+    setFolderPanelAccessOnly(false)
     setFolderPanelOpen(false)
   }
 
@@ -136,11 +143,13 @@ export function createPanelActions(options: PanelOptions) {
     setProfileOpen(true)
     setSettingsOpen(false)
     setDetailFileId(null)
+    setFolderPanelAccessOnly(false)
     setFolderPanelOpen(false)
   }
 
   function openFolderPanel(anchor?: HTMLElement) {
     if (anchor) movePopover('folder', popoverPositionFromAnchor(anchor, 360))
+    setFolderPanelAccessOnly(false)
     setFolderPanelFolderId(null)
     setFolderPanelOpen(true)
     setSettingsOpen(false)

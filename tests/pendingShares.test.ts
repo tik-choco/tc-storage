@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
 import type { PendingShare } from '../src/appTypes.js'
+import { loadFolderAccessModes, saveFolderAccessModes } from '../src/folderAccess.js'
 import { loadImportKeys, loadPendingShares, saveImportKeys, savePendingShares } from '../src/pendingShares.js'
 
 class MemoryStorage implements Storage {
@@ -70,6 +71,25 @@ test('pending shares and import keys survive a reload', () => {
   assert.deepEqual(loadImportKeys(), { 'cid-folder': 'secret-key' })
 })
 
+test('fixed folder invite pending shares survive without a cid', () => {
+  const share: PendingShare = {
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    folderId: 'folder-fixed',
+    folderName: 'Fixed invite',
+    autoImport: true,
+    senderProfile: { name: 'Owner' },
+  }
+
+  savePendingShares([share])
+
+  assert.deepEqual(loadPendingShares(), [share])
+})
+
 test('pending share storage ignores malformed records', () => {
   localStorage.setItem('tc-storage-pending-shares-v1', JSON.stringify([
     { type: 'hello', cid: 'cid-hello' },
@@ -87,4 +107,18 @@ test('pending share storage ignores malformed records', () => {
   ]))
 
   assert.deepEqual(loadPendingShares().map((share) => share.cid), ['cid-file'])
+})
+
+test('folder access modes survive a reload and normalize invalid modes', () => {
+  saveFolderAccessModes({ 'folder-approval': 'approval', 'folder-open': 'open' })
+  localStorage.setItem('tc-storage-folder-access-modes-v1', JSON.stringify({
+    ...loadFolderAccessModes(),
+    'folder-invalid': 'anything',
+  }))
+
+  assert.deepEqual(loadFolderAccessModes(), {
+    'folder-approval': 'approval',
+    'folder-open': 'open',
+    'folder-invalid': 'approval',
+  })
 })

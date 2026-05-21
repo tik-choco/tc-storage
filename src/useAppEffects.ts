@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type Dispatch, type StateUpdater } from 'preact/hooks'
-import type { BrowserViewMode, Notice, PendingShare } from './appTypes.js'
+import type { BrowserViewMode, FolderAccessMode, Notice, PendingShare } from './appTypes.js'
 import { activeAncestorFolderId, canPreloadThumbnail, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import { ensureDidIdentity, publicDidIdentity } from './didIdentity.js'
 import type { FileRecord, FolderRecord, StorageSnapshot } from './domain.js'
@@ -8,6 +8,7 @@ import { saveFolderSyncPeers, type FolderSyncPeers } from './folderPeers.js'
 import { readFolderRoute, replaceFolderRoute } from './folderRoute.js'
 import { canAutoImportFolderShare, hasSharedFolderChangesSinceLastShare, sharedFolderSignature } from './folderSync.js'
 import { ensureFolderKeys, saveFolderKeys } from './folderKeys.js'
+import { saveFolderAccessModes } from './folderAccess.js'
 import { saveFileShareKeys } from './fileShareKeys.js'
 import { saveSettings, type AppSettings } from './localSettings.js'
 import { persistSnapshot } from './localSnapshot.js'
@@ -53,6 +54,8 @@ interface AppEffectsOptions {
   fileShareKeys: Record<string, string>
   fileShareKeysRef: MutableRef<Record<string, string>>
   files: FileRecord[]
+  folderAccessModes: Record<string, FolderAccessMode>
+  folderAccessModesRef: MutableRef<Record<string, FolderAccessMode>>
   folderKeys: Record<string, string>
   folderKeysRef: MutableRef<Record<string, string>>
   folderPeers: FolderSyncPeers
@@ -69,6 +72,7 @@ interface AppEffectsOptions {
   preloadFileContent: (file: FileRecord) => void
   previewFiles: FileRecord[]
   profileOpen: boolean
+  requestFolderAccess: (share: PendingShare) => Promise<void>
   scheduleFolderSync: (folderId: string, reason: string) => void
   selectedFile: FileRecord | null
   selectedFileId: string | null
@@ -102,10 +106,10 @@ export function useAppEffects(options: AppEffectsOptions): void {
     acceptLinkedShare, announceSharedFolders, autoImportCidsRef, autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare,
     browserViewMode, browserViewModeKey, canResolveFileContent, clearFolderSyncTimer, currentFolder,
     currentFolderId, detailFileId, ensureFileContent, expandedPreviewOpen, fileContentCache, fileContentCacheRef, fileDataUrls,
-    fileRows, fileShareKeys, fileShareKeysRef, files, folderKeys, folderKeysRef, folderPeers, folders,
+    fileRows, fileShareKeys, fileShareKeysRef, files, folderAccessModes, folderAccessModesRef, folderKeys, folderKeysRef, folderPeers, folders,
     handlePreviewKey, importKeys, importKeysRef, isPendingShareAlreadyImported, markPendingShareImported,
     network, networkRef, networkMode, peerCount, pendingShares, pendingSharesRef, preloadFileContent,
-    previewFiles, profileOpen, scheduleFolderSync, selectedFile, selectedFileId, selectedPreviewFile,
+    previewFiles, profileOpen, requestFolderAccess, scheduleFolderSync, selectedFile, selectedFileId, selectedPreviewFile,
     selectFolder, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setNotice, setSelectedFileId, setSettings, setSettingsDraft, settings, settingsOpen,
     setSnapshot, settingsRef, snapshot, snapshotRef, stablePeerCount, stablePeerKey, syncSignaturesRef, syncTimersRef,
@@ -113,6 +117,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
   const lastConnectionAnnounceKeyRef = useRef('')
 
   useEffect(() => { snapshotRef.current = snapshot }, [snapshot])
+  useEffect(() => { folderAccessModesRef.current = folderAccessModes }, [folderAccessModes])
   useEffect(() => { folderKeysRef.current = folderKeys }, [folderKeys])
   useEffect(() => { fileShareKeysRef.current = fileShareKeys }, [fileShareKeys])
   useEffect(() => { fileContentCacheRef.current = fileContentCache }, [fileContentCache])
@@ -143,7 +148,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
     return () => { cancelled = true }
   }, [])
   useEffect(() => persistSnapshot(snapshot), [snapshot])
-  useEffect(() => { saveSettings(settings); saveFolderKeys(folderKeys); saveFileShareKeys(fileShareKeys); saveFolderSyncPeers(folderPeers) }, [settings, folderKeys, fileShareKeys, folderPeers])
+  useEffect(() => { saveSettings(settings); saveFolderAccessModes(folderAccessModes); saveFolderKeys(folderKeys); saveFileShareKeys(fileShareKeys); saveFolderSyncPeers(folderPeers) }, [settings, folderAccessModes, folderKeys, fileShareKeys, folderPeers])
   useEffect(() => { savePendingShares(pendingShares); saveImportKeys(importKeys) }, [importKeys, pendingShares])
   useEffect(() => localStorage.setItem(browserViewModeKey, browserViewMode), [browserViewMode, browserViewModeKey])
   useEffect(() => setSettingsDraft(settings), [profileOpen, settings, settingsOpen])
@@ -203,7 +208,12 @@ export function useAppEffects(options: AppEffectsOptions): void {
   }, [folderKeys, snapshot])
   useEffect(() => {
     for (const share of pendingShares) {
-      if (!share.cid) continue
+      if (!share.cid) {
+        if (share.type === 'folder-share' && share.autoImport && share.folderId && networkMode === 'mistlib' && stablePeerCount > 0) {
+          void requestFolderAccess(share)
+        }
+        continue
+      }
       const linkedPassphrase = importKeys[share.cid]?.trim() ?? ''
       if (share.autoImport && linkedPassphrase) {
         if (autoImportCidsRef.current.has(share.cid) || autoImportInFlightRef.current.has(share.cid)) continue
@@ -222,7 +232,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
       syncLog('pending folder-share accepted: storage_get will start', { ...shareLogDetails(share), localCid: shortLogValue(folder.lastCid) })
       void autoImportFolderShare(share, passphrase)
     }
-  }, [folderKeys, importKeys, networkMode, peerCount, pendingShares, snapshot.files, snapshot.folders])
+  }, [folderKeys, importKeys, networkMode, peerCount, pendingShares, snapshot.files, snapshot.folders, stablePeerCount])
   useEffect(() => () => {
     for (const timer of Object.values(syncTimersRef.current)) window.clearTimeout(timer)
   }, [])

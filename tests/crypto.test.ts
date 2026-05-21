@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { webcrypto } from 'node:crypto'
 import { test } from 'node:test'
+import { createAccessRequestKey, decryptFolderKeyGrant, encryptFolderKeyForRequest } from '../src/accessGrantCrypto.js'
 import { decryptJson, encryptJson } from '../src/crypto.js'
 
 if (!globalThis.crypto) {
@@ -32,4 +33,14 @@ test('encryptJson falls back when crypto.subtle is unavailable', async () => {
   } finally {
     if (descriptor) Object.defineProperty(globalThis, 'crypto', descriptor)
   }
+})
+
+test('folder access grant encrypts the folder key for the requesting public key', async () => {
+  const requestKey = await createAccessRequestKey()
+  const otherRequestKey = await createAccessRequestKey()
+  const grant = await encryptFolderKeyForRequest('folder-secret', requestKey.publicKey)
+
+  assert.equal(JSON.stringify(grant).includes('folder-secret'), false)
+  assert.equal(await decryptFolderKeyGrant({ ...grant, privateKey: requestKey.privateKey }), 'folder-secret')
+  await assert.rejects(() => decryptFolderKeyGrant({ ...grant, privateKey: otherRequestKey.privateKey }))
 })

@@ -105,8 +105,8 @@ export function PendingFolderShareTile(props: {
         <strong>{props.share.folderName ?? 'Shared folder'}</strong>
       </div>
       <div class="tile-meta-row">
-        <span class="status-cell"><Share2 size={15} />{props.busy ? '読み込み中' : '読み込み待ち'}</span>
-        <span>共有待ち</span>
+        <span class="status-cell"><Share2 size={15} />{props.share.cid ? props.busy ? '読み込み中' : '読み込み待ち' : '承認待ち'}</span>
+        <span>{props.share.cid ? '共有待ち' : 'リクエスト中'}</span>
       </div>
       <span class="tile-date">{dateLabel(props.share.receivedAt)}</span>
       <span class="row-actions tile-actions">

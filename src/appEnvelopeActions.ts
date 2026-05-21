@@ -1,4 +1,4 @@
-import type { Notice, PendingShare } from './appTypes.js'
+import { pendingShareKey, type Notice, type PendingShare } from './appTypes.js'
 import type { FileContentActions, MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
 import { canPreloadThumbnail, envelopeLogDetails, folderLogDetails, shortLogValue, syncLog } from './appUtils.js'
@@ -21,6 +21,8 @@ interface EnvelopeOptions {
   preloadFileContent: FileContentActions['preloadFileContent']
   rememberFolderPeer: (envelope: Pick<ShareEnvelope, 'folderId' | 'from' | 'senderProfile' | 'sentAt'>) => void
   scheduleFolderSync: (folderId: string, reason: string) => void
+  handleFolderAccessGrant: (envelope: ShareEnvelope) => Promise<void>
+  handleFolderAccessRequest: (envelope: ShareEnvelope) => void
   setCurrentFolderId: SetState<string | null>
   setDetailFileId: SetState<string | null>
   setExpandedPreviewOpen: SetState<boolean>
@@ -42,6 +44,7 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
     announceSharedFolders, autoImportCidsRef, autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare,
     currentFolderId, detailFileId, folderKeysRef, folderPanelFolderId, helloResponseAtRef,
     importKeysRef, pendingSharesRef, preloadFileContent, rememberFolderPeer, scheduleFolderSync,
+    handleFolderAccessGrant, handleFolderAccessRequest,
     selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderPanelFolderId, setFolderPanelOpen, setNotice, setPendingShares, setSelectedFileId,
     setSnapshot, snapshotRef,
@@ -68,10 +71,38 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
       receiveFolderChange(envelope)
       return
     }
+    if (envelope.type === 'folder-access-request') {
+      handleFolderAccessRequest(envelope)
+      return
+    }
+    if (envelope.type === 'folder-access-grant') {
+      void handleFolderAccessGrant(envelope)
+      return
+    }
     if ((envelope.type !== 'folder-share' && envelope.type !== 'file-share') || !envelope.cid) return
+    const receivedAt = new Date().toISOString()
+    const incomingShare: PendingShare = { ...envelope, receivedAt }
+    const incomingKey = pendingShareKey(incomingShare)
+    const matchesIncomingShare = (share: PendingShare) => (
+      share.cid === envelope.cid ||
+      pendingShareKey(share) === incomingKey ||
+      (envelope.type === 'folder-share' && share.type === 'folder-share' && Boolean(envelope.folderId && share.folderId === envelope.folderId && share.roomId === envelope.roomId))
+    )
+    const existingShare = pendingSharesRef.current.find(matchesIncomingShare)
+    if (
+      envelope.type === 'folder-share' &&
+      envelope.folderId &&
+      existingShare?.autoImport &&
+      folderKeysRef.current[envelope.folderId] &&
+      !snapshotRef.current.folders.some((folder) => folder.id === envelope.folderId && !folder.deletedAt) &&
+      !autoImportCidsRef.current.has(envelope.cid) &&
+      !autoImportInFlightRef.current.has(envelope.cid)
+    ) {
+      void autoImportLinkedShare({ ...incomingShare, autoImport: true }, folderKeysRef.current[envelope.folderId])
+    }
     setPendingShares((current) => {
-      const existing = current.find((share) => share.cid === envelope.cid)
-      return [{ ...envelope, autoImport: existing?.autoImport, receivedAt: new Date().toISOString() }, ...current.filter((share) => share.cid !== envelope.cid)].slice(0, 12)
+      const existing = current.find(matchesIncomingShare)
+      return [{ ...incomingShare, autoImport: existing?.autoImport }, ...current.filter((share) => !matchesIncomingShare(share))].slice(0, 12)
     })
   }
 

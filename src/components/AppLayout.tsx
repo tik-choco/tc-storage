@@ -114,12 +114,21 @@ function renderFolderPanel(c: AppController) {
       <DraggablePopover className="folder-popover" position={c.popoverPositions.folder} onMove={(position) => c.movePopover('folder', position)}>
         <FolderPanel
           folder={c.folderPanelFolder}
+          accessOnly={c.folderPanelAccessOnly}
+          accessMode={c.folderPanelAccessMode}
+          accessRequests={c.folderPanelAccessRequests}
           shareUrl={c.folderShareUrl}
           syncPeers={c.folderPanelPeers}
+          onAccessModeChange={(mode) => {
+            const folderId = c.folderPanelFolder?.id
+            if (folderId) c.setFolderAccessModes((current) => ({ ...current, [folderId]: mode }))
+          }}
+          onApproveAccess={(request) => void c.approveFolderAccess(request)}
           onCopy={c.copyText}
           onDownloadFolder={(folder) => void c.downloadFolderAsZip(folder)}
           onDeleteFolder={c.deleteCurrentFolder}
           onPatchFolder={c.patchCurrentFolder}
+          onRejectAccess={c.rejectFolderAccess}
         />
       </DraggablePopover>
     </div>

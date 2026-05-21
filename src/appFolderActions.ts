@@ -147,7 +147,7 @@ export function createFolderActions(options: FolderActionOptions) {
       syncSignaturesRef.current[targetFolder.id] = sharedFolderSignature({ ...sourceSnapshot, folders: sourceSnapshot.folders.map((item) => (item.id === targetFolder.id ? folderForSave : item)), files: sourceSnapshot.files.map((file) => filesForSaveById.get(file.id) ?? file) }, targetFolder.id)
       markFolderSaved(targetFolder, cid, now, shareAfterSave, filesForSave)
       if (shareAfterSave) networkRef.current.broadcastShare({ clock: sourceSnapshot.clock + 1, folderId: targetFolder.id, folderName: targetFolder.name, cid })
-      const copied = shareAfterSave ? await writeReservedClipboard(makeFolderShareUrl(targetFolder, settings.roomId, sourceSnapshot.clock + 1, cid, passphrase, shareProfile), clipboard) : false
+      const copied = shareAfterSave ? await writeReservedClipboard(makeFolderShareUrl(targetFolder, settings.roomId, shareProfile), clipboard) : false
       setNotice({ tone: 'success', text: shareAfterSave ? copied ? '共有URLをコピーしました' : '共有URLを作成しました' : '暗号化してmistlibへ保存しました' })
     } catch (error) {
       clipboard?.cancel()

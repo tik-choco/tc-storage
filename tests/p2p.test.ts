@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { configureMistRoom, dropFailedMistPeers, observeStableMistPeers, peerIdsForMistSend, positionForSharedRoom, sendMistPayloadToPeers } from '../src/p2p.js'
+import { parseEnvelope } from '../src/p2pEnvelope.js'
 
 test('positionForSharedRoom keeps the same room at the same base coordinates', () => {
   assert.deepEqual(positionForSharedRoom('tc-storage-main'), positionForSharedRoom('tc-storage-main'))
@@ -122,4 +123,18 @@ test('observeStableMistPeers drops peers that disappear before becoming stable',
 
   assert.deepEqual(next.firstSeenAt, { 'node-b': 1000 })
   assert.deepEqual(next.stablePeers, ['node-b'])
+})
+
+test('parseEnvelope accepts folder access request and grant envelopes', () => {
+  const base = {
+    from: 'node-a',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    clock: 0,
+    folderId: 'folder-a',
+    requestId: 'request-a',
+  }
+
+  assert.equal(parseEnvelope({ ...base, type: 'folder-access-request', accessPublicKey: 'pub-a' })?.type, 'folder-access-request')
+  assert.equal(parseEnvelope({ ...base, type: 'folder-access-grant', targetNodeId: 'node-b', accessGrantPublicKey: 'pub-b', accessGrantIv: 'iv', accessGrantCipherText: 'cipher' })?.type, 'folder-access-grant')
 })

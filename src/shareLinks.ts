@@ -11,9 +11,9 @@ type ShareLinkPayload = {
   v: 1
   type: ShareKind
   roomId: string
-  clock: number
-  cid: string
-  key: string
+  clock?: number
+  cid?: string
+  key?: string
   folderId?: string
   folderName?: string
   fileId?: string
@@ -29,8 +29,8 @@ export type LinkedShare = {
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-export function makeFolderShareUrl(folder: FolderRecord, roomId: string, clock: number, cid: string, key: string, senderProfile: ShareProfile): string {
-  return makeShareUrl({ v: 1, type: 'folder-share', roomId, clock, cid, key, folderId: folder.id, folderName: folder.name, senderProfile })
+export function makeFolderShareUrl(folder: FolderRecord, roomId: string, senderProfile: ShareProfile): string {
+  return makeShareUrl({ v: 1, type: 'folder-share', roomId, folderId: folder.id, folderName: folder.name, senderProfile })
 }
 
 export function makeFileShareUrl(file: FileRecord, folder: FolderRecord, roomId: string, clock: number, cid: string, key: string, senderProfile: ShareProfile): string {
@@ -62,21 +62,21 @@ function makeShareUrl(payload: ShareLinkPayload): string {
   return url.toString()
 }
 
-function readShareLink(hash: string): LinkedShare | undefined {
+export function readShareLink(hash: string): LinkedShare | undefined {
   const raw = new URLSearchParams(hash.replace(/^#/, '')).get('tc-share')
   if (!raw) return undefined
   try {
     const payload = JSON.parse(decoder.decode(base64ToBytes(fromBase64Url(raw)))) as unknown
     if (!isShareLinkPayload(payload)) return undefined
     return {
-      key: payload.key,
+      key: payload.key ?? '',
       share: {
         type: payload.type,
         from: 'share-url',
         roomId: payload.roomId,
         sentAt: new Date().toISOString(),
         receivedAt: new Date().toISOString(),
-        clock: payload.clock,
+        clock: payload.clock ?? 0,
         folderId: payload.folderId,
         folderName: payload.folderName,
         fileId: payload.fileId,
@@ -97,9 +97,9 @@ function isShareLinkPayload(value: unknown): value is ShareLinkPayload {
       payload.v === 1 &&
       (payload.type === 'folder-share' || payload.type === 'file-share') &&
       typeof payload.roomId === 'string' &&
-      typeof payload.clock === 'number' &&
-      typeof payload.cid === 'string' &&
-      typeof payload.key === 'string',
+      (payload.clock === undefined || typeof payload.clock === 'number') &&
+      (payload.type === 'folder-share' || typeof payload.cid === 'string') &&
+      (payload.type === 'folder-share' || typeof payload.key === 'string'),
   )
 }
 

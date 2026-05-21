@@ -44,7 +44,7 @@ function normalizePendingShare(value: unknown): PendingShare | undefined {
     typeof share.sentAt !== 'string' ||
     typeof share.receivedAt !== 'string' ||
     typeof share.clock !== 'number' ||
-    typeof share.cid !== 'string'
+    (share.type === 'file-share' && typeof share.cid !== 'string')
   ) {
     return undefined
   }
@@ -56,8 +56,8 @@ function normalizePendingShare(value: unknown): PendingShare | undefined {
     sentAt: share.sentAt,
     receivedAt: share.receivedAt,
     clock: share.clock,
-    cid: share.cid,
   }
+  if (typeof share.cid === 'string') normalized.cid = share.cid
   if (share.autoImport === true) normalized.autoImport = true
   assignOptionalString(normalized, 'folderId', share.folderId)
   assignOptionalString(normalized, 'folderName', share.folderName)

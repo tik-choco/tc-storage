@@ -32,3 +32,23 @@ export type SyncPeer = {
   profile?: ShareProfile
   lastSeenAt: string
 }
+
+export type FolderAccessMode = 'approval' | 'open'
+
+export type FolderAccessRequest = {
+  id: string
+  folderId: string
+  folderName?: string
+  nodeId: string
+  profile?: ShareProfile
+  publicKey: string
+  requestedAt: string
+  requestId: string
+}
+
+export function pendingShareKey(share: Pick<PendingShare, 'cid' | 'fileId' | 'folderId' | 'roomId' | 'type'>): string {
+  if (share.cid) return share.cid
+  if (share.type === 'folder-share' && share.folderId) return `${share.roomId}:folder:${share.folderId}`
+  if (share.type === 'file-share' && share.fileId) return `${share.roomId}:file:${share.fileId}`
+  return `${share.roomId}:${share.type}`
+}
