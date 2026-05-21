@@ -194,10 +194,11 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
     const folder = snapshotValue.folders.find((item) => item.id === targetFolderId)
     if (!folder) return syncLog('folder-change folder delete skipped: local folder not found', envelopeLogDetails(envelope))
     const deletedIds = descendantFolderIds(snapshotValue.folders, folder.id)
+    const deletedAt = envelope.folder?.deletedAt ?? envelope.sentAt
     setSnapshot((current) => {
       const currentDeletedIds = descendantFolderIds(current.folders, folder.id)
-      const foldersNext = current.folders.map((item) => (currentDeletedIds.has(item.id) ? stampFolderPatch(item, { deletedAt: envelope.sentAt }, envelope.sentAt, envelope.from) : item))
-      const filesNext = current.files.map((item) => (currentDeletedIds.has(item.folderId) ? stampFilePatch(item, { deletedAt: envelope.sentAt }, envelope.sentAt, envelope.from) : item))
+      const foldersNext = current.folders.map((item) => (currentDeletedIds.has(item.id) ? stampFolderPatch(item, { deletedAt }, deletedAt, envelope.from) : item))
+      const filesNext = current.files.map((item) => (currentDeletedIds.has(item.folderId) ? stampFilePatch(item, { deletedAt }, deletedAt, envelope.from) : item))
       return addActivity({ ...current, folders: foldersNext, files: filesNext, clock: Math.max(current.clock, envelope.clock) + 1, originNode: current.originNode }, { actorNodeId: envelope.from, folderId: folder.id, action: 'folder.remote-delete', detail: `${folder.name} がリモートで削除` }, envelope.sentAt)
     })
     if (currentFolderId && deletedIds.has(currentFolderId)) setCurrentFolderId(folder.parentId)

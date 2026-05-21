@@ -16,3 +16,4 @@ Thumbs.db
 
 coverage/
 .vite/
+docs-internal/

@@ -70,16 +70,17 @@ export function createMoveActions(options: MoveOptions): MoveActions {
       setFolderKeys((current) => ({ ...current, ...keyUpdates }))
     }
     const now = new Date().toISOString()
+    const removedAt = previousIsoInstant(now)
     setBusy(`move-file-${file.id}`)
     try {
       const fileWithContent = await ensureFileContent(file)
       const movedFileWithContent = { ...fileWithContent, folderId: targetFolderId }
       const cid = await saveEncryptedFileToMist({ folder: storageFolder, file: movedFileWithContent, passphrase, originNode: settings.nodeId })
-      const movedFile = stripFileContent(stampFilePatch(file, { folderId: targetFolderId, lastCid: cid }, now, settings.nodeId))
+      const movedFile = stripFileContent(stampFilePatch(file, { folderId: targetFolderId, lastCid: cid, deletedAt: undefined }, now, settings.nodeId))
       if (fileWithContent.dataUrl) setFileContentCache((current) => ({ ...current, [file.id]: fileWithContent.dataUrl ?? '' }))
       setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((item) => (item.id === file.id ? movedFile : item)) }, { actorNodeId: settings.nodeId, folderId: targetFolderId, fileId: file.id, action: 'file.move', detail: `${file.name} を ${targetFolder.name} に移動` }, now), settings.nodeId))
       if (sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id) {
-        announceFolderChange(sourceSharedRoot, 'file-deleted', stripFileContent(stampFilePatch(file, { deletedAt: now }, now, settings.nodeId)))
+        announceFolderChange(sourceSharedRoot, 'file-deleted', stripFileContent(stampFilePatch(file, { deletedAt: removedAt }, removedAt, settings.nodeId)))
         scheduleSharedFolderSync(sourceSharedRoot, 'local file move out')
       }
       if (targetSharedRoot) {
@@ -100,7 +101,8 @@ export function createMoveActions(options: MoveOptions): MoveActions {
     const targetFolder = targetFolderId ? snapshotValue.folders.find((item) => item.id === targetFolderId && !item.deletedAt) : null
     if (!folder || (targetFolderId && !targetFolder)) return setNotice({ tone: 'error', text: '移動先が見つかりません' })
     const now = new Date().toISOString()
-    const movedFolder = stampFolderPatch(folder, { parentId: targetFolderId }, now, settings.nodeId)
+    const removedAt = previousIsoInstant(now)
+    const movedFolder = stampFolderPatch(folder, { parentId: targetFolderId, deletedAt: undefined }, now, settings.nodeId)
     const sourceSharedRoot = nearestSharedAncestorFolder(snapshotValue, folder.parentId)
     const targetSharedRoot = targetFolderId ? nearestSharedAncestorFolder(snapshotValue, targetFolderId) : undefined
     if (targetSharedRoot && folderKeysRef.current[targetSharedRoot.id]) {
@@ -113,7 +115,7 @@ export function createMoveActions(options: MoveOptions): MoveActions {
     }
     setSnapshot((current) => touchSnapshot(addActivity({ ...current, folders: current.folders.map((item) => (item.id === folder.id ? movedFolder : item)) }, { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.move', detail: `${folder.name} を ${targetFolder?.name ?? 'My Drive'} に移動` }, now), settings.nodeId))
     if (sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id) {
-      announceFolderChange(sourceSharedRoot, 'folder-deleted', undefined, folder)
+      announceFolderChange(sourceSharedRoot, 'folder-deleted', undefined, stampFolderPatch(folder, { deletedAt: removedAt }, removedAt, settings.nodeId))
       scheduleSharedFolderSync(sourceSharedRoot, 'local folder move out')
     }
     if (targetSharedRoot) {
@@ -127,6 +129,9 @@ export function createMoveActions(options: MoveOptions): MoveActions {
     if (!folder.shareEnabled || !folderKeysRef.current[folder.id]) return
     scheduleFolderSync(folder.id, reason)
   }
-
   return { canMoveItemToFolder, moveDraggedItem }
+}
+
+function previousIsoInstant(isoTimestamp: string): string {
+  return new Date(Math.max(0, Date.parse(isoTimestamp) - 1)).toISOString()
 }

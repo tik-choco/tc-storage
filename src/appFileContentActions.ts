@@ -41,7 +41,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   async function ensureFolderFilesStored(folder: FolderRecord, filesForSave: FileRecord[], passphrase: string): Promise<FileRecord[]> {
     const storedFiles: FileRecord[] = []
     for (const file of filesForSave) {
-      if (file.deletedAt || (file.lastCid && file.folderId === folder.id)) {
+      if (file.deletedAt || isFileStoredForFolder(file, folder, passphrase)) {
         storedFiles.push(file)
         continue
       }
@@ -52,6 +52,14 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       storedFiles.push(stampFilePatch(fileWithContent, { lastCid: cid }, new Date().toISOString(), settingsRef.current.nodeId))
     }
     return storedFiles
+  }
+
+  function isFileStoredForFolder(file: FileRecord, folder: FolderRecord, passphrase: string): boolean {
+    if (!file.lastCid) return false
+    if (file.folderId === folder.id) return true
+    if (folderKeysRef.current[file.folderId] === passphrase) return true
+    const sharedRoot = nearestSharedAncestorFolder(snapshotRef.current, file.folderId)
+    return sharedRoot?.id === folder.id && Boolean(folder.lastCid)
   }
 
   async function materializeFolderBundleFiles(bundle: FolderBundle, passphrase: string): Promise<FolderBundle> {
