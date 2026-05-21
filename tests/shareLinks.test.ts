@@ -21,7 +21,7 @@ test('folder share URL is a stable approval invite without cid or decryption key
     shareEnabled: true,
   }
 
-  const url = makeFolderShareUrl(folder, 'room-a', { name: 'Owner' })
+  const url = makeFolderShareUrl(folder, 'room-a', { name: 'Owner' }, 'node-owner')
   const linked = readShareLink(new URL(url).hash)
 
   assert.equal(new URL(url).searchParams.has('folder'), false)
@@ -29,6 +29,45 @@ test('folder share URL is a stable approval invite without cid or decryption key
   assert.equal(linked?.share.type, 'folder-share')
   assert.equal(linked?.share.folderId, 'folder-fixed')
   assert.equal(linked?.share.cid, undefined)
+  assert.equal(linked?.share.ownerNodeId, 'node-owner')
+})
+
+test('folder share URL parser rejects cid or decryption key in approval invites', () => {
+  const payload = {
+    v: 1,
+    type: 'folder-share',
+    roomId: 'room-a',
+    folderId: 'folder-fixed',
+    folderName: 'Shared docs',
+    ownerNodeId: 'node-owner',
+    cid: 'cid-should-not-be-here',
+    key: 'folder-secret-should-not-be-here',
+  }
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+
+  assert.equal(readShareLink(`#tc-share=${encoded}`), undefined)
+})
+
+test('file share URL parser requires cid and decryption key', () => {
+  const missingKey = Buffer.from(JSON.stringify({
+    v: 1,
+    type: 'file-share',
+    roomId: 'room-a',
+    folderId: 'folder-a',
+    fileId: 'file-a',
+    cid: 'cid-file',
+  }), 'utf8').toString('base64url')
+  const missingCid = Buffer.from(JSON.stringify({
+    v: 1,
+    type: 'file-share',
+    roomId: 'room-a',
+    folderId: 'folder-a',
+    fileId: 'file-a',
+    key: 'file-secret',
+  }), 'utf8').toString('base64url')
+
+  assert.equal(readShareLink(`#tc-share=${missingKey}`), undefined)
+  assert.equal(readShareLink(`#tc-share=${missingCid}`), undefined)
 })
 
 test('file share URL keeps snapshot cid and key for direct import', () => {

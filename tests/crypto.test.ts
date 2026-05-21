@@ -18,6 +18,16 @@ test('encryptJson keeps payload opaque and decrypts with the folder key', async 
   assert.deepEqual(await decryptJson(encrypted, 'folder secret'), payload)
 })
 
+test('encryptJson rejects tampered ciphertext', async () => {
+  const encrypted = await encryptJson({ body: 'do not alter' }, 'folder secret')
+  const tampered = {
+    ...encrypted,
+    cipherText: replaceLastBase64Char(encrypted.cipherText),
+  }
+
+  await assert.rejects(() => decryptJson(tampered, 'folder secret'))
+})
+
 test('encryptJson falls back when crypto.subtle is unavailable', async () => {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
   Object.defineProperty(globalThis, 'crypto', {
@@ -44,3 +54,8 @@ test('folder access grant encrypts the folder key for the requesting public key'
   assert.equal(await decryptFolderKeyGrant({ ...grant, privateKey: requestKey.privateKey }), 'folder-secret')
   await assert.rejects(() => decryptFolderKeyGrant({ ...grant, privateKey: otherRequestKey.privateKey }))
 })
+
+function replaceLastBase64Char(value: string): string {
+  const replacement = value.endsWith('A') ? 'B' : 'A'
+  return `${value.slice(0, -1)}${replacement}`
+}

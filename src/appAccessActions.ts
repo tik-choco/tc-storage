@@ -8,6 +8,7 @@ import type { ShareEnvelope } from './p2p.js'
 
 export type RequestKeyEntry = AccessRequestKey & {
   folderId: string
+  ownerNodeId?: string
   roomId: string
   requestId: string
 }
@@ -40,16 +41,18 @@ export function createAccessActions(options: AccessOptions) {
     try {
       const accessKey = await createAccessRequestKey()
       const requestId = `access-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      const entry = { ...accessKey, folderId: share.folderId, ownerNodeId: share.ownerNodeId, requestId, roomId: share.roomId }
       accessRequestKeysRef.current = {
         ...accessRequestKeysRef.current,
-        [key]: { ...accessKey, folderId: share.folderId, requestId, roomId: share.roomId },
-        [requestId]: { ...accessKey, folderId: share.folderId, requestId, roomId: share.roomId },
+        [key]: entry,
+        [requestId]: entry,
       }
       networkRef.current.broadcastShare({
         type: 'folder-access-request',
         clock: 0,
         folderId: share.folderId,
         folderName: share.folderName,
+        targetNodeId: share.ownerNodeId,
         requestId,
         accessPublicKey: accessKey.publicKey,
       })
@@ -60,6 +63,7 @@ export function createAccessActions(options: AccessOptions) {
   }
 
   function handleFolderAccessRequest(envelope: ShareEnvelope): void {
+    if (envelope.targetNodeId && envelope.targetNodeId !== settingsRef.current.nodeId) return
     if (!envelope.folderId || !envelope.requestId || !envelope.accessPublicKey) return
     const folder = snapshotRef.current.folders.find((item) => item.id === envelope.folderId && !item.deletedAt)
     const folderKey = folder ? folderKeysRef.current[folder.id] : ''
@@ -124,6 +128,7 @@ export function createAccessActions(options: AccessOptions) {
     const entry = accessRequestKeysRef.current[envelope.requestId]
     const roomId = entry?.roomId ?? envelope.roomId
     const folderId = entry?.folderId ?? envelope.folderId
+    if (entry?.ownerNodeId && envelope.from !== entry.ownerNodeId) return
     const shareKey = pendingShareKey({ type: 'folder-share', roomId, folderId })
     accessRequestKeysRef.current = Object.fromEntries(Object.entries(accessRequestKeysRef.current).filter(([key]) => key !== envelope.requestId && key !== shareKey))
     setPendingShares((current) => current.filter((share) => (
@@ -138,6 +143,7 @@ export function createAccessActions(options: AccessOptions) {
     if (!envelope.folderId || !envelope.requestId || !envelope.accessGrantPublicKey || !envelope.accessGrantIv || !envelope.accessGrantCipherText) return
     const entry = accessRequestKeysRef.current[envelope.requestId]
     if (!entry || entry.folderId !== envelope.folderId) return
+    if (entry.ownerNodeId && envelope.from !== entry.ownerNodeId) return
     try {
       const passphrase = await decryptFolderKeyGrant({
         cipherText: envelope.accessGrantCipherText,

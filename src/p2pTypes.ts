@@ -26,6 +26,7 @@ export type ShareEnvelope = {
   cid?: string
   senderProfile?: ShareProfile
   signature?: string
+  ownerNodeId?: string
   targetNodeId?: string
   requestId?: string
   accessPublicKey?: string

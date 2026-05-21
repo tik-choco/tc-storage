@@ -18,6 +18,7 @@ type ShareLinkPayload = {
   folderName?: string
   fileId?: string
   fileName?: string
+  ownerNodeId?: string
   senderProfile?: ShareProfile
 }
 
@@ -29,8 +30,8 @@ export type LinkedShare = {
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-export function makeFolderShareUrl(folder: FolderRecord, roomId: string, senderProfile: ShareProfile): string {
-  return makeShareUrl({ v: 1, type: 'folder-share', roomId, folderId: folder.id, folderName: folder.name, senderProfile })
+export function makeFolderShareUrl(folder: FolderRecord, roomId: string, senderProfile: ShareProfile, ownerNodeId?: string): string {
+  return makeShareUrl({ v: 1, type: 'folder-share', roomId, folderId: folder.id, folderName: folder.name, ownerNodeId, senderProfile })
 }
 
 export function makeFileShareUrl(file: FileRecord, folder: FolderRecord, roomId: string, clock: number, cid: string, key: string, senderProfile: ShareProfile): string {
@@ -81,6 +82,7 @@ export function readShareLink(hash: string): LinkedShare | undefined {
         folderName: payload.folderName,
         fileId: payload.fileId,
         fileName: payload.fileName,
+        ownerNodeId: payload.ownerNodeId,
         cid: payload.cid,
         senderProfile: payload.senderProfile,
       },
@@ -98,8 +100,10 @@ function isShareLinkPayload(value: unknown): value is ShareLinkPayload {
       (payload.type === 'folder-share' || payload.type === 'file-share') &&
       typeof payload.roomId === 'string' &&
       (payload.clock === undefined || typeof payload.clock === 'number') &&
-      (payload.type === 'folder-share' || typeof payload.cid === 'string') &&
-      (payload.type === 'folder-share' || typeof payload.key === 'string'),
+      (payload.ownerNodeId === undefined || typeof payload.ownerNodeId === 'string') &&
+      (payload.type === 'folder-share'
+        ? payload.cid === undefined && payload.key === undefined
+        : typeof payload.cid === 'string' && payload.cid.length > 0 && typeof payload.key === 'string' && payload.key.length > 0),
   )
 }
 

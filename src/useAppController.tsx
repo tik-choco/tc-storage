@@ -101,7 +101,7 @@ export function useAppController() {
   const detailFolderPeers = detailFolder ? folderPeers[detailFolder.id] ?? [] : []
   const avatarUrl = settings.avatarFileId ? fileDataUrls[settings.avatarFileId] ?? '' : settings.avatarUrl
   const draftAvatarUrl = settingsDraft.avatarFileId ? fileDataUrls[settingsDraft.avatarFileId] ?? '' : settingsDraft.avatarUrl
-  const folderShareUrl = folderPanelFolder?.shareEnabled ? makeFolderShareUrl(folderPanelFolder, settings.roomId, shareProfile) : ''
+  const folderShareUrl = folderPanelFolder?.shareEnabled ? makeFolderShareUrl(folderPanelFolder, settings.roomId, shareProfile, settings.nodeId) : ''
   const detailFileShareCid = detailFile?.lastShareCid ?? detailFile?.lastCid
   const fileShareUrl = detailFile && detailFileShareCid && detailFolder && fileShareKeys[detailFile.id] ? makeFileShareUrl(detailFile, detailFolder, settings.roomId, snapshot.clock, detailFileShareCid, fileShareKeys[detailFile.id], shareProfile) : ''
   const previewFiles = useMemo(() => (selectedFile ? filesInFolder(snapshot, selectedFile.folderId) : fileRows), [fileRows, selectedFile, snapshot])

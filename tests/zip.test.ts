@@ -23,3 +23,18 @@ test('createZipBlob writes a basic ZIP archive with nested paths', async () => {
   assert.match(text, /Root\/Nested\/b\.txt/)
   assert.deepEqual([...bytes.slice(-22, -18)], [0x50, 0x4b, 0x05, 0x06])
 })
+
+test('createZipBlob rejects traversal paths', () => {
+  assert.throws(
+    () => createZipBlob([{ path: '../evil.txt', data: new Uint8Array() }]),
+    /Invalid ZIP path/,
+  )
+  assert.throws(
+    () => createZipBlob([{ path: 'Root/../../evil.txt', data: new Uint8Array() }]),
+    /Invalid ZIP path/,
+  )
+  assert.throws(
+    () => createZipBlob([{ path: 'Root\\..\\evil.txt', data: new Uint8Array() }]),
+    /Invalid ZIP path/,
+  )
+})

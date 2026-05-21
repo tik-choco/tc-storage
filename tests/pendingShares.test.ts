@@ -81,6 +81,7 @@ test('fixed folder invite pending shares survive without a cid', () => {
     clock: 0,
     folderId: 'folder-fixed',
     folderName: 'Fixed invite',
+    ownerNodeId: 'node-owner',
     autoImport: true,
     senderProfile: { name: 'Owner' },
   }

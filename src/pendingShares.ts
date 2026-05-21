@@ -63,6 +63,7 @@ function normalizePendingShare(value: unknown): PendingShare | undefined {
   assignOptionalString(normalized, 'folderName', share.folderName)
   assignOptionalString(normalized, 'fileId', share.fileId)
   assignOptionalString(normalized, 'fileName', share.fileName)
+  assignOptionalString(normalized, 'ownerNodeId', share.ownerNodeId)
   assignOptionalString(normalized, 'folderSignature', share.folderSignature)
   assignOptionalString(normalized, 'signature', share.signature)
   const senderProfile = normalizeShareProfile(share.senderProfile)
