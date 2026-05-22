@@ -28,18 +28,14 @@ test('encryptJson rejects tampered ciphertext', async () => {
   await assert.rejects(() => decryptJson(tampered, 'folder secret'))
 })
 
-test('encryptJson falls back when crypto.subtle is unavailable', async () => {
+test('encryptJson requires Web Crypto subtle', async () => {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
   Object.defineProperty(globalThis, 'crypto', {
     configurable: true,
     value: { getRandomValues: webcrypto.getRandomValues.bind(webcrypto) },
   })
   try {
-    const payload = { name: 'lan-upload.txt', body: 'works over http ip' }
-    const encrypted = await encryptJson(payload, 'folder secret')
-    assert.equal(encrypted.algorithm, 'CHACHA20-HMAC-SHA256')
-    assert.equal(JSON.stringify(encrypted).includes('works over http ip'), false)
-    assert.deepEqual(await decryptJson(encrypted, 'folder secret'), payload)
+    await assert.rejects(() => encryptJson({ name: 'lan-upload.txt' }, 'folder secret'), /Web Crypto/)
   } finally {
     if (descriptor) Object.defineProperty(globalThis, 'crypto', descriptor)
   }

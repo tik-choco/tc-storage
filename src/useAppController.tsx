@@ -58,15 +58,15 @@ export function useAppController() {
     const folderShares = pendingShares.filter((share) => share.autoImport && share.type === 'folder-share')
     return queryText ? filterByName(folderShares.map((share) => ({ ...share, name: share.folderName ?? 'Shared folder' })), queryText) : folderShares
   }, [currentFolderId, pendingShares, queryText])
-  const shareProfile: ShareProfile = useMemo(() => ({ name: settings.profileName, avatarUrl: settings.avatarFileId ? undefined : settings.avatarUrl || undefined }), [settings.avatarFileId, settings.avatarUrl, settings.profileName])
+  const shareProfile: ShareProfile = useMemo(() => ({ name: settings.profileName }), [settings.profileName])
   const currentFolderKey = currentFolder ? folderKeys[currentFolder.id] ?? '' : ''
   const folderPanelPeers = folderPanelFolder ? folderPeers[folderPanelFolder.id] ?? [] : []
   const folderPanelAccessMode = folderPanelFolder ? folderAccessModes[folderPanelFolder.id] ?? 'approval' : 'approval'
   const folderPanelFolderKey = folderPanelFolder ? folderKeys[folderPanelFolder.id] ?? '' : ''
   const folderPanelAccessRequests = folderPanelFolder ? folderAccessRequests.filter((request) => request.folderId === folderPanelFolder.id) : []
   const detailFolderPeers = detailFolder ? folderPeers[detailFolder.id] ?? [] : []
-  const avatarUrl = settings.avatarFileId ? fileDataUrls[settings.avatarFileId] ?? '' : settings.avatarUrl
-  const draftAvatarUrl = settingsDraft.avatarFileId ? fileDataUrls[settingsDraft.avatarFileId] ?? '' : settingsDraft.avatarUrl
+  const avatarUrl = settings.avatarFileId ? fileDataUrls[settings.avatarFileId] ?? '' : ''
+  const draftAvatarUrl = settingsDraft.avatarFileId ? fileDataUrls[settingsDraft.avatarFileId] ?? '' : ''
   const folderShareUrl = folderPanelFolder?.shareEnabled && isEd25519DidKey(settings.nodeId) && folderPanelFolderKey ? makeFolderShareUrl(folderPanelFolder, settings.roomId, shareProfile, settings.nodeId, folderPanelFolderKey, folderPanelAccessMode) : ''
   const detailFileShareCid = detailFile?.lastShareCid ?? detailFile?.lastCid
   const fileShareUrl = detailFile && detailFileShareCid && detailFolder && fileShareKeys[detailFile.id] ? makeFileShareUrl(detailFile, detailFolder, settings.roomId, snapshot.clock, detailFileShareCid, fileShareKeys[detailFile.id], shareProfile) : ''

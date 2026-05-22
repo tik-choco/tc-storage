@@ -88,10 +88,6 @@ export function createAccessActions(options: AccessOptions) {
     if (!folder?.shareEnabled || !folderKey) return
     if (!matchesFolderKeyHash(folder.id, folderKey, envelope.folderKeyHash)) return
     const request = accessRequestFromEnvelope(envelope, folder)
-    if (folderAccessModesRef.current[folder.id] === 'open') {
-      void approveFolderAccess(request)
-      return
-    }
     setFolderAccessRequests((current) => [
       request,
       ...current.filter((item) => item.id !== request.id),

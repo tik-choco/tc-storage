@@ -15,7 +15,7 @@ export function saveFolderAccessModes(modes: Record<string, FolderAccessMode>): 
 }
 
 export function normalizeFolderAccessMode(value: unknown): FolderAccessMode {
-  return value === 'shared-approval' || value === 'open' ? value : 'approval'
+  return value === 'shared-approval' ? value : 'approval'
 }
 
 function normalizeFolderAccessModes(value: unknown): Record<string, FolderAccessMode> {

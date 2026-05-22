@@ -62,6 +62,5 @@ export function queueMistHello(options: {
 function profileFromSettings(settings: AppSettings): ShareProfile {
   return {
     name: settings.profileName.trim() || settings.nodeId,
-    avatarUrl: settings.avatarUrl.trim() || undefined,
   }
 }

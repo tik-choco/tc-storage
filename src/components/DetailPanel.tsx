@@ -94,7 +94,6 @@ function FolderShareSettings(props: {
             <select value={props.accessMode} onChange={(event) => props.onAccessModeChange(event.currentTarget.value as FolderAccessMode)}>
               <option value="approval">Owner承認</option>
               <option value="shared-approval">共有者承認</option>
-              <option value="open">無制限受け入れ</option>
             </select>
           </label>
           {props.accessRequests.length > 0 ? (
@@ -174,12 +173,11 @@ function AccessRequestRow(props: {
   onReject: (request: FolderAccessRequest) => void
 }) {
   const name = props.request.profile?.name?.trim() || props.request.nodeId
-  const avatarUrl = props.request.profile?.avatarUrl?.trim()
 
   return (
     <div class="access-request" title={props.request.nodeId}>
       <div class="avatar-frame tiny">
-        {avatarUrl ? <img src={avatarUrl} alt="" /> : <UserRound size={14} />}
+        <UserRound size={14} />
       </div>
       <div>
         <strong>{name}</strong>
@@ -208,12 +206,11 @@ export function SyncPeers(props: { peers: SyncPeer[] }) {
 
 function SyncPeerRow(props: { peer: SyncPeer }) {
   const name = props.peer.profile?.name?.trim() || props.peer.nodeId
-  const avatarUrl = props.peer.profile?.avatarUrl?.trim()
 
   return (
     <div class="sync-peer" title={props.peer.nodeId}>
       <div class="avatar-frame tiny">
-        {avatarUrl ? <img src={avatarUrl} alt="" /> : <UserRound size={14} />}
+        <UserRound size={14} />
       </div>
       <div>
         <strong>{name}</strong>

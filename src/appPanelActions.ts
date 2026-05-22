@@ -51,8 +51,7 @@ export function createPanelActions(options: PanelOptions) {
   }
 
   function normalizedSettingsDraft(): AppSettings {
-    const avatarUrl = settingsDraft.avatarUrl.trim()
-    const avatarFileId = avatarUrl ? '' : settingsDraft.avatarFileId && profileImageFiles.some((file) => file.id === settingsDraft.avatarFileId) ? settingsDraft.avatarFileId : ''
+    const avatarFileId = settingsDraft.avatarFileId && profileImageFiles.some((file) => file.id === settingsDraft.avatarFileId) ? settingsDraft.avatarFileId : ''
     return {
       ...settingsDraft,
       roomId: settingsDraft.roomId.trim() || 'tc-storage-main',
@@ -60,7 +59,7 @@ export function createPanelActions(options: PanelOptions) {
       nodeId: settings.nodeId,
       identity: settings.identity,
       profileName: settingsDraft.profileName.trim() || 'Local user',
-      avatarUrl,
+      avatarUrl: '',
       avatarFileId,
     }
   }

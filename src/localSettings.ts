@@ -26,7 +26,7 @@ export function loadSettings(): AppSettings {
       identity,
       autoConnect: parsed.autoConnect ?? fallback.autoConnect,
       profileName: parsed.profileName?.trim() || fallback.profileName,
-      avatarUrl: parsed.avatarUrl?.trim() || fallback.avatarUrl,
+      avatarUrl: '',
       avatarFileId: parsed.avatarFileId?.trim() || fallback.avatarFileId,
     }
   } catch {

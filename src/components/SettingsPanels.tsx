@@ -108,10 +108,6 @@ export function ProfilePanel(props: {
         <span>Display name</span>
         <input value={props.draft.profileName} onInput={(event) => props.onDraft({ ...props.draft, profileName: event.currentTarget.value })} placeholder="Local user" />
       </label>
-      <label>
-        <span>Icon image URL</span>
-        <input value={props.draft.avatarUrl} onInput={(event) => props.onDraft({ ...props.draft, avatarFileId: '', avatarUrl: event.currentTarget.value })} placeholder="https://example.com/avatar.png" type="url" />
-      </label>
       {props.avatarImages.length > 0 ? (
         <div class="profile-avatar-picker">
           <button type="button" class="profile-avatar-open" onClick={openAvatarImages}>

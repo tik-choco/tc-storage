@@ -2,22 +2,6 @@ import { concatBytes } from './cryptoEncoding.js'
 
 const blockSize = 64
 
-export function pbkdf2Sha256(password: Uint8Array, salt: Uint8Array, iterations: number, length: number): Uint8Array {
-  const blockCount = Math.ceil(length / 32)
-  const output = new Uint8Array(blockCount * 32)
-  for (let block = 1; block <= blockCount; block += 1) {
-    const blockSalt = concatBytes(salt, uint32be(block))
-    let u = hmacSha256(password, blockSalt)
-    const result = new Uint8Array(u)
-    for (let index = 1; index < iterations; index += 1) {
-      u = hmacSha256(password, u)
-      for (let byte = 0; byte < result.length; byte += 1) result[byte] ^= u[byte] ?? 0
-    }
-    output.set(result, (block - 1) * 32)
-  }
-  return output.slice(0, length)
-}
-
 export function hmacSha256(key: Uint8Array, message: Uint8Array): Uint8Array {
   const normalizedKey = key.length > blockSize ? sha256(key) : key
   const outer = new Uint8Array(blockSize)
@@ -81,19 +65,6 @@ export function sha256(message: Uint8Array): Uint8Array {
   return digest
 }
 
-export function chacha20(data: Uint8Array, key: Uint8Array, nonce: Uint8Array): Uint8Array {
-  if (key.length !== 32 || nonce.length !== 12) throw new Error('内部暗号化キーの形式が不正です')
-  const output = new Uint8Array(data.length)
-  let counter = 1
-  for (let offset = 0; offset < data.length; offset += 64) {
-    const stream = chachaBlock(key, nonce, counter)
-    counter += 1
-    const block = data.slice(offset, offset + 64)
-    for (let index = 0; index < block.length; index += 1) output[offset + index] = (block[index] ?? 0) ^ (stream[index] ?? 0)
-  }
-  return output
-}
-
 export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false
   let diff = 0
@@ -120,64 +91,8 @@ function prepareWords(words: Uint32Array, view: DataView, offset: number): void 
   }
 }
 
-function chachaBlock(key: Uint8Array, nonce: Uint8Array, counter: number): Uint8Array {
-  const state = new Uint32Array(16)
-  state.set([0x61707865, 0x3320646e, 0x79622d32, 0x6b206574])
-  for (let index = 0; index < 8; index += 1) state[4 + index] = readLittleEndian(key, index * 4)
-  state[12] = counter
-  state[13] = readLittleEndian(nonce, 0)
-  state[14] = readLittleEndian(nonce, 4)
-  state[15] = readLittleEndian(nonce, 8)
-  const working = new Uint32Array(state)
-  for (let round = 0; round < 10; round += 1) {
-    quarterRound(working, 0, 4, 8, 12)
-    quarterRound(working, 1, 5, 9, 13)
-    quarterRound(working, 2, 6, 10, 14)
-    quarterRound(working, 3, 7, 11, 15)
-    quarterRound(working, 0, 5, 10, 15)
-    quarterRound(working, 1, 6, 11, 12)
-    quarterRound(working, 2, 7, 8, 13)
-    quarterRound(working, 3, 4, 9, 14)
-  }
-  const bytes = new Uint8Array(64)
-  for (let index = 0; index < 16; index += 1) writeLittleEndian(bytes, index * 4, add32(working[index] ?? 0, state[index] ?? 0))
-  return bytes
-}
-
-function quarterRound(state: Uint32Array, a: number, b: number, c: number, d: number): void {
-  state[a] = add32(state[a] ?? 0, state[b] ?? 0)
-  state[d] = rotateLeft((state[d] ?? 0) ^ (state[a] ?? 0), 16)
-  state[c] = add32(state[c] ?? 0, state[d] ?? 0)
-  state[b] = rotateLeft((state[b] ?? 0) ^ (state[c] ?? 0), 12)
-  state[a] = add32(state[a] ?? 0, state[b] ?? 0)
-  state[d] = rotateLeft((state[d] ?? 0) ^ (state[a] ?? 0), 8)
-  state[c] = add32(state[c] ?? 0, state[d] ?? 0)
-  state[b] = rotateLeft((state[b] ?? 0) ^ (state[c] ?? 0), 7)
-}
-
-function uint32be(value: number): Uint8Array {
-  const bytes = new Uint8Array(4)
-  new DataView(bytes.buffer).setUint32(0, value, false)
-  return bytes
-}
-
-function readLittleEndian(bytes: Uint8Array, offset: number): number {
-  return (((bytes[offset] ?? 0) | ((bytes[offset + 1] ?? 0) << 8) | ((bytes[offset + 2] ?? 0) << 16) | ((bytes[offset + 3] ?? 0) << 24)) >>> 0)
-}
-
-function writeLittleEndian(bytes: Uint8Array, offset: number, value: number): void {
-  bytes[offset] = value & 0xff
-  bytes[offset + 1] = (value >>> 8) & 0xff
-  bytes[offset + 2] = (value >>> 16) & 0xff
-  bytes[offset + 3] = (value >>> 24) & 0xff
-}
-
 function rotateRight(value: number, shift: number): number {
   return (value >>> shift) | (value << (32 - shift))
-}
-
-function rotateLeft(value: number, shift: number): number {
-  return ((value << shift) | (value >>> (32 - shift))) >>> 0
 }
 
 function add32(...values: number[]): number {

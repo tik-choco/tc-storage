@@ -112,17 +112,18 @@ test('pending share storage ignores malformed records', () => {
   assert.deepEqual(loadPendingShares().map((share) => share.cid), ['cid-file'])
 })
 
-test('folder access modes survive a reload and normalize invalid modes', () => {
-  saveFolderAccessModes({ 'folder-approval': 'approval', 'folder-shared': 'shared-approval', 'folder-open': 'open' })
+test('folder access modes survive a reload and normalize unsafe or invalid modes', () => {
+  saveFolderAccessModes({ 'folder-approval': 'approval', 'folder-shared': 'shared-approval' })
   localStorage.setItem('tc-storage-folder-access-modes-v1', JSON.stringify({
     ...loadFolderAccessModes(),
+    'folder-open': 'open',
     'folder-invalid': 'anything',
   }))
 
   assert.deepEqual(loadFolderAccessModes(), {
     'folder-approval': 'approval',
     'folder-shared': 'shared-approval',
-    'folder-open': 'open',
+    'folder-open': 'approval',
     'folder-invalid': 'approval',
   })
 })

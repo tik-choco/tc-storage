@@ -73,18 +73,11 @@ function normalizePendingShare(value: unknown): PendingShare | undefined {
   return normalized
 }
 
-function optionalString(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined
-}
-
 function normalizeShareProfile(value: unknown): ShareProfile | undefined {
   if (!value || typeof value !== 'object') return undefined
   const profile = value as Partial<ShareProfile>
   if (typeof profile.name !== 'string') return undefined
-  const normalized: ShareProfile = { name: profile.name }
-  const avatarUrl = optionalString(profile.avatarUrl)
-  if (avatarUrl) normalized.avatarUrl = avatarUrl
-  return normalized
+  return { name: profile.name }
 }
 
 function assignOptionalString<T extends object, K extends keyof T>(target: T, key: K, value: unknown): void {

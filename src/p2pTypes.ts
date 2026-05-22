@@ -6,7 +6,6 @@ export type MistRoomController = Pick<MistModule, 'init' | 'join_room' | 'regist
 
 export type ShareProfile = {
   name: string
-  avatarUrl?: string
 }
 
 export type ShareEnvelope = {
