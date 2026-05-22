@@ -259,6 +259,10 @@
   font-size: 12px;
 }
 
+.table-grid .tile-date {
+  display: none;
+}
+
 .tile-actions {
   justify-content: flex-start;
   margin-top: auto;
