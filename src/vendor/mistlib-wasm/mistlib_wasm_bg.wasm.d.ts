@@ -1,8 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
-export const storage_add: (a: number, b: number, c: number, d: number) => any;
-export const storage_get: (a: number, b: number) => any;
 export const get_all_nodes: () => [number, number];
 export const get_config: () => [number, number];
 export const get_local_track: (a: number, b: number) => [number, number, number];
@@ -21,17 +19,19 @@ export const set_local_track_enabled: (a: number, b: number, c: number) => [numb
 export const unpublish_local_track: (a: number, b: number) => [number, number];
 export const update_position: (a: number, b: number, c: number) => void;
 export const leave_room: () => void;
-export const wasm_bindgen__closure__destroy__h363959a4d9c0960a: (a: number, b: number) => void;
-export const wasm_bindgen__closure__destroy__hc78b9a8ef5871be7: (a: number, b: number) => void;
-export const wasm_bindgen__closure__destroy__h36584e9320caae5c: (a: number, b: number) => void;
-export const wasm_bindgen__convert__closures_____invoke__h30b9ca29ae182cf8: (a: number, b: number, c: any) => [number, number];
-export const wasm_bindgen__convert__closures_____invoke__h1b6d27bb48c02378: (a: number, b: number, c: any, d: any) => void;
-export const wasm_bindgen__convert__closures_____invoke__h232f6ce52dcddfa8: (a: number, b: number, c: any) => void;
-export const wasm_bindgen__convert__closures_____invoke__h232f6ce52dcddfa8_1: (a: number, b: number, c: any) => void;
-export const wasm_bindgen__convert__closures_____invoke__h232f6ce52dcddfa8_2: (a: number, b: number, c: any) => void;
-export const wasm_bindgen__convert__closures_____invoke__h232f6ce52dcddfa8_3: (a: number, b: number, c: any) => void;
-export const wasm_bindgen__convert__closures_____invoke__h232f6ce52dcddfa8_4: (a: number, b: number, c: any) => void;
-export const wasm_bindgen__convert__closures_____invoke__h349daea80ae102d7: (a: number, b: number) => void;
+export const storage_add: (a: number, b: number, c: number, d: number) => any;
+export const storage_get: (a: number, b: number) => any;
+export const wasm_bindgen__closure__destroy__h0e41feffcb0b438f: (a: number, b: number) => void;
+export const wasm_bindgen__closure__destroy__hcdaffa1040963a4b: (a: number, b: number) => void;
+export const wasm_bindgen__closure__destroy__h05a83ba1ebb522b0: (a: number, b: number) => void;
+export const wasm_bindgen__convert__closures_____invoke__h999a9bf274d7c0d8: (a: number, b: number, c: any) => [number, number];
+export const wasm_bindgen__convert__closures_____invoke__h0998374791a8172a: (a: number, b: number, c: any, d: any) => void;
+export const wasm_bindgen__convert__closures_____invoke__h43a49b8d53fe866c: (a: number, b: number, c: any) => void;
+export const wasm_bindgen__convert__closures_____invoke__h43a49b8d53fe866c_1: (a: number, b: number, c: any) => void;
+export const wasm_bindgen__convert__closures_____invoke__h43a49b8d53fe866c_2: (a: number, b: number, c: any) => void;
+export const wasm_bindgen__convert__closures_____invoke__h43a49b8d53fe866c_3: (a: number, b: number, c: any) => void;
+export const wasm_bindgen__convert__closures_____invoke__h43a49b8d53fe866c_4: (a: number, b: number, c: any) => void;
+export const wasm_bindgen__convert__closures_____invoke__h8124756a0cfbb18d: (a: number, b: number) => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
 export const __wbindgen_exn_store: (a: number) => void;

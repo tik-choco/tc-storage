@@ -9,9 +9,14 @@ type NavigatorWithOpfs = Navigator & {
     getDirectory?: () => Promise<unknown>
   }
 }
+type MistConfigBridge = {
+  get_config: () => string
+  set_config: (data: string) => boolean
+}
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
+export const mistStorageMaxCapacityMb = 256 * 1024
 let mistModulePromise: Promise<MistModule> | undefined
 
 function storageLog(message: string, details?: Record<string, unknown>): void {
@@ -27,11 +32,31 @@ export async function loadMistModule(): Promise<MistModule> {
     storageLog('loading mistlib wasm module')
     mistModulePromise = import('./vendor/mistlib-wasm/mistlib_wasm.js').then(async (module) => {
       await module.default()
+      configureMistStorageCapacity(module)
       storageLog('mistlib wasm module initialized')
       return module
     })
   }
   return mistModulePromise
+}
+
+export function configureMistStorageCapacity(mist: MistConfigBridge, capacityMb = mistStorageMaxCapacityMb): boolean {
+  try {
+    const config = parseMistConfig(mist.get_config())
+    const nextConfig = { ...config, storageMaxCapacityMb: capacityMb }
+    const configured = mist.set_config(JSON.stringify(nextConfig))
+    if (!configured) storageWarn('mistlib storage capacity config was rejected', { capacityMb })
+    else storageLog('mistlib storage capacity configured', { capacityMb })
+    return configured
+  } catch (error) {
+    storageWarn('mistlib storage capacity config failed', { capacityMb, error: describeStorageError(error) })
+    return false
+  }
+}
+
+function parseMistConfig(raw: string): Record<string, unknown> {
+  const parsed = JSON.parse(raw) as unknown
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
 }
 
 export async function saveEncryptedFolderToMist(options: {

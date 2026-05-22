@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { makeFileFromDataUrl, makeFolder } from '../src/domain.js'
-import { saveEncryptedFileToMist } from '../src/mistStorage.js'
+import { configureMistStorageCapacity, mistStorageMaxCapacityMb, saveEncryptedFileToMist } from '../src/mistStorage.js'
 
 const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
 const locationDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'location')
@@ -57,4 +57,26 @@ test('saveEncryptedFileToMist reports OPFS requirements before loading mistlib',
     () => saveEncryptedFileToMist({ folder, file, passphrase: 'secret', originNode: 'node-test' }),
     /http:\/\/localhost:5178\/.*HTTPS/,
   )
+})
+
+test('configureMistStorageCapacity sets mistlib storage capacity to 256 GiB', () => {
+  let appliedConfig = ''
+  const mist = {
+    get_config() {
+      return JSON.stringify({
+        maxConnectionCount: 30,
+        storageMaxCapacityMb: 8192,
+      })
+    },
+    set_config(data: string) {
+      appliedConfig = data
+      return true
+    },
+  }
+
+  assert.equal(configureMistStorageCapacity(mist), true)
+  assert.deepEqual(JSON.parse(appliedConfig), {
+    maxConnectionCount: 30,
+    storageMaxCapacityMb: mistStorageMaxCapacityMb,
+  })
 })
