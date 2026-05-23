@@ -12,7 +12,7 @@ import { createPanelActions } from './appPanelActions.js'
 import { createPeerActions } from './appPeerActions.js'
 import { createSelectionActions } from './appSelectionActions.js'
 import { createShareImportActions } from './appShareImportActions.js'
-import { browserViewModeKey } from './appUtils.js'
+import { browserViewModeKey, requiresLargeDownloadConfirmation } from './appUtils.js'
 import { activeFiles, activeFolders, childFolders, filesInFolder } from './domain.js'
 import { isEd25519DidKey } from './didIdentity.js'
 import { useMistShare, type ShareEnvelope, type ShareProfile } from './p2p.js'
@@ -32,6 +32,7 @@ export function useAppController() {
     folderPanelMode, setFolderPanelMode, folderPanelFolderId, setFolderPanelFolderId, selectedFileId, setSelectedFileId, detailFileId, setDetailFileId,
     expandedPreviewOpen, setExpandedPreviewOpen, dragActive, setDragActive, dragItem, setDragItem, selectedItems, setSelectedItems,
     dropTargetFolderId, setDropTargetFolderId, reorderTarget, setReorderTarget, notice, setNotice, busy, setBusy, deleteRequest, setDeleteRequest,
+    downloadConfirmRequest, setDownloadConfirmRequest,
     popoverPositions, setPopoverPositions,
   } = useAppControllerState()
   const transfer = useTransferProgress()
@@ -193,6 +194,31 @@ export function useAppController() {
 
   useEffect(() => setSelectedItems([]), [currentFolderId])
 
+  function requestDownloadFile(file: typeof files[number]): void {
+    if (requiresLargeDownloadConfirmation(file.size)) {
+      setDownloadConfirmRequest({ type: 'file', file, size: file.size })
+      return
+    }
+    void fileContent.downloadStoredFile(file)
+  }
+
+  function requestDownloadFolder(folder: typeof folders[number]): void {
+    const folderSize = folderDownloadSize(snapshot, folder.id)
+    if (requiresLargeDownloadConfirmation(folderSize)) {
+      setDownloadConfirmRequest({ type: 'folder', folder, size: folderSize })
+      return
+    }
+    void fileContent.downloadFolderAsZip(folder)
+  }
+
+  function confirmDownload(): void {
+    const request = downloadConfirmRequest
+    if (!request) return
+    setDownloadConfirmRequest(null)
+    if (request.type === 'file') void fileContent.downloadStoredFile(request.file)
+    else void fileContent.downloadFolderAsZip(request.folder)
+  }
+
   return {
     avatarUrl,
     beginCreateFolder: folderActions.beginCreateFolder,
@@ -211,9 +237,11 @@ export function useAppController() {
     deleteRequest,
     detailFileWithContent,
     detailFolderPeers,
+    downloadConfirmRequest,
     downloadProgress: transfer.downloadProgress,
-    downloadFolderAsZip: fileContent.downloadFolderAsZip,
-    downloadStoredFile: fileContent.downloadStoredFile,
+    confirmDownload,
+    requestDownloadFile,
+    requestDownloadFolder,
     draftAvatarUrl,
     dragActive,
     dragItem,
@@ -278,7 +306,7 @@ export function useAppController() {
     selectedPreviewFile,
     selectedPreviewProgress,
     selection,
-    setBrowserViewMode, setDeleteRequest, setDetailFileId, setExpandedPreviewOpen, setFolderNameDraft,
+    setBrowserViewMode, setDeleteRequest, setDetailFileId, setDownloadConfirmRequest, setExpandedPreviewOpen, setFolderNameDraft,
     setFolderAccessModes, setFolderPanelOpen, setImportKeys, setProfileOpen, setQuery, setSettingsDraft, setSettingsOpen,
     settingsDraft,
     settingsOpen,
@@ -296,3 +324,8 @@ export function useAppController() {
 }
 
 export type AppController = ReturnType<typeof useAppController>
+
+function folderDownloadSize(snapshot: import('./domain.js').StorageSnapshot, folderId: string): number {
+  const folderIds = descendantFolderIds(activeFolders(snapshot), folderId)
+  return activeFiles(snapshot).filter((file) => folderIds.has(file.folderId)).reduce((total, file) => total + file.size, 0)
+}

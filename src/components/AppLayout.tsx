@@ -1,6 +1,6 @@
 import type { AppController } from '../useAppController.js'
 import { BrowserPanel } from './BrowserPanel.js'
-import { DeleteConfirmPanel } from './DeleteConfirmPanel.js'
+import { DeleteConfirmPanel, DownloadConfirmPanel } from './DeleteConfirmPanel.js'
 import { FolderPanel } from './DetailPanel.js'
 import { DraggablePopover } from './FloatingPopover.js'
 import { ExpandedPreview, FileDetailPanel } from './Preview.js'
@@ -57,8 +57,8 @@ export function AppLayout({ controller: c }: AppLayoutProps) {
           onCancelPendingShare={c.cancelPendingShare}
           onConfirmCreateFolder={c.confirmCreateFolder}
           onCreateFolder={c.beginCreateFolder}
-          onDownloadFile={(file) => void c.downloadStoredFile(file)}
-          onDownloadFolder={(folder) => void c.downloadFolderAsZip(folder)}
+          onDownloadFile={c.requestDownloadFile}
+          onDownloadFolder={c.requestDownloadFolder}
           onDeleteFolder={c.requestDeleteFolder}
           onDeleteFile={c.requestDeleteFile}
           onDrag={c.handleDrag}
@@ -89,6 +89,7 @@ export function AppLayout({ controller: c }: AppLayoutProps) {
       {renderSettingsPanel(c)}
       {renderFileDetailPanel(c)}
       {renderDeleteConfirmPanel(c)}
+      {renderDownloadConfirmPanel(c)}
       {c.expandedPreviewOpen && c.selectedPreviewFile ? (
         <ExpandedPreview
           file={c.selectedPreviewFile}
@@ -100,7 +101,7 @@ export function AppLayout({ controller: c }: AppLayoutProps) {
           onClose={() => c.setExpandedPreviewOpen(false)}
           onPrevious={() => c.movePreview(-1)}
           onNext={() => c.movePreview(1)}
-          onDownload={(file) => void c.downloadStoredFile(file)}
+          onDownload={c.requestDownloadFile}
           onPreloadFile={c.preloadFileContent}
         />
       ) : null}
@@ -126,7 +127,7 @@ function renderFolderPanel(c: AppController) {
           }}
           onApproveAccess={(request) => void c.approveFolderAccess(request)}
           onCopy={c.copyText}
-          onDownloadFolder={(folder) => void c.downloadFolderAsZip(folder)}
+          onDownloadFolder={c.requestDownloadFolder}
           onDeleteFolder={c.deleteCurrentFolder}
           onPatchFolder={c.patchCurrentFolder}
           onRejectAccess={c.rejectFolderAccess}
@@ -185,7 +186,7 @@ function renderFileDetailPanel(c: AppController) {
           syncPeers={c.detailFolderPeers}
           onClose={() => c.setDetailFileId(null)}
           onCopy={c.copyText}
-          onDownload={(file) => void c.downloadStoredFile(file)}
+          onDownload={c.requestDownloadFile}
           onDelete={c.requestDeleteFile}
           onRename={c.renameFile}
           onShare={(file) => void c.shareFile(file)}
@@ -202,6 +203,19 @@ function renderDeleteConfirmPanel(c: AppController) {
       <div class="floating-popover confirm-popover centered-popover" onMouseDown={(event) => event.stopPropagation()}>
         <div class="floating-popover-content">
         <DeleteConfirmPanel request={c.deleteRequest} onCancel={() => c.setDeleteRequest(null)} onConfirm={c.confirmDelete} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function renderDownloadConfirmPanel(c: AppController) {
+  if (!c.downloadConfirmRequest) return null
+  return (
+    <div class="floating-popover-layer" onMouseDown={() => c.setDownloadConfirmRequest(null)}>
+      <div class="floating-popover confirm-popover centered-popover" onMouseDown={(event) => event.stopPropagation()}>
+        <div class="floating-popover-content">
+          <DownloadConfirmPanel request={c.downloadConfirmRequest} onCancel={() => c.setDownloadConfirmRequest(null)} onConfirm={c.confirmDownload} />
         </div>
       </div>
     </div>

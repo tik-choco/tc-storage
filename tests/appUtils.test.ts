@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
-import { browserViewModeKey, isMediaFile, loadBrowserViewMode, shouldPreloadVisibleThumbnail } from '../src/appUtils.js'
+import { browserViewModeKey, isMediaFile, largeDownloadConfirmThresholdBytes, loadBrowserViewMode, requiresLargeDownloadConfirmation, shouldPreloadVisibleThumbnail } from '../src/appUtils.js'
 
 let originalLocalStorage: Storage | undefined
 let store: Record<string, string>
@@ -49,4 +49,10 @@ test('media file detection includes images and video', () => {
   assert.equal(isMediaFile({ mimeType: 'image/png' }), true)
   assert.equal(isMediaFile({ mimeType: 'video/mp4' }), true)
   assert.equal(isMediaFile({ mimeType: 'application/pdf' }), false)
+})
+
+test('large download confirmation starts at 100 MiB', () => {
+  assert.equal(requiresLargeDownloadConfirmation(largeDownloadConfirmThresholdBytes - 1), false)
+  assert.equal(requiresLargeDownloadConfirmation(largeDownloadConfirmThresholdBytes), true)
+  assert.equal(requiresLargeDownloadConfirmation(largeDownloadConfirmThresholdBytes + 1), true)
 })

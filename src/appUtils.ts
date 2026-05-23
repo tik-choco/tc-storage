@@ -5,6 +5,7 @@ import type { ShareEnvelope } from './p2p.js'
 
 export const folderColors = ['teal', 'blue', 'amber', 'rose', 'slate'] as const
 export const browserViewModeKey = 'tc-storage-browser-view-mode-v1'
+export const largeDownloadConfirmThresholdBytes = 100 * 1024 * 1024
 
 export function syncLog(message: string, details?: Record<string, unknown>): void {
   debugInfo('sync', message, details)
@@ -46,6 +47,10 @@ export function shouldPreloadVisibleThumbnail(options: {
   visible: boolean
 }): boolean {
   return options.visible && !options.dataUrl && canPreloadThumbnail(options.file) && Boolean(options.file.lastCid || options.file.lastShareCid)
+}
+
+export function requiresLargeDownloadConfirmation(bytes: number): boolean {
+  return bytes >= largeDownloadConfirmThresholdBytes
 }
 
 export function nearestSharedAncestorFolder(snapshot: StorageSnapshot, folderId: string | null): FolderRecord | undefined {

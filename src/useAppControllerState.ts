@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks'
-import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, DeleteRequest, FolderAccessRequest, FolderPanelMode, Notice, PendingShare } from './appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, DeleteRequest, DownloadConfirmRequest, FolderAccessRequest, FolderPanelMode, Notice, PendingShare } from './appTypes.js'
 import { loadBrowserViewMode } from './appUtils.js'
 import { initialPopoverPosition, type PopoverKind, type PopoverPosition } from './components/FloatingPopover.js'
 import type { StorageSnapshot } from './domain.js'
@@ -44,6 +44,7 @@ export function useAppControllerState() {
   const [notice, setNotice] = useState<Notice>({ tone: 'info', text: '' })
   const [busy, setBusy] = useState('')
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null)
+  const [downloadConfirmRequest, setDownloadConfirmRequest] = useState<DownloadConfirmRequest | null>(null)
   const [popoverPositions, setPopoverPositions] = useState<Record<PopoverKind, PopoverPosition>>(() => ({
     profile: initialPopoverPosition('profile'),
     settings: initialPopoverPosition('settings'),
@@ -53,11 +54,11 @@ export function useAppControllerState() {
   }))
 
   return {
-    browserViewMode, busy, currentFolderId, deleteRequest, detailFileId, dragActive, dragItem, dropTargetFolderId,
+    browserViewMode, busy, currentFolderId, deleteRequest, detailFileId, downloadConfirmRequest, dragActive, dragItem, dropTargetFolderId,
     expandedPreviewOpen, fileContentCache, fileShareKeys, folderAccessModes, folderAccessRequests,
     folderKeys, folderNameDraft, folderPanelFolderId, folderPanelMode, folderPanelOpen, folderPeers, importKeys,
     notice, pendingShares, popoverPositions, profileOpen, query, reorderTarget, selectedFileId, selectedItems,
-    setBrowserViewMode, setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setDragActive, setDragItem,
+    setBrowserViewMode, setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setDownloadConfirmRequest, setDragActive, setDragItem,
     setDropTargetFolderId, setExpandedPreviewOpen, setFileContentCache, setFileShareKeys, setFolderAccessModes,
     setFolderAccessRequests, setFolderKeys, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelMode,
     setFolderPanelOpen, setFolderPeers, setImportKeys, setNotice, setPendingShares, setPopoverPositions,

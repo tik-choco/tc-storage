@@ -1,4 +1,5 @@
-import type { DeleteRequest } from '../appTypes.js'
+import type { DeleteRequest, DownloadConfirmRequest } from '../appTypes.js'
+import { formatBytes } from '../domain.js'
 
 export function DeleteConfirmPanel(props: {
   request: DeleteRequest
@@ -27,6 +28,32 @@ export function DeleteConfirmPanel(props: {
       <div class="confirm-actions">
         <button type="button" onClick={props.onCancel}>Cancel</button>
         <button type="button" class="danger" onClick={props.onConfirm}>Delete</button>
+      </div>
+    </section>
+  )
+}
+
+export function DownloadConfirmPanel(props: {
+  request: DownloadConfirmRequest
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const name = props.request.type === 'file' ? props.request.file.name : props.request.folder.name
+  const label = props.request.type === 'file' ? 'file' : 'folder ZIP'
+
+  return (
+    <section class="delete-confirm-panel">
+      <div class="panel-title">
+        <div>
+          <span>Confirm</span>
+          <strong>Download {label}</strong>
+        </div>
+      </div>
+      <p><strong>{name}</strong> をダウンロードしますか？</p>
+      <small>推定サイズは {formatBytes(props.request.size)} です。</small>
+      <div class="confirm-actions">
+        <button type="button" onClick={props.onCancel}>Cancel</button>
+        <button type="button" onClick={props.onConfirm}>Download</button>
       </div>
     </section>
   )

@@ -21,6 +21,10 @@ export type DeleteRequest =
   | { type: 'folder'; folder: FolderRecord }
   | { type: 'selection'; files: FileRecord[]; folders: FolderRecord[] }
 
+export type DownloadConfirmRequest =
+  | { type: 'file'; file: FileRecord; size: number }
+  | { type: 'folder'; folder: FolderRecord; size: number }
+
 export type DownloadProgress = {
   fileId: string
   fileName: string
