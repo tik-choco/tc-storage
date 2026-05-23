@@ -1,7 +1,7 @@
 import { useRef } from 'preact/hooks'
 import type { RequestKeyEntry } from './appAccessActions.js'
 import type { BrowserDragItem, FolderAccessMode, PendingShare } from './appTypes.js'
-import type { FileContentPreloadQueue, FolderStateAnnouncement } from './appControllerTypes.js'
+import type { FileContentFailure, FileContentPreloadQueue, FolderStateAnnouncement } from './appControllerTypes.js'
 import type { StorageSnapshot } from './domain.js'
 import type { AppSettings } from './localSettings.js'
 
@@ -23,7 +23,7 @@ export function useAppControllerRefs<TNetwork>(options: AppControllerRefsOptions
   const folderAccessModesRef = useRef(options.folderAccessModes)
   const fileShareKeysRef = useRef(options.fileShareKeys)
   const fileContentCacheRef = useRef(options.fileContentCache)
-  const fileContentFailuresRef = useRef<Record<string, { retryAfter: number; signature: string }>>({})
+  const fileContentFailuresRef = useRef<Record<string, FileContentFailure>>({})
   const importKeysRef = useRef(options.importKeys)
   const pendingSharesRef = useRef(options.pendingShares)
   const fileContentLoadsRef = useRef<Partial<Record<string, Promise<string>>>>({})

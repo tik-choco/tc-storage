@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { failedThumbnailRetryPeerKey, immediateConnectionAnnounceKey, sharedFolderReannounceIntervalMs, shouldPreloadProfileAvatar, shouldRunSharedFolderReannounce } from '../src/useAppEffects.js'
+import { failedThumbnailRetryPeerKey, immediateConnectionAnnounceKey, sharedFolderReannounceIntervalMs, shouldPreloadProfileAvatar, shouldRetryFileContentFailureAfterPeerConnection, shouldRunSharedFolderReannounce } from '../src/useAppEffects.js'
 
 test('immediateConnectionAnnounceKey waits for stable mist peers', () => {
   const base = {
@@ -50,4 +50,15 @@ test('failed thumbnail retry key advances only for stable mist peers', () => {
   assert.equal(failedThumbnailRetryPeerKey({ networkMode: 'mistlib', stablePeerCount: 1, stablePeerKey: 'node-b' }), 'node-b')
   assert.equal(failedThumbnailRetryPeerKey({ networkMode: 'mistlib', stablePeerCount: 0, stablePeerKey: '' }), '')
   assert.equal(failedThumbnailRetryPeerKey({ networkMode: 'local-gossip', stablePeerCount: 1, stablePeerKey: 'node-b' }), '')
+})
+
+test('failed preview retry after peer connection is limited to transient failures', () => {
+  const base = { retryAfter: Date.now() + 1000, signature: 'signature-a' }
+
+  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'block-not-found' }), true)
+  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'network' }), true)
+  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'decrypt' }), false)
+  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'parse' }), false)
+  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'missing-data' }), false)
+  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'unknown' }), false)
 })

@@ -12,6 +12,14 @@ export interface FileContentPreloadQueue {
   running: boolean
 }
 
+export type FileContentFailureKind = 'block-not-found' | 'network' | 'decrypt' | 'parse' | 'missing-data' | 'unknown'
+
+export type FileContentFailure = {
+  kind: FileContentFailureKind
+  retryAfter: number
+  signature: string
+}
+
 export type FolderStateAnnouncement = {
   audienceKey: string
   cid: string

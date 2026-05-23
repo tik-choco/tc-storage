@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { canPreloadPreviewContent } from '../appUtils.js'
+import { canPreloadPreviewContent, isImageFile } from '../appUtils.js'
 import { ExpandedPreviewShell } from './ExpandedPreviewShell.js'
 import { clamp, clampZoom, isInteractiveFlowTarget, isLeftSideTap, isMobilePreview, pinchMetrics, pointInElement } from './previewInteraction.js'
 import type { ExpandedPreviewProps } from './previewTypes.js'
@@ -9,7 +9,7 @@ export function ExpandedPreview(props: ExpandedPreviewProps) {
   const canNavigate = props.total > 1
   const flowFiles = props.files.length ? props.files : [props.file]
   const flowEnabled = mode === 'flow' && canNavigate
-  const canZoom = !flowEnabled && props.file.mimeType.startsWith('image/') && Boolean(props.file.dataUrl)
+  const canZoom = !flowEnabled && isImageFile(props.file) && Boolean(props.file.dataUrl)
   const [zoom, setZoom] = useState({ scale: 1, x: 0, y: 0 })
   const [flowZoom, setFlowZoom] = useState(1)
   const flowBodyRef = useRef<HTMLDivElement>(null)

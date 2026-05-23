@@ -7,23 +7,28 @@ import { mergeSnapshots, stampFilePatch, stampFolderPatch } from '../src/crdt.js
 import { createInitialSnapshot, makeFileFromDataUrl, makeFolder } from '../src/domain.js'
 import { canAutoImportFolderShare, canAutoImportFolderState, folderFilesForSync, foldersForSync, hasSharedFolderChangesSinceLastShare, sharedFolderSignature, shouldDeferRemoteFolderStateImport } from '../src/folderSync.js'
 
-test('sharedFolderSignature tracks content changes but ignores saved CIDs', () => {
+test('sharedFolderSignature ignores saved folder CIDs but tracks saved file CIDs', () => {
   const { file, folder, snapshot } = snapshotWithFolderAndFile()
 
   const shared = {
     ...snapshot,
     folders: [stampFolderPatch(folder, { shareEnabled: true, lastCid: 'cid-one' }, '2026-05-17T00:00:00.000Z', 'node-a')],
   }
-  const withNewCid = {
+  const withNewFolderCid = {
     ...shared,
     folders: [stampFolderPatch(shared.folders[0]!, { lastCid: 'cid-two' }, '2026-05-17T00:00:01.000Z', 'node-a')],
+  }
+  const withNewFileCid = {
+    ...shared,
+    files: snapshot.files.map((item) => (item.id === file.id ? stampFilePatch(item, { lastCid: 'cid-file-two' }, '2026-05-17T00:00:01.000Z', 'node-a') : item)),
   }
   const withDeletedFile = {
     ...shared,
     files: snapshot.files.map((item) => (item.id === file.id ? stampFilePatch(item, { deletedAt: '2026-05-17T00:00:02.000Z' }, '2026-05-17T00:00:02.000Z', 'node-a') : item)),
   }
 
-  assert.equal(sharedFolderSignature(shared, folder.id), sharedFolderSignature(withNewCid, folder.id))
+  assert.equal(sharedFolderSignature(shared, folder.id), sharedFolderSignature(withNewFolderCid, folder.id))
+  assert.notEqual(sharedFolderSignature(shared, folder.id), sharedFolderSignature(withNewFileCid, folder.id))
   assert.notEqual(sharedFolderSignature(shared, folder.id), sharedFolderSignature(withDeletedFile, folder.id))
 })
 

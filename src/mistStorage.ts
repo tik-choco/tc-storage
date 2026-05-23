@@ -13,6 +13,7 @@ type MistConfigBridge = {
   get_config: () => string
   set_config: (data: string) => boolean
 }
+type StoredBundleKind = 'file' | 'folder'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -150,10 +151,9 @@ export async function loadEncryptedFolderFromMist(cid: string, passphrase: strin
   const normalizedCid = cid.trim()
   storageLog('storage_get folder start', { cid: normalizedCid })
   try {
-    const bytes = await mist.storage_get(normalizedCid)
-    storageLog('storage_get folder complete', { cid: normalizedCid, bytes: bytes.byteLength })
-    const encrypted = JSON.parse(decoder.decode(bytes)) as EncryptedPayload
-    const bundle = await decryptJson<FolderBundle>(encrypted, passphrase)
+    const bytes = await loadStoredBytes(mist, 'folder', normalizedCid)
+    const encrypted = parseEncryptedPayload(bytes, 'folder', normalizedCid)
+    const bundle = await decryptEncryptedPayload<FolderBundle>(encrypted, passphrase, 'folder', normalizedCid)
     storageLog('storage_get folder decrypted', {
       cid: normalizedCid,
       folderId: bundle.folder.id,
@@ -176,10 +176,9 @@ export async function loadEncryptedFileFromMist(cid: string, passphrase: string)
   const normalizedCid = cid.trim()
   storageLog('storage_get file start', { cid: normalizedCid })
   try {
-    const bytes = await mist.storage_get(normalizedCid)
-    storageLog('storage_get file complete', { cid: normalizedCid, bytes: bytes.byteLength })
-    const encrypted = JSON.parse(decoder.decode(bytes)) as EncryptedPayload
-    const bundle = await decryptJson<FileBundle>(encrypted, passphrase)
+    const bytes = await loadStoredBytes(mist, 'file', normalizedCid)
+    const encrypted = parseEncryptedPayload(bytes, 'file', normalizedCid)
+    const bundle = await decryptEncryptedPayload<FileBundle>(encrypted, passphrase, 'file', normalizedCid)
     storageLog('storage_get file decrypted', {
       cid: normalizedCid,
       folderId: bundle.folder.id,
@@ -216,6 +215,39 @@ function mistStorageUnavailableMessage(): string {
 
 function describeStorageError(error: unknown): string {
   return describeError(error, 'unknown storage error')
+}
+
+async function loadStoredBytes(mist: Pick<MistModule, 'storage_get'>, kind: StoredBundleKind, cid: string): Promise<Uint8Array> {
+  try {
+    const bytes = await mist.storage_get(cid)
+    storageLog(`storage_get ${kind} complete`, { cid, bytes: bytes.byteLength })
+    return bytes
+  } catch (error) {
+    const message = describeStorageError(error)
+    storageWarn(`storage_get ${kind} retrieval failed`, { cid, error: message, ...storageContextDetails() })
+    throw new Error(`storage_get ${kind} retrieval failed: ${message}`)
+  }
+}
+
+function parseEncryptedPayload(bytes: Uint8Array, kind: StoredBundleKind, cid: string): EncryptedPayload {
+  const text = decoder.decode(bytes)
+  try {
+    return JSON.parse(text) as EncryptedPayload
+  } catch (error) {
+    const message = describeStorageError(error)
+    storageWarn(`storage_get ${kind} parse failed`, { cid, bytes: bytes.byteLength, textPrefix: text.slice(0, 32), error: message, ...storageContextDetails() })
+    throw new Error(`保存データJSONを解析できませんでした (${kind}): ${message}`)
+  }
+}
+
+async function decryptEncryptedPayload<T>(encrypted: EncryptedPayload, passphrase: string, kind: StoredBundleKind, cid: string): Promise<T> {
+  try {
+    return await decryptJson<T>(encrypted, passphrase)
+  } catch (error) {
+    const message = describeStorageError(error)
+    storageWarn(`storage_get ${kind} decrypt failed`, { cid, error: message, ...storageContextDetails() })
+    throw new Error(`保存データを復号できませんでした (${kind}): ${message}`)
+  }
 }
 
 async function verifyStorageAdd(mist: Pick<MistModule, 'storage_get'>, kind: 'file' | 'folder', cid: string, details: Record<string, unknown>): Promise<void> {

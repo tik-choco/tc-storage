@@ -106,6 +106,7 @@ function pickFileSyncFields(file: FileRecord) {
     mimeType: file.mimeType,
     size: file.size,
     checksum: file.checksum,
+    lastCid: file.lastCid ?? '',
     version: file.version,
     starred: file.starred,
     deletedAt: file.deletedAt ?? '',

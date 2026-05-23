@@ -1,6 +1,7 @@
 import { FileText } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import type { ProgressStatus } from '../appTypes.js'
+import { isAudioFile, isImageFile, isInlinePreviewFile, isPdfFile, isVideoFile } from '../appUtils.js'
 import { formatBytes, type FileRecord } from '../domain.js'
 import { isTextLike } from '../format.js'
 import { ProgressIndicator } from './ProgressIndicator.js'
@@ -8,12 +9,12 @@ import { ProgressIndicator } from './ProgressIndicator.js'
 export function PreviewContent(props: { file: FileRecord; expanded?: boolean; imageStyle?: Record<string, string | undefined>; loadingProgress?: ProgressStatus; zoomable?: boolean }) {
   const [text, setText] = useState('')
   const [textError, setTextError] = useState('')
-  const isImage = props.file.mimeType.startsWith('image/')
-  const isVideo = props.file.mimeType.startsWith('video/')
-  const isAudio = props.file.mimeType.startsWith('audio/')
-  const isPdf = props.file.mimeType === 'application/pdf' || props.file.name.toLowerCase().endsWith('.pdf')
+  const isImage = isImageFile(props.file)
+  const isVideo = isVideoFile(props.file)
+  const isAudio = isAudioFile(props.file)
+  const isPdf = isPdfFile(props.file)
   const isText = isTextLike(props.file)
-  const isInlinePreview = isImage || isVideo || isAudio || isPdf || isText
+  const isInlinePreview = isInlinePreviewFile(props.file)
   const dataUrl = props.file.dataUrl
   const isLoading = !dataUrl && (Boolean(props.loadingProgress) || Boolean(props.file.lastCid))
 

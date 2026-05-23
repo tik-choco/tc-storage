@@ -1,5 +1,5 @@
 import type { Notice } from './appTypes.js'
-import type { FileContentActions, FileContentPreloadQueue, MutableRef, SetState } from './appControllerTypes.js'
+import type { FileContentActions, FileContentFailure, FileContentFailureKind, FileContentPreloadQueue, MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
 import { stampFilePatch } from './crdt.js'
 import { activeFiles, activeFolders, stripFileContent, type FileRecord, type FolderBundle, type FolderRecord, type StorageSnapshot } from './domain.js'
@@ -25,7 +25,7 @@ interface FileContentOptions {
   failDownloadProgress: (requestId: number) => void
   failFileLoadProgress: (fileId: string) => void
   fileContentCacheRef: MutableRef<Record<string, string>>
-  fileContentFailuresRef?: MutableRef<Record<string, { retryAfter: number; signature: string }>>
+  fileContentFailuresRef?: MutableRef<Record<string, FileContentFailure>>
   fileContentLoadsRef: MutableRef<Partial<Record<string, Promise<string>>>>
   fileContentPreloadQueueRef?: MutableRef<FileContentPreloadQueue>
   fileContentStorageRef?: MutableRef<Record<string, string>>
@@ -127,9 +127,9 @@ export function createFileContentActions(options: FileContentOptions): FileConte
         ? loadFileContentFromCandidates(file, candidates).catch(async (error) => {
           if (!folderBundleCandidate) throw error
           syncWarn('file content candidates failed; trying parent folder bundle', { fileId: file.id, fileName: file.name, folderCid: shortLogValue(folderBundleCandidate.cid), error: describeError(error, 'unknown error') })
-          return loadFileContentFromFolderBundle(file, folderBundleCandidate.cid, folderBundleCandidate.passphrase)
+          return loadFileContentFromFolderBundle(file, folderBundleCandidate.cid, folderBundleCandidate.passphrase, attemptedCandidateKeys(candidates))
         })
-        : loadFileContentFromFolderBundle(file, folderBundleCandidate!.cid, folderBundleCandidate!.passphrase)
+        : loadFileContentFromFolderBundle(file, folderBundleCandidate!.cid, folderBundleCandidate!.passphrase, new Set())
       fileContentLoadsRef.current[file.id] = promise
       try {
         const dataUrl = await promise
@@ -190,8 +190,9 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       clearContentFailure(file)
       syncLog('preview preload complete', { fileId: file.id, fileName: file.name })
     }).catch((error) => {
-      rememberContentFailure(file)
-      syncWarn('preview preload failed', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid), error: describeError(error, 'unknown error') })
+      const errorKind = contentErrorKind(error)
+      rememberContentFailure(file, errorKind)
+      syncWarn('preview preload failed', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid), errorKind, error: describeError(error, 'unknown error') })
     })
   }
 
@@ -238,7 +239,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     throw lastError instanceof Error ? lastError : new Error(`${file.name} の本文を取得できませんでした`)
   }
 
-  async function loadFileContentFromFolderBundle(file: FileRecord, folderCid: string, passphrase: string): Promise<string> {
+  async function loadFileContentFromFolderBundle(file: FileRecord, folderCid: string, passphrase: string, attemptedCandidates: Set<string>): Promise<string> {
     syncLog('storage_get start for parent folder content fallback', { fileId: file.id, fileName: file.name, folderCid: shortLogValue(folderCid) })
     const bundle = await materializeFolderBundleFiles(await loadEncryptedFolder(folderCid, passphrase), passphrase)
     const bundledFile = bundle.files.find((item) => item.id === file.id)
@@ -259,7 +260,9 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       return bundledFile.dataUrl
     }
     if (bundledFile.lastCid) {
-      const dataUrl = await loadFileContentFromCandidates(file, [{ cid: bundledFile.lastCid, passphrase, source: 'parent-folder-file' }])
+      const candidate = { cid: bundledFile.lastCid, passphrase, source: 'parent-folder-file' }
+      if (attemptedCandidates.has(candidateKey(candidate))) throw new Error(`${file.name} の本文CIDは既に同じ復号キーで試行済みです`)
+      const dataUrl = await loadFileContentFromCandidates(file, [candidate])
       rememberStoredFile({ ...bundledFile, lastCid: bundledFile.lastCid }, bundle.folder, passphrase)
       acceptBundledFileCid(file, bundledFile, bundle, 'parent-folder-file')
       return dataUrl
@@ -321,6 +324,14 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     const shareCid = file.lastShareCid ?? file.lastCid
     if (shareCid && filePassphrase) candidates.push({ cid: shareCid, passphrase: filePassphrase, source: 'file-share' })
     return candidates
+  }
+
+  function attemptedCandidateKeys(candidates: FileContentCandidate[]): Set<string> {
+    return new Set(candidates.map(candidateKey))
+  }
+
+  function candidateKey(candidate: Pick<FileContentCandidate, 'cid' | 'passphrase'>): string {
+    return `${candidate.cid}\0${candidate.passphrase}`
   }
 
   function folderBundleContentCandidate(file: FileRecord): { cid: string; passphrase: string } | undefined {
@@ -389,9 +400,9 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     return Boolean(failure && failure.signature === fileContentSignature(file) && failure.retryAfter > Date.now())
   }
 
-  function rememberContentFailure(file: FileRecord): void {
+  function rememberContentFailure(file: FileRecord, kind: FileContentFailureKind): void {
     if (!fileContentFailuresRef) return
-    fileContentFailuresRef.current[file.id] = { retryAfter: Date.now() + failedContentRetryMs, signature: fileContentSignature(file) }
+    fileContentFailuresRef.current[file.id] = { kind, retryAfter: Date.now() + failedContentRetryMs, signature: fileContentSignature(file) }
   }
 
   function clearContentFailure(file: FileRecord): void {
@@ -453,12 +464,13 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     return Math.floor((payload.length * 3) / 4) - padding
   }
 
-  function contentErrorKind(error: unknown): string {
+  function contentErrorKind(error: unknown): FileContentFailureKind {
     const message = describeError(error, 'unknown error')
     if (message.includes('Block not found')) return 'block-not-found'
-    if (message.includes('Network error')) return 'network'
+    if (message.includes('Network error') || message.includes('storage_get') || message.includes('retrieval failed')) return 'network'
     if (message.includes('復号') || message.includes('decrypt') || message.includes('AES-GCM')) return 'decrypt'
     if (message.includes('JSON')) return 'parse'
+    if (message.includes('本文') || message.includes('data')) return 'missing-data'
     return 'unknown'
   }
 

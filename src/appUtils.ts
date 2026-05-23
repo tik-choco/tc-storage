@@ -7,6 +7,7 @@ import type { ShareEnvelope } from './p2p.js'
 export const folderColors = ['teal', 'blue', 'amber', 'rose', 'slate'] as const
 export const browserViewModeKey = 'tc-storage-browser-view-mode-v1'
 export const largeDownloadConfirmThresholdBytes = 100 * 1024 * 1024
+export const previewPreloadMaxBytes = 256 * 1024 * 1024
 
 export function syncLog(message: string, details?: Record<string, unknown>): void {
   debugInfo('sync', message, details)
@@ -26,19 +27,29 @@ export function isSeededLegacySnapshot(snapshot: StorageSnapshot): boolean {
   )
 }
 
-export function isImageFile(file: Pick<FileRecord, 'mimeType'>): boolean {
-  return file.mimeType.startsWith('image/')
+const imageFileExtensions = ['.avif', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.webp']
+const videoFileExtensions = ['.3gp', '.avi', '.flv', '.m2ts', '.m4v', '.mkv', '.mov', '.mp4', '.mpeg', '.mpg', '.mts', '.ogv', '.ts', '.webm', '.wmv']
+const audioFileExtensions = ['.aac', '.aif', '.aiff', '.flac', '.m4a', '.mid', '.midi', '.mp3', '.oga', '.ogg', '.opus', '.wav', '.weba']
+
+function hasFileExtension(fileName: string | undefined, extensions: string[]): boolean {
+  if (!fileName) return false
+  const normalized = fileName.toLowerCase()
+  return extensions.some((extension) => normalized.endsWith(extension))
 }
 
-export function isVideoFile(file: Pick<FileRecord, 'mimeType'>): boolean {
-  return file.mimeType.startsWith('video/')
+export function isImageFile(file: Pick<FileRecord, 'mimeType'> & Partial<Pick<FileRecord, 'name'>>): boolean {
+  return file.mimeType.startsWith('image/') || hasFileExtension(file.name, imageFileExtensions)
 }
 
-export function isAudioFile(file: Pick<FileRecord, 'mimeType'>): boolean {
-  return file.mimeType.startsWith('audio/')
+export function isVideoFile(file: Pick<FileRecord, 'mimeType'> & Partial<Pick<FileRecord, 'name'>>): boolean {
+  return file.mimeType.startsWith('video/') || hasFileExtension(file.name, videoFileExtensions)
 }
 
-export function isMediaFile(file: Pick<FileRecord, 'mimeType'>): boolean {
+export function isAudioFile(file: Pick<FileRecord, 'mimeType'> & Partial<Pick<FileRecord, 'name'>>): boolean {
+  return file.mimeType.startsWith('audio/') || hasFileExtension(file.name, audioFileExtensions)
+}
+
+export function isMediaFile(file: Pick<FileRecord, 'mimeType'> & Partial<Pick<FileRecord, 'name'>>): boolean {
   return isImageFile(file) || isVideoFile(file)
 }
 
@@ -50,17 +61,17 @@ export function isInlinePreviewFile(file: Pick<FileRecord, 'mimeType' | 'name'>)
   return isMediaFile(file) || isAudioFile(file) || isPdfFile(file) || isTextLike(file)
 }
 
-export function canPreloadThumbnail(file: Pick<FileRecord, 'deletedAt' | 'mimeType'>): boolean {
-  return !file.deletedAt && isMediaFile(file)
+export function canPreloadThumbnail(file: Pick<FileRecord, 'deletedAt' | 'mimeType' | 'name' | 'size'>): boolean {
+  return !file.deletedAt && file.size < previewPreloadMaxBytes && isMediaFile(file)
 }
 
-export function canPreloadPreviewContent(file: Pick<FileRecord, 'deletedAt' | 'mimeType' | 'name'>): boolean {
-  return !file.deletedAt && isInlinePreviewFile(file)
+export function canPreloadPreviewContent(file: Pick<FileRecord, 'deletedAt' | 'mimeType' | 'name' | 'size'>): boolean {
+  return !file.deletedAt && file.size < previewPreloadMaxBytes && isInlinePreviewFile(file)
 }
 
 export function shouldPreloadVisibleThumbnail(options: {
   dataUrl: string | undefined
-  file: Pick<FileRecord, 'deletedAt' | 'lastCid' | 'lastShareCid' | 'mimeType'>
+  file: Pick<FileRecord, 'deletedAt' | 'lastCid' | 'lastShareCid' | 'mimeType' | 'name' | 'size'>
   visible: boolean
 }): boolean {
   return options.visible && !options.dataUrl && canPreloadThumbnail(options.file) && Boolean(options.file.lastCid || options.file.lastShareCid)

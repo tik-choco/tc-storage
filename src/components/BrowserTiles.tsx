@@ -175,7 +175,7 @@ export function FileTile(props: {
     }, { rootMargin: '160px 0px' })
     observer.observe(element)
     return () => observer.disconnect()
-  }, [props.dataUrl, props.file.id, props.file.lastCid, props.file.lastShareCid, props.file.mimeType, props.file.deletedAt, props.onPreloadFile])
+  }, [props.dataUrl, props.file.id, props.file.lastCid, props.file.lastShareCid, props.file.mimeType, props.file.name, props.file.size, props.file.deletedAt, props.onPreloadFile])
 
   if (isMediaFile(props.file)) {
     return (
@@ -279,7 +279,7 @@ function FileTilePreview(props: { dataUrl: string | undefined; file: FileRecord;
   if (isVideo && props.dataUrl) {
     return (
       <span class={previewClass}>
-        <video src={props.dataUrl} muted playsInline preload="metadata" />
+        <VideoTileThumbnail dataUrl={props.dataUrl} fileName={props.file.name} />
       </span>
     )
   }
@@ -305,6 +305,50 @@ function FileTilePreview(props: { dataUrl: string | undefined; file: FileRecord;
       <FileText size={32} />
     </span>
   )
+}
+
+function VideoTileThumbnail(props: { dataUrl: string; fileName: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    let cancelled = false
+    let frame = 0
+    const revealFrame = () => {
+      if (cancelled) return
+      const target = Number.isFinite(video.duration) && video.duration > 0.25 ? 0.15 : 0
+      if (Math.abs(video.currentTime - target) <= 0.01) return
+      try {
+        video.currentTime = target
+      } catch {
+        // Some codecs reject early seeks until more data is available.
+      }
+    }
+    const scheduleReveal = () => {
+      if (cancelled) return
+      if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+        revealFrame()
+        return
+      }
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(revealFrame)
+    }
+    video.addEventListener('loadedmetadata', scheduleReveal)
+    video.addEventListener('loadeddata', scheduleReveal)
+    video.addEventListener('canplay', scheduleReveal)
+    video.load()
+    scheduleReveal()
+    return () => {
+      cancelled = true
+      if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(frame)
+      video.removeEventListener('loadedmetadata', scheduleReveal)
+      video.removeEventListener('loadeddata', scheduleReveal)
+      video.removeEventListener('canplay', scheduleReveal)
+    }
+  }, [props.dataUrl])
+
+  return <video ref={videoRef} src={props.dataUrl} muted playsInline preload="auto" aria-label={`Preview for ${props.fileName}`} />
 }
 
 function isActionClick(event: MouseEvent): boolean {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type Dispatch, type StateUpdater } from 'preact/hooks'
+import type { FileContentFailure } from './appControllerTypes.js'
 import type { BrowserViewMode, FolderAccessMode, Notice, PendingShare } from './appTypes.js'
 import { activeAncestorFolderId, canPreloadPreviewContent, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import { ensureDidIdentity, publicDidIdentity } from './didIdentity.js'
@@ -60,6 +61,10 @@ export function failedThumbnailRetryPeerKey(options: {
   return options.stablePeerKey
 }
 
+export function shouldRetryFileContentFailureAfterPeerConnection(failure: FileContentFailure): boolean {
+  return failure.kind === 'block-not-found' || failure.kind === 'network'
+}
+
 interface AppEffectsOptions {
   acceptLinkedShare: (share: LinkedShare) => void
   announceSharedFolders: (options?: { publishLocalChangesImmediately?: boolean }) => void
@@ -77,7 +82,7 @@ interface AppEffectsOptions {
   ensureFileContent: (file: FileRecord, options?: { trackProgress?: boolean }) => Promise<FileRecord>
   expandedPreviewOpen: boolean
   fileContentCacheRef: MutableRef<Record<string, string>>
-  fileContentFailuresRef: MutableRef<Record<string, { retryAfter: number; signature: string }>>
+  fileContentFailuresRef: MutableRef<Record<string, FileContentFailure>>
   fileContentCache: Record<string, string>
   fileDataUrls: Record<string, string>
   fileShareKeys: Record<string, string>
@@ -209,11 +214,13 @@ export function useAppEffects(options: AppEffectsOptions): void {
     }
     if (lastFailedThumbnailRetryPeerKeyRef.current === retryPeerKey) return
     lastFailedThumbnailRetryPeerKeyRef.current = retryPeerKey
-    const failedIds = Object.keys(fileContentFailuresRef.current)
-    if (failedIds.length === 0) return
-    fileContentFailuresRef.current = {}
-    syncLog('retrying failed preview preloads after stable peer connection', { failedCount: failedIds.length, stablePeerCount })
-    const failed = new Set(failedIds)
+    const retryableIds = Object.entries(fileContentFailuresRef.current)
+      .filter(([, failure]) => shouldRetryFileContentFailureAfterPeerConnection(failure))
+      .map(([fileId]) => fileId)
+    if (retryableIds.length === 0) return
+    for (const fileId of retryableIds) delete fileContentFailuresRef.current[fileId]
+    syncLog('retrying failed preview preloads after stable peer connection', { failedCount: retryableIds.length, stablePeerCount })
+    const failed = new Set(retryableIds)
     for (const file of files) {
       if (failed.has(file.id) && canPreloadPreviewContent(file) && canResolveFileContent(file)) preloadFileContent(file)
     }

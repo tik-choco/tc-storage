@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createFileContentActions } from '../src/appFileContentActions.js'
 import { createShareImportActions } from '../src/appShareImportActions.js'
+import type { FileContentFailure } from '../src/appControllerTypes.js'
 import type { Notice, PendingShare } from '../src/appTypes.js'
 import { stampFilePatch } from '../src/crdt.js'
 import { createInitialSnapshot, makeFileFromDataUrl, makeFolder, stripFileContent } from '../src/domain.js'
@@ -23,7 +24,7 @@ test('thumbnail preload backs off after a storage_get failure for the same conte
     nodeId: 'node-a',
   }), { lastCid: 'cid-missing' }, now, 'node-a'))
   const snapshot = { ...createInitialSnapshot('node-a'), folders: [folder], files: [file], activity: [] }
-  const failuresRef: { current: Record<string, { retryAfter: number; signature: string }> } = { current: {} }
+  const failuresRef: { current: Record<string, FileContentFailure> } = { current: {} }
   let loadStarts = 0
   let loadFailures = 0
   const actions = createFileContentActions({
@@ -101,6 +102,57 @@ test('thumbnail preload does not start duplicate progress while content is alrea
   actions.preloadFileContent(file)
 
   assert.equal(loadStarts, 0)
+})
+
+test('parent folder fallback does not retry an already failed file CID with the same key', async () => {
+  const now = '2026-05-21T00:00:00.000Z'
+  const folder = makeFolder({ id: 'folder-a', name: 'Folder A', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: 'node-a' })
+  const sharedFolder = { ...folder, shareEnabled: true, lastCid: 'cid-folder' }
+  const file = stripFileContent(stampFilePatch(makeFileFromDataUrl({
+    id: 'file-a',
+    folderId: folder.id,
+    name: 'video.mp4',
+    mimeType: 'video/mp4',
+    size: 5,
+    dataUrl: 'data:video/mp4;base64,aGVsbG8=',
+    checksum: 'checksum-a',
+    now,
+    nodeId: 'node-a',
+  }), { lastCid: 'cid-file' }, now, 'node-a'))
+  const snapshot = { ...createInitialSnapshot('node-a'), folders: [sharedFolder], files: [file], activity: [] }
+  let fileLoads = 0
+  let folderLoads = 0
+  const actions = createFileContentActions({
+    failDownloadProgress: () => {},
+    failFileLoadProgress: () => {},
+    fileContentCacheRef: { current: {} },
+    fileContentFailuresRef: { current: {} },
+    fileContentLoadsRef: { current: {} },
+    fileShareKeysRef: { current: {} },
+    finishDownloadProgress: () => {},
+    finishFileLoadProgress: () => {},
+    folderKeysRef: { current: { [folder.id]: 'secret' } },
+    loadEncryptedFile: async () => {
+      fileLoads += 1
+      throw new Error('保存データを復号できませんでした')
+    },
+    loadEncryptedFolder: async () => {
+      folderLoads += 1
+      return { version: 1, exportedAt: now, originNode: 'node-a', folder: sharedFolder, files: [file] }
+    },
+    setFileContentCache: () => {},
+    setNotice: () => {},
+    setSnapshot: () => {},
+    settingsRef: { current: testSettings() },
+    snapshotRef: { current: snapshot },
+    startDownloadProgress: () => 0,
+    startFileLoadProgress: () => file.id,
+    updateDownloadProgress: () => {},
+  })
+
+  await assert.rejects(() => actions.ensureFileContent(file), /試行済み/)
+  assert.equal(fileLoads, 1)
+  assert.equal(folderLoads, 1)
 })
 
 test('auto folder import backs off after a storage_get failure for the same share', async () => {
