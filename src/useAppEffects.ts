@@ -62,7 +62,7 @@ export function failedThumbnailRetryPeerKey(options: {
 }
 
 export function shouldRetryFileContentFailureAfterPeerConnection(failure: FileContentFailure): boolean {
-  return failure.kind === 'block-not-found' || failure.kind === 'network'
+  return failure.kind === 'block-not-found' || failure.kind === 'network' || failure.kind === 'decrypt' || failure.kind === 'parse'
 }
 
 interface AppEffectsOptions {
@@ -79,7 +79,7 @@ interface AppEffectsOptions {
   currentFolder: FolderRecord | null
   currentFolderId: string | null
   detailFileId: string | null
-  ensureFileContent: (file: FileRecord, options?: { trackProgress?: boolean }) => Promise<FileRecord>
+  ensureFileContent: (file: FileRecord, options?: { suppressRepairRequest?: boolean; trackProgress?: boolean }) => Promise<FileRecord>
   expandedPreviewOpen: boolean
   fileContentCacheRef: MutableRef<Record<string, string>>
   fileContentFailuresRef: MutableRef<Record<string, FileContentFailure>>

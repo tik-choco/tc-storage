@@ -33,7 +33,7 @@ export function parseEnvelope(value: unknown): ShareEnvelope | undefined {
   if (!value || typeof value !== 'object') return undefined
   const envelope = value as Partial<ShareEnvelope>
   if (
-    (envelope.type === 'hello' || envelope.type === 'folder-share' || envelope.type === 'file-share' || envelope.type === 'folder-state' || envelope.type === 'folder-change' || envelope.type === 'folder-access-request' || envelope.type === 'folder-access-grant' || envelope.type === 'folder-access-denied') &&
+    (envelope.type === 'hello' || envelope.type === 'folder-share' || envelope.type === 'file-share' || envelope.type === 'folder-state' || envelope.type === 'folder-change' || envelope.type === 'file-content-repair-request' || envelope.type === 'folder-access-request' || envelope.type === 'folder-access-grant' || envelope.type === 'folder-access-denied') &&
     typeof envelope.from === 'string' &&
     typeof envelope.roomId === 'string' &&
     typeof envelope.sentAt === 'string' &&
@@ -61,6 +61,7 @@ export function shareLabel(type: ShareEnvelope['type']): string {
   if (type === 'folder-share') return 'フォルダー共有'
   if (type === 'folder-state') return 'フォルダー状態'
   if (type === 'folder-change') return 'フォルダー変更'
+  if (type === 'file-content-repair-request') return '本文修復リクエスト'
   if (type === 'folder-access-request') return 'アクセスリクエスト'
   if (type === 'folder-access-grant') return 'アクセス承認'
   if (type === 'folder-access-denied') return 'アクセス却下'

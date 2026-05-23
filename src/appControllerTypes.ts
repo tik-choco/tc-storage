@@ -1,7 +1,7 @@
 import type { Dispatch, StateUpdater } from 'preact/hooks'
 import type { BrowserDragItem } from './appTypes.js'
 import type { FileRecord, FolderRecord } from './domain.js'
-import type { useMistShare } from './p2p.js'
+import type { ShareEnvelope, useMistShare } from './p2p.js'
 
 export type MutableRef<T> = { current: T }
 export type SetState<T> = Dispatch<StateUpdater<T>>
@@ -31,8 +31,9 @@ export interface FileContentActions {
   canResolveFileContent: (file: FileRecord) => boolean
   downloadFolderAsZip: (folder: FolderRecord) => Promise<void>
   downloadStoredFile: (file: FileRecord) => Promise<void>
-  ensureFileContent: (file: FileRecord, options?: { trackProgress?: boolean }) => Promise<FileRecord>
+  ensureFileContent: (file: FileRecord, options?: { suppressRepairRequest?: boolean; trackProgress?: boolean }) => Promise<FileRecord>
   ensureFolderFilesStored: (folder: FolderRecord, filesForSave: FileRecord[], passphrase: string) => Promise<FileRecord[]>
+  handleFileContentRepairRequest: (request: Pick<ShareEnvelope, 'cid' | 'fileId' | 'fileName' | 'folderId' | 'from'>) => void
   hasUntrustedFolderContent: (folderId: string) => boolean
   materializeFolderBundleFiles: (bundle: import('./domain.js').FolderBundle, passphrase: string) => Promise<import('./domain.js').FolderBundle>
   preloadFileContent: (file: FileRecord) => void

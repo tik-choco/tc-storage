@@ -52,13 +52,13 @@ test('failed thumbnail retry key advances only for stable mist peers', () => {
   assert.equal(failedThumbnailRetryPeerKey({ networkMode: 'local-gossip', stablePeerCount: 1, stablePeerKey: 'node-b' }), '')
 })
 
-test('failed preview retry after peer connection is limited to transient failures', () => {
+test('failed preview retry after peer connection includes corrupt retrieval failures', () => {
   const base = { retryAfter: Date.now() + 1000, signature: 'signature-a' }
 
   assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'block-not-found' }), true)
   assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'network' }), true)
-  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'decrypt' }), false)
-  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'parse' }), false)
+  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'decrypt' }), true)
+  assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'parse' }), true)
   assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'missing-data' }), false)
   assert.equal(shouldRetryFileContentFailureAfterPeerConnection({ ...base, kind: 'unknown' }), false)
 })

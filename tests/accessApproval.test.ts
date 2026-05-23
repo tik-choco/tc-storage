@@ -33,6 +33,7 @@ test('folder-share cid after fixed invite uses the granted folder key for immedi
     detailFileId: null,
     folderKeysRef: { current: { [fixedFolderId]: folderSecret } },
     folderPanelFolderId: null,
+    handleFileContentRepairRequest: () => {},
     handleFolderAccessDenied: () => {},
     handleFolderAccessGrant: async () => {},
     handleFolderAccessRequest: () => {},

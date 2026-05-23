@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { createFileContentActions } from '../src/appFileContentActions.js'
 import { createInitialSnapshot, makeFileFromDataUrl, makeFolder, stripFileContent, type StorageSnapshot } from '../src/domain.js'
 import { stampFilePatch, stampFolderPatch } from '../src/crdt.js'
+import type { BroadcastSharePayload } from '../src/p2pTypes.js'
 
 type StateUpdate<T> = T | ((current: T) => T)
 
@@ -152,6 +153,62 @@ test('parent folder publish does not treat independently shared child cache as u
   assert.equal(actions.hasUntrustedFolderContent(sharedChildFolder.id), true)
 })
 
+test('decrypt failure broadcasts a file content repair request for shared content', async () => {
+  const { childFileWithCid, sharedRoot, snapshot } = snapshotWithSharedChildFile({ rootLastCid: false })
+  const broadcasts: BroadcastSharePayload[] = []
+  const harness = createContentActionsHarness({
+    snapshot,
+    folderKeys: { [sharedRoot.id]: 'folder-secret' },
+    loadEncryptedFile: async () => {
+      throw new Error('保存データを復号できませんでした (file): unknown storage error')
+    },
+    networkRef: networkRefForBroadcasts(broadcasts),
+  })
+
+  await assert.rejects(() => harness.actions.ensureFileContent(childFileWithCid), /復号/)
+
+  assert.equal(broadcasts.length, 1)
+  assert.equal(broadcasts[0]?.type, 'file-content-repair-request')
+  assert.equal(broadcasts[0]?.folderId, sharedRoot.id)
+  assert.equal(broadcasts[0]?.fileId, childFileWithCid.id)
+  assert.equal(broadcasts[0]?.cid, childFileWithCid.lastCid)
+})
+
+test('file content repair request re-saves cached content and announces the new cid', async () => {
+  const { childFileWithCid, sharedRoot, snapshot } = snapshotWithSharedChildFile()
+  const dataUrl = 'data:text/plain;base64,aGVsbG8='
+  const broadcasts: BroadcastSharePayload[] = []
+  const harness = createContentActionsHarness({
+    snapshot,
+    folderKeys: { [sharedRoot.id]: 'folder-secret' },
+    initialCache: { [childFileWithCid.id]: dataUrl },
+    networkRef: networkRefForBroadcasts(broadcasts),
+    saveEncryptedFile: async ({ file, folder, passphrase }) => {
+      assert.equal(folder.id, sharedRoot.id)
+      assert.equal(passphrase, 'folder-secret')
+      assert.equal(file.dataUrl, dataUrl)
+      return 'cid-repaired'
+    },
+  })
+
+  harness.actions.handleFileContentRepairRequest({
+    cid: childFileWithCid.lastCid,
+    fileId: childFileWithCid.id,
+    fileName: childFileWithCid.name,
+    folderId: sharedRoot.id,
+    from: 'node-b',
+  })
+  await settle()
+
+  const repairedFile = harness.snapshot().files.find((file) => file.id === childFileWithCid.id)
+  assert.equal(repairedFile?.lastCid, 'cid-repaired')
+  assert.equal(broadcasts.length, 1)
+  assert.equal(broadcasts[0]?.type, 'folder-change')
+  assert.equal(broadcasts[0]?.changeType, 'file-upserted')
+  assert.equal(broadcasts[0]?.cid, 'cid-repaired')
+  assert.equal(broadcasts[0]?.file?.lastCid, 'cid-repaired')
+})
+
 function createContentActionsForSnapshot(
   snapshot: StorageSnapshot,
   folderKeys: Record<string, string>,
@@ -167,6 +224,7 @@ function createContentActionsHarness(options: {
   initialCache?: Record<string, string>
   loadEncryptedFile?: Parameters<typeof createFileContentActions>[0]['loadEncryptedFile']
   loadEncryptedFolder?: Parameters<typeof createFileContentActions>[0]['loadEncryptedFolder']
+  networkRef?: Parameters<typeof createFileContentActions>[0]['networkRef']
   saveEncryptedFile?: Parameters<typeof createFileContentActions>[0]['saveEncryptedFile']
 }) {
   let cache = options.initialCache ?? {}
@@ -185,6 +243,7 @@ function createContentActionsHarness(options: {
     folderKeysRef: { current: options.folderKeys },
     loadEncryptedFile: options.loadEncryptedFile,
     loadEncryptedFolder: options.loadEncryptedFolder,
+    networkRef: options.networkRef,
     saveEncryptedFile: options.saveEncryptedFile,
     setFileContentCache: (update) => {
       cache = applyStateUpdate(cache, update)
@@ -204,15 +263,34 @@ function createContentActionsHarness(options: {
   return { actions, snapshot: () => snapshotValue }
 }
 
-function snapshotWithSharedChildFile() {
+function snapshotWithSharedChildFile(options: { rootLastCid?: boolean } = {}) {
   const now = '2026-05-21T00:00:00.000Z'
-  const sharedRoot = stampFolderPatch(makeFolder({ id: 'folder-root', name: 'Root', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: 'node-a' }), { shareEnabled: true, lastCid: 'cid-root' }, now, 'node-a')
+  const sharedRoot = stampFolderPatch(
+    makeFolder({ id: 'folder-root', name: 'Root', parentId: null, color: 'teal', roomId: 'tc-storage-main', now, nodeId: 'node-a' }),
+    options.rootLastCid === false ? { shareEnabled: true } : { shareEnabled: true, lastCid: 'cid-root' },
+    now,
+    'node-a',
+  )
   const childFolder = makeFolder({ id: 'folder-child', name: 'Child', parentId: sharedRoot.id, color: 'blue', roomId: 'tc-storage-main', now, nodeId: 'node-a' })
   const childFile = makeFileFromDataUrl({ id: 'file-child', folderId: childFolder.id, name: 'child.txt', mimeType: 'text/plain', size: 5, dataUrl: 'data:text/plain;base64,aGVsbG8=', checksum: 'checksum-child', now, nodeId: 'node-a' })
   const childFileWithCid = stripFileContent(stampFilePatch(childFile, { lastCid: 'cid-child' }, now, 'node-a'))
   return { childFileWithCid, childFolder, sharedRoot, snapshot: { ...createInitialSnapshot('node-a'), folders: [sharedRoot, childFolder], files: [childFileWithCid], activity: [] } }
 }
 
+function networkRefForBroadcasts(broadcasts: BroadcastSharePayload[]): NonNullable<Parameters<typeof createFileContentActions>[0]['networkRef']> {
+  return {
+    current: {
+      broadcastShare: (payload: BroadcastSharePayload) => {
+        broadcasts.push(payload)
+      },
+    },
+  } as NonNullable<Parameters<typeof createFileContentActions>[0]['networkRef']>
+}
+
 function applyStateUpdate<T>(current: T, update: StateUpdate<T>): T {
   return typeof update === 'function' ? (update as (current: T) => T)(current) : update
+}
+
+async function settle(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0))
 }

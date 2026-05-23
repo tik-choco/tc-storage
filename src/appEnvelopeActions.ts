@@ -20,6 +20,7 @@ interface EnvelopeOptions {
   pendingSharesRef: MutableRef<PendingShare[]>
   rememberFolderPeer: (envelope: Pick<ShareEnvelope, 'folderId' | 'from' | 'senderProfile' | 'sentAt'>) => void
   scheduleFolderSync: (folderId: string, reason: string) => void
+  handleFileContentRepairRequest: (envelope: ShareEnvelope) => void
   handleFolderAccessDenied: (envelope: ShareEnvelope) => void
   handleFolderAccessGrant: (envelope: ShareEnvelope) => Promise<void>
   handleFolderAccessRequest: (envelope: ShareEnvelope) => void
@@ -44,7 +45,7 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
     announceSharedFolders, autoImportCidsRef, autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare,
     currentFolderId, detailFileId, folderKeysRef, folderPanelFolderId, helloResponseAtRef,
     importKeysRef, pendingSharesRef, rememberFolderPeer, scheduleFolderSync,
-    handleFolderAccessDenied, handleFolderAccessGrant, handleFolderAccessRequest,
+    handleFileContentRepairRequest, handleFolderAccessDenied, handleFolderAccessGrant, handleFolderAccessRequest,
     selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderPanelFolderId, setFolderPanelOpen, setNotice, setPendingShares, setSelectedFileId,
     setSnapshot, snapshotRef,
@@ -69,6 +70,11 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
     }
     if (envelope.type === 'folder-change') {
       receiveFolderChange(envelope)
+      return
+    }
+    if (envelope.type === 'file-content-repair-request') {
+      syncLog('received file content repair request', envelopeLogDetails(envelope))
+      handleFileContentRepairRequest(envelope)
       return
     }
     if (envelope.type === 'folder-access-request') {

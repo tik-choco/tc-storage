@@ -9,7 +9,7 @@ export type ShareProfile = {
 }
 
 export type ShareEnvelope = {
-  type: 'hello' | 'folder-share' | 'file-share' | 'folder-state' | 'folder-change' | 'folder-access-request' | 'folder-access-grant' | 'folder-access-denied'
+  type: 'hello' | 'folder-share' | 'file-share' | 'folder-state' | 'folder-change' | 'file-content-repair-request' | 'folder-access-request' | 'folder-access-grant' | 'folder-access-denied'
   from: string
   roomId: string
   sentAt: string
@@ -48,5 +48,5 @@ export type NetworkState = {
 }
 
 export type BroadcastSharePayload = Omit<ShareEnvelope, 'type' | 'from' | 'roomId' | 'sentAt'> & {
-  type?: 'folder-share' | 'file-share' | 'folder-state' | 'folder-change' | 'folder-access-request' | 'folder-access-grant' | 'folder-access-denied'
+  type?: 'folder-share' | 'file-share' | 'folder-state' | 'folder-change' | 'file-content-repair-request' | 'folder-access-request' | 'folder-access-grant' | 'folder-access-denied'
 }

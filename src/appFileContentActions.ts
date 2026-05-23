@@ -1,5 +1,5 @@
 import type { Notice } from './appTypes.js'
-import type { FileContentActions, FileContentFailure, FileContentFailureKind, FileContentPreloadQueue, MutableRef, SetState } from './appControllerTypes.js'
+import type { FileContentActions, FileContentFailure, FileContentFailureKind, FileContentPreloadQueue, MistShare, MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
 import { stampFilePatch } from './crdt.js'
 import { activeFiles, activeFolders, stripFileContent, type FileRecord, type FolderBundle, type FolderRecord, type StorageSnapshot } from './domain.js'
@@ -10,6 +10,7 @@ import { folderKeyHash } from './folderKeyProof.js'
 import { loadEncryptedFileFromMist, loadEncryptedFolderFromMist, saveEncryptedFileToMist } from './mistStorage.js'
 import { nearestSharedAncestorFolder, shortLogValue, syncLog, syncWarn } from './appUtils.js'
 import type { AppSettings } from './localSettings.js'
+import type { ShareEnvelope } from './p2p.js'
 import { createZipBlob, dataUrlToBytes } from './zip.js'
 
 type DownloadTarget = Pick<FileRecord, 'id' | 'name'>
@@ -40,6 +41,7 @@ interface FileContentOptions {
   snapshotRef: MutableRef<StorageSnapshot>
   loadEncryptedFile?: LoadEncryptedFile
   loadEncryptedFolder?: LoadEncryptedFolder
+  networkRef?: MutableRef<MistShare>
   saveEncryptedFile?: SaveEncryptedFile
   startDownloadProgress: (file: DownloadTarget, cached: boolean) => number
   startFileLoadProgress: (file: FileRecord) => string
@@ -51,7 +53,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     failDownloadProgress, failFileLoadProgress, fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef,
     fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, finishDownloadProgress, finishFileLoadProgress, folderKeysRef,
     loadEncryptedFile = loadEncryptedFileFromMist, loadEncryptedFolder = loadEncryptedFolderFromMist,
-    saveEncryptedFile = saveEncryptedFileToMist, setFileContentCache, setNotice, setSnapshot, settingsRef,
+    networkRef, saveEncryptedFile = saveEncryptedFileToMist, setFileContentCache, setNotice, setSnapshot, settingsRef,
     snapshotRef, startDownloadProgress, startFileLoadProgress, updateDownloadProgress,
   } = options
 
@@ -104,7 +106,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     return { ...bundle, files }
   }
 
-  async function ensureFileContent(file: FileRecord, options: { trackProgress?: boolean } = {}): Promise<FileRecord> {
+  async function ensureFileContent(file: FileRecord, options: { suppressRepairRequest?: boolean; trackProgress?: boolean } = {}): Promise<FileRecord> {
     const cached = file.dataUrl ?? fileContentCacheRef.current[file.id]
     if (cached) {
       syncLog('file content cache hit', { fileId: file.id, fileName: file.name, hasRecordDataUrl: Boolean(file.dataUrl), hasMemoryCache: Boolean(fileContentCacheRef.current[file.id]) })
@@ -143,6 +145,9 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       }
     } catch (error) {
       if (progressFileId) failFileLoadProgress(progressFileId)
+      const errorKind = contentErrorKind(error)
+      rememberContentFailure(file, errorKind)
+      if (!options.suppressRepairRequest) requestFileContentRepair(file, errorKind)
       throw error
     }
   }
@@ -205,6 +210,129 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     return Boolean(file.dataUrl || fileContentCacheRef.current[file.id] || (file.lastCid && folderPassphrase) ||
       (file.lastCid && sharedRootPassphrase) || ((file.lastShareCid ?? file.lastCid) && filePassphrase) ||
       (folder?.lastCid && folderPassphrase) || (sharedRoot?.lastCid && sharedRootPassphrase))
+  }
+
+  function requestFileContentRepair(file: FileRecord, kind: FileContentFailureKind): void {
+    if (!networkRef || !shouldRequestFileContentRepair(kind) || !file.lastCid) return
+    const snapshotValue = snapshotRef.current
+    const folder = snapshotValue.folders.find((item) => item.id === file.folderId && !item.deletedAt)
+    const sharedRoot = nearestSharedAncestorFolder(snapshotValue, file.folderId) ?? (folder?.shareEnabled ? folder : undefined)
+    if (!sharedRoot) return
+    syncLog('requesting file content repair from peers', {
+      fileId: file.id,
+      fileName: file.name,
+      folderId: sharedRoot.id,
+      cid: shortLogValue(file.lastCid),
+      errorKind: kind,
+    })
+    networkRef.current.broadcastShare({
+      type: 'file-content-repair-request',
+      clock: snapshotValue.clock + 1,
+      folderId: sharedRoot.id,
+      folderName: sharedRoot.name,
+      fileId: file.id,
+      fileName: file.name,
+      cid: file.lastCid,
+    })
+  }
+
+  function handleFileContentRepairRequest(request: Pick<ShareEnvelope, 'cid' | 'fileId' | 'fileName' | 'folderId' | 'from'>): void {
+    if (!networkRef || !request.folderId || !request.fileId || !request.cid) return
+    const snapshotValue = snapshotRef.current
+    const sharedRoot = snapshotValue.folders.find((item) => item.id === request.folderId && !item.deletedAt && item.shareEnabled)
+    const passphrase = sharedRoot ? folderKeysRef.current[sharedRoot.id] : ''
+    if (!sharedRoot || !passphrase) return
+    const folderIds = descendantFolderIds(activeFolders(snapshotValue), sharedRoot.id)
+    const file = activeFiles(snapshotValue).find((item) => item.id === request.fileId && folderIds.has(item.folderId))
+    if (!file) return
+    if (file.lastCid && file.lastCid !== request.cid) {
+      syncLog('file content repair request answered with current metadata', {
+        requester: shortLogValue(request.from),
+        folderId: sharedRoot.id,
+        fileId: file.id,
+        fileName: file.name,
+        requestedCid: shortLogValue(request.cid),
+        currentCid: shortLogValue(file.lastCid),
+      })
+      networkRef.current.broadcastShare({
+        type: 'folder-change',
+        clock: snapshotRef.current.clock + 1,
+        changeType: 'file-upserted',
+        folderId: sharedRoot.id,
+        folderName: sharedRoot.name,
+        fileId: file.id,
+        fileName: file.name,
+        file: stripFileContent(file),
+        cid: file.lastCid,
+      })
+      return
+    }
+    void repairSharedFileContent(sharedRoot, file, passphrase, request)
+  }
+
+  async function repairSharedFileContent(
+    sharedRoot: FolderRecord,
+    file: FileRecord,
+    passphrase: string,
+    request: Pick<ShareEnvelope, 'cid' | 'fileId' | 'fileName' | 'from'>,
+  ): Promise<void> {
+    const cached = file.dataUrl ?? fileContentCacheRef.current[file.id]
+    if (!cached && !canResolveFileContent(file)) {
+      syncLog('file content repair request skipped: content not available locally', {
+        requester: shortLogValue(request.from),
+        folderId: sharedRoot.id,
+        fileId: file.id,
+        fileName: file.name,
+        requestedCid: shortLogValue(request.cid),
+      })
+      return
+    }
+    try {
+      syncLog('file content repair storage_add start', {
+        requester: shortLogValue(request.from),
+        folderId: sharedRoot.id,
+        fileId: file.id,
+        fileName: file.name,
+        requestedCid: shortLogValue(request.cid),
+      })
+      const fileWithContent = cached ? { ...file, dataUrl: cached } : await ensureFileContent(file, { suppressRepairRequest: true })
+      const cid = await saveEncryptedFile({ folder: sharedRoot, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId })
+      const now = new Date().toISOString()
+      const repairedFile = stripFileContent(stampFilePatch(fileWithContent, { lastCid: cid }, now, settingsRef.current.nodeId))
+      rememberStoredFile(repairedFile, sharedRoot, passphrase)
+      setSnapshot((current) => ({
+        ...current,
+        files: current.files.map((item) => (item.id === file.id ? repairedFile : item)),
+      }))
+      networkRef?.current.broadcastShare({
+        type: 'folder-change',
+        clock: snapshotRef.current.clock + 1,
+        changeType: 'file-upserted',
+        folderId: sharedRoot.id,
+        folderName: sharedRoot.name,
+        fileId: repairedFile.id,
+        fileName: repairedFile.name,
+        file: repairedFile,
+        cid,
+      })
+      syncLog('file content repair storage_add complete', {
+        requester: shortLogValue(request.from),
+        folderId: sharedRoot.id,
+        fileId: repairedFile.id,
+        fileName: repairedFile.name,
+        previousCid: shortLogValue(request.cid),
+        cid: shortLogValue(cid),
+      })
+    } catch (error) {
+      syncWarn('file content repair failed', {
+        requester: shortLogValue(request.from),
+        folderId: sharedRoot.id,
+        fileId: file.id,
+        fileName: file.name,
+        requestedCid: shortLogValue(request.cid),
+        error: describeError(error, 'unknown error'),
+      })
+    }
   }
 
   function hasUntrustedFolderContent(folderId: string): boolean {
@@ -474,7 +602,11 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     return 'unknown'
   }
 
-  return { canResolveFileContent, downloadFolderAsZip, downloadStoredFile, ensureFileContent, ensureFolderFilesStored, hasUntrustedFolderContent, materializeFolderBundleFiles, preloadFileContent }
+  return { canResolveFileContent, downloadFolderAsZip, downloadStoredFile, ensureFileContent, ensureFolderFilesStored, handleFileContentRepairRequest, hasUntrustedFolderContent, materializeFolderBundleFiles, preloadFileContent }
+}
+
+function shouldRequestFileContentRepair(kind: FileContentFailureKind): boolean {
+  return kind === 'decrypt' || kind === 'parse' || kind === 'block-not-found' || kind === 'network'
 }
 
 function schedulePreloadTask(task: () => void): void {
