@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type Dispatch, type StateUpdater } from 'preact/hooks'
 import type { BrowserViewMode, FolderAccessMode, Notice, PendingShare } from './appTypes.js'
-import { activeAncestorFolderId, canPreloadThumbnail, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
+import { activeAncestorFolderId, canPreloadPreviewContent, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import { ensureDidIdentity, publicDidIdentity } from './didIdentity.js'
 import type { FileRecord, FolderRecord, StorageSnapshot } from './domain.js'
 import { describeError } from './errors.js'
@@ -212,10 +212,10 @@ export function useAppEffects(options: AppEffectsOptions): void {
     const failedIds = Object.keys(fileContentFailuresRef.current)
     if (failedIds.length === 0) return
     fileContentFailuresRef.current = {}
-    syncLog('retrying failed thumbnail preloads after stable peer connection', { failedCount: failedIds.length, stablePeerCount })
+    syncLog('retrying failed preview preloads after stable peer connection', { failedCount: failedIds.length, stablePeerCount })
     const failed = new Set(failedIds)
     for (const file of files) {
-      if (failed.has(file.id) && canPreloadThumbnail(file) && canResolveFileContent(file)) preloadFileContent(file)
+      if (failed.has(file.id) && canPreloadPreviewContent(file) && canResolveFileContent(file)) preloadFileContent(file)
     }
   }, [canResolveFileContent, fileContentFailuresRef, files, networkMode, preloadFileContent, stablePeerCount, stablePeerKey])
   useShareLinkImport(useCallback(acceptLinkedShare, []))
@@ -325,7 +325,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
     const currentIndex = previewFiles.findIndex((file) => file.id === selectedFileId)
     if (currentIndex < 0) return
     for (const file of [previewFiles[currentIndex - 1], previewFiles[currentIndex + 1]]) {
-      if (!file || fileDataUrls[file.id] || !canPreloadThumbnail(file) || !canResolveFileContent(file)) continue
+      if (!file || fileDataUrls[file.id] || !canPreloadPreviewContent(file) || !canResolveFileContent(file)) continue
       preloadFileContent(file)
     }
   }, [canResolveFileContent, expandedPreviewOpen, fileDataUrls, preloadFileContent, previewFiles, selectedFileId])

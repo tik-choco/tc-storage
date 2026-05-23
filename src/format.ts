@@ -24,7 +24,7 @@ export function dateLabel(value: string | undefined): string {
   }).format(new Date(value))
 }
 
-export function isTextLike(file: FileRecord): boolean {
+export function isTextLike(file: Pick<FileRecord, 'mimeType' | 'name'>): boolean {
   const name = file.name.toLowerCase()
   return (
     file.mimeType.startsWith('text/') ||

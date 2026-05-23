@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { canPreloadThumbnail } from '../appUtils.js'
+import { canPreloadPreviewContent } from '../appUtils.js'
 import { ExpandedPreviewShell } from './ExpandedPreviewShell.js'
 import { clamp, clampZoom, isInteractiveFlowTarget, isLeftSideTap, isMobilePreview, pinchMetrics, pointInElement } from './previewInteraction.js'
 import type { ExpandedPreviewProps } from './previewTypes.js'
@@ -43,7 +43,7 @@ export function ExpandedPreview(props: ExpandedPreviewProps) {
 
   useEffect(() => {
     if (!flowEnabled) return
-    if (canPreloadThumbnail(props.file)) props.onPreloadFile(props.file)
+    if (canPreloadPreviewContent(props.file)) props.onPreloadFile(props.file)
     const current = flowItemRefs.current[props.file.id]
     current?.scrollIntoView({ block: 'start' })
   }, [flowEnabled, props.file.id])
@@ -53,7 +53,7 @@ export function ExpandedPreview(props: ExpandedPreviewProps) {
     const root = flowBodyRef.current
     if (!root || typeof IntersectionObserver !== 'function') {
       for (const file of flowFiles.slice(Math.max(0, props.index - 1), props.index + 2)) {
-        if (canPreloadThumbnail(file)) props.onPreloadFile(file)
+        if (canPreloadPreviewContent(file)) props.onPreloadFile(file)
       }
       return
     }
@@ -62,7 +62,7 @@ export function ExpandedPreview(props: ExpandedPreviewProps) {
         if (!entry.isIntersecting) continue
         const id = (entry.target as HTMLElement).dataset.fileId
         const file = flowFiles.find((item) => item.id === id)
-        if (file && canPreloadThumbnail(file)) props.onPreloadFile(file)
+        if (file && canPreloadPreviewContent(file)) props.onPreloadFile(file)
       }
     }, { root, rootMargin: '260px 0px' })
     for (const element of Object.values(flowItemRefs.current)) {

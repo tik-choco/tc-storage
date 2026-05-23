@@ -150,19 +150,19 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   function preloadFileContent(file: FileRecord): void {
     if (file.dataUrl || fileContentCacheRef.current[file.id] || fileContentLoadsRef.current[file.id] || !canResolveFileContent(file)) return
     if (isContentFailureCoolingDown(file)) {
-      syncLog('thumbnail preload skipped: previous content failure cooling down', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
+      syncLog('preview preload skipped: previous content failure cooling down', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
       return
     }
     const queue = fileContentPreloadQueueRef?.current
     if (!queue) {
-      startThumbnailPreload(file)
+      startPreviewPreload(file)
       return
     }
     queue.items.set(file.id, file)
-    drainThumbnailPreloadQueue()
+    drainPreviewPreloadQueue()
   }
 
-  function drainThumbnailPreloadQueue(): void {
+  function drainPreviewPreloadQueue(): void {
     const queue = fileContentPreloadQueueRef?.current
     if (!queue || queue.running) return
     const next = queue.items.entries().next()
@@ -172,26 +172,26 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     queue.running = true
     schedulePreloadTask(() => {
       const currentFile = snapshotRef.current.files.find((item) => item.id === queuedFile.id && !item.deletedAt) ?? queuedFile
-      void startThumbnailPreload(currentFile).finally(() => {
+      void startPreviewPreload(currentFile).finally(() => {
         queue.running = false
-        drainThumbnailPreloadQueue()
+        drainPreviewPreloadQueue()
       })
     })
   }
 
-  function startThumbnailPreload(file: FileRecord): Promise<void> {
+  function startPreviewPreload(file: FileRecord): Promise<void> {
     if (file.dataUrl || fileContentCacheRef.current[file.id] || fileContentLoadsRef.current[file.id] || !canResolveFileContent(file)) return Promise.resolve()
     if (isContentFailureCoolingDown(file)) {
-      syncLog('thumbnail preload skipped: previous content failure cooling down', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
+      syncLog('preview preload skipped: previous content failure cooling down', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
       return Promise.resolve()
     }
-    syncLog('thumbnail preload requested', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
+    syncLog('preview preload requested', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
     return ensureFileContent(file, { trackProgress: true }).then(() => {
       clearContentFailure(file)
-      syncLog('thumbnail preload complete', { fileId: file.id, fileName: file.name })
+      syncLog('preview preload complete', { fileId: file.id, fileName: file.name })
     }).catch((error) => {
       rememberContentFailure(file)
-      syncWarn('thumbnail preload failed', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid), error: describeError(error, 'unknown error') })
+      syncWarn('preview preload failed', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid), error: describeError(error, 'unknown error') })
     })
   }
 

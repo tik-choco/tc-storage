@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
-import { browserViewModeKey, isMediaFile, largeDownloadConfirmThresholdBytes, loadBrowserViewMode, requiresLargeDownloadConfirmation, shouldPreloadVisibleThumbnail } from '../src/appUtils.js'
+import { browserViewModeKey, canPreloadPreviewContent, isMediaFile, largeDownloadConfirmThresholdBytes, loadBrowserViewMode, requiresLargeDownloadConfirmation, shouldPreloadVisibleThumbnail } from '../src/appUtils.js'
 
 let originalLocalStorage: Storage | undefined
 let store: Record<string, string>
@@ -43,6 +43,18 @@ test('visible thumbnail preload is limited to uncached media with a cid', () => 
   assert.equal(shouldPreloadVisibleThumbnail({ dataUrl: undefined, file: { ...image, lastCid: '', lastShareCid: '' }, visible: true }), false)
   assert.equal(shouldPreloadVisibleThumbnail({ dataUrl: undefined, file: { ...image, mimeType: 'application/pdf' }, visible: true }), false)
   assert.equal(shouldPreloadVisibleThumbnail({ dataUrl: undefined, file: { ...image, mimeType: 'video/mp4' }, visible: true }), true)
+})
+
+test('preview content preload includes inline preview file types', () => {
+  const base = { deletedAt: undefined, name: 'file.bin' }
+
+  assert.equal(canPreloadPreviewContent({ ...base, mimeType: 'image/png' }), true)
+  assert.equal(canPreloadPreviewContent({ ...base, mimeType: 'video/mp4' }), true)
+  assert.equal(canPreloadPreviewContent({ ...base, mimeType: 'audio/mpeg' }), true)
+  assert.equal(canPreloadPreviewContent({ ...base, mimeType: 'application/pdf' }), true)
+  assert.equal(canPreloadPreviewContent({ ...base, name: 'notes.md', mimeType: 'application/octet-stream' }), true)
+  assert.equal(canPreloadPreviewContent({ ...base, mimeType: 'application/octet-stream' }), false)
+  assert.equal(canPreloadPreviewContent({ ...base, deletedAt: '2026-05-21T00:00:00.000Z', mimeType: 'audio/mpeg' }), false)
 })
 
 test('media file detection includes images and video', () => {

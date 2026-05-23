@@ -1,5 +1,6 @@
 import type { BrowserViewMode, PendingShare } from './appTypes.js'
 import type { FileRecord, FolderBundle, FolderRecord, StorageSnapshot } from './domain.js'
+import { isTextLike } from './format.js'
 import { debugInfo, debugWarn } from './logging.js'
 import type { ShareEnvelope } from './p2p.js'
 
@@ -33,12 +34,28 @@ export function isVideoFile(file: Pick<FileRecord, 'mimeType'>): boolean {
   return file.mimeType.startsWith('video/')
 }
 
+export function isAudioFile(file: Pick<FileRecord, 'mimeType'>): boolean {
+  return file.mimeType.startsWith('audio/')
+}
+
 export function isMediaFile(file: Pick<FileRecord, 'mimeType'>): boolean {
   return isImageFile(file) || isVideoFile(file)
 }
 
+export function isPdfFile(file: Pick<FileRecord, 'mimeType' | 'name'>): boolean {
+  return file.mimeType === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+}
+
+export function isInlinePreviewFile(file: Pick<FileRecord, 'mimeType' | 'name'>): boolean {
+  return isMediaFile(file) || isAudioFile(file) || isPdfFile(file) || isTextLike(file)
+}
+
 export function canPreloadThumbnail(file: Pick<FileRecord, 'deletedAt' | 'mimeType'>): boolean {
   return !file.deletedAt && isMediaFile(file)
+}
+
+export function canPreloadPreviewContent(file: Pick<FileRecord, 'deletedAt' | 'mimeType' | 'name'>): boolean {
+  return !file.deletedAt && isInlinePreviewFile(file)
 }
 
 export function shouldPreloadVisibleThumbnail(options: {
