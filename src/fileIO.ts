@@ -1,10 +1,11 @@
 import { sha256Hex } from './crypto.js'
+import { bytesToBase64 } from './cryptoEncoding.js'
 import { makeFileFromDataUrl, type FileRecord } from './domain.js'
 
 export async function readBrowserFile(file: File, folderId: string, now: string, nodeId: string): Promise<FileRecord> {
   const bytes = new Uint8Array(await file.arrayBuffer())
   const checksum = await sha256Hex(bytes)
-  const dataUrl = await readAsDataUrl(file)
+  const dataUrl = bytesToDataUrl(bytes, file.type || 'application/octet-stream')
   return makeFileFromDataUrl({
     folderId,
     name: file.name,
@@ -34,11 +35,6 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.addEventListener('load', () => resolve(String(reader.result)))
-    reader.addEventListener('error', () => reject(new Error('ファイルを読み込めませんでした')))
-    reader.readAsDataURL(file)
-  })
+function bytesToDataUrl(bytes: Uint8Array, mimeType: string): string {
+  return `data:${mimeType};base64,${bytesToBase64(bytes)}`
 }

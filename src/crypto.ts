@@ -16,6 +16,8 @@ export { base64ToBytes, bytesToBase64 }
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 const webCryptoIterations = 210000
+const minWebCryptoIterations = 100000
+const maxWebCryptoIterations = 1000000
 
 export async function encryptJson(value: unknown, passphrase: string): Promise<EncryptedPayload> {
   const phrase = passphrase.trim()
@@ -28,8 +30,7 @@ export async function encryptJson(value: unknown, passphrase: string): Promise<E
 export async function decryptJson<T>(payload: EncryptedPayload, passphrase: string): Promise<T> {
   const phrase = passphrase.trim()
   if (!phrase) throw new Error('復号キーが必要です')
-  if (payload.version !== 1) throw new Error('未対応の暗号化形式です')
-  if (payload.algorithm !== 'AES-GCM') throw new Error('未対応の暗号化形式です')
+  validateAesGcmPayload(payload)
   const decrypted = await decryptAesGcm(payload, phrase)
   return JSON.parse(decoder.decode(decrypted)) as T
 }
@@ -65,6 +66,28 @@ async function decryptAesGcm(payload: AesGcmPayload, passphrase: string): Promis
   const key = await deriveWebCryptoKey(passphrase, salt, payload.iterations)
   const decrypted = await subtleCrypto().decrypt({ name: 'AES-GCM', iv: toArrayBuffer(iv) }, key, toArrayBuffer(cipherText))
   return new Uint8Array(decrypted)
+}
+
+function validateAesGcmPayload(payload: unknown): asserts payload is AesGcmPayload {
+  if (!payload || typeof payload !== 'object') throw new Error('未対応の暗号化形式です')
+  const value = payload as Partial<AesGcmPayload>
+  if (typeof value.salt !== 'string' || typeof value.iv !== 'string' || typeof value.cipherText !== 'string') {
+    throw new Error('暗号化パラメーターが不正です')
+  }
+  if (value.version !== 1) throw new Error('未対応の暗号化形式です')
+  if (value.algorithm !== 'AES-GCM') throw new Error('未対応の暗号化形式です')
+  if (value.kdf !== 'PBKDF2-SHA256') throw new Error('未対応の暗号化形式です')
+  const iterations = value.iterations
+  if (typeof iterations !== 'number' || !Number.isInteger(iterations) || iterations < minWebCryptoIterations || iterations > maxWebCryptoIterations) {
+    throw new Error('暗号化パラメーターが不正です')
+  }
+
+  const salt = base64ToBytes(value.salt)
+  const iv = base64ToBytes(value.iv)
+  const cipherText = base64ToBytes(value.cipherText)
+  if (salt.byteLength !== 16 || iv.byteLength !== 12 || cipherText.byteLength === 0) {
+    throw new Error('暗号化パラメーターが不正です')
+  }
 }
 
 async function deriveWebCryptoKey(passphrase: string, salt: Uint8Array, iterationCount = webCryptoIterations): Promise<CryptoKey> {

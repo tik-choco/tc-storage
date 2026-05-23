@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "pretest": "node -e \"require('node:fs').rmSync('dist-test',{recursive:true,force:true})\"",
     "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/*.test.js"
   },
   "dependencies": {

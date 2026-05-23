@@ -28,6 +28,15 @@ test('encryptJson rejects tampered ciphertext', async () => {
   await assert.rejects(() => decryptJson(tampered, 'folder secret'))
 })
 
+test('decryptJson rejects unsafe encryption parameters before key derivation', async () => {
+  const encrypted = await encryptJson({ body: 'bounded work' }, 'folder secret')
+
+  await assert.rejects(() => decryptJson({ ...encrypted, iterations: 1 }, 'folder secret'), /暗号化パラメーター/)
+  await assert.rejects(() => decryptJson({ ...encrypted, iterations: 1000001 }, 'folder secret'), /暗号化パラメーター/)
+  await assert.rejects(() => decryptJson({ ...encrypted, kdf: 'PBKDF2-SHA1' as 'PBKDF2-SHA256' }, 'folder secret'), /未対応の暗号化形式/)
+  await assert.rejects(() => decryptJson({ ...encrypted, iv: encrypted.salt }, 'folder secret'), /暗号化パラメーター/)
+})
+
 test('encryptJson requires Web Crypto subtle', async () => {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
   Object.defineProperty(globalThis, 'crypto', {

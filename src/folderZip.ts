@@ -1,7 +1,13 @@
 import { childFolders, compareFilesForDisplay, type FileRecord, type FolderRecord, type StorageSnapshot } from './domain.js'
 import type { ZipEntry } from './zip.js'
 
-export function makeFolderZipLayout(snapshot: StorageSnapshot, root: FolderRecord, folderIds: Set<string>): { entries: ZipEntry[]; folderPathById: Map<string, string> } {
+export type FolderZipLayout = {
+  entries: ZipEntry[]
+  folderPathById: Map<string, string>
+  usedPaths: Set<string>
+}
+
+export function makeFolderZipLayout(snapshot: StorageSnapshot, root: FolderRecord, folderIds: Set<string>): FolderZipLayout {
   const entries: ZipEntry[] = []
   const folderPathById = new Map<string, string>()
   const usedPaths = new Set<string>()
@@ -14,11 +20,10 @@ export function makeFolderZipLayout(snapshot: StorageSnapshot, root: FolderRecor
     folderPathById.set(folder.id, path.slice(0, -1))
     entries.push({ data: new Uint8Array(), modifiedAt: folder.updatedAt, path })
   }
-  return { entries, folderPathById }
+  return { entries, folderPathById, usedPaths }
 }
 
-export function zipFilePath(entries: ZipEntry[], folderPathById: Map<string, string>, root: FolderRecord, file: FileRecord): string {
-  const usedPaths = new Set(entries.map((entry) => entry.path))
+export function zipFilePath(entries: ZipEntry[], folderPathById: Map<string, string>, root: FolderRecord, file: FileRecord, usedPaths = new Set(entries.map((entry) => entry.path))): string {
   const folderPath = folderPathById.get(file.folderId) ?? safeZipSegment(root.name, 'Folder')
   return uniqueZipPath(`${folderPath}/${safeZipSegment(file.name, 'file')}`, usedPaths)
 }

@@ -427,7 +427,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
         entries.push({
           data: dataUrlToBytes(fileWithContent.dataUrl),
           modifiedAt: fileWithContent.updatedAt,
-          path: zipFilePath(entries, zipLayout.folderPathById, folder, fileWithContent),
+          path: zipFilePath(entries, zipLayout.folderPathById, folder, fileWithContent, zipLayout.usedPaths),
         })
         updateDownloadProgress(target, 8 + ((index + 1) / Math.max(filesForDownload.length, 1)) * 76, progressRequestId, 'Preparing ZIP')
       }
