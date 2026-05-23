@@ -1,7 +1,7 @@
 import type { BrowserDragItem, Notice } from './appTypes.js'
 import type { FileContentActions, MoveActions, MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
-import { nearestSharedAncestorFolder } from './appUtils.js'
+import { nearestSharedAncestorFolder, shortLogValue, syncLog, syncWarn } from './appUtils.js'
 import { stampFilePatch, stampFolderPatch } from './crdt.js'
 import { addActivity, stripFileContent, touchSnapshot, type FileRecord, type FolderRecord, type StorageSnapshot } from './domain.js'
 import { describeError } from './errors.js'
@@ -71,25 +71,52 @@ export function createMoveActions(options: MoveOptions): MoveActions {
     }
     const now = new Date().toISOString()
     const removedAt = previousIsoInstant(now)
+    const movedFile = stripFileContent(stampFilePatch(file, { folderId: targetFolderId, lastCid: undefined, deletedAt: undefined }, now, settings.nodeId))
+    setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((item) => (item.id === file.id ? movedFile : item)) }, { actorNodeId: settings.nodeId, folderId: targetFolderId, fileId: file.id, action: 'file.move', detail: `${file.name} を ${targetFolder.name} に移動` }, now), settings.nodeId))
+    setNotice({ tone: 'success', text: `${file.name} を ${targetFolder.name} に移動しました。保存はバックグラウンドで続行します` })
+    void storeMovedFileInBackground({ file, movedFile, passphrase, removedAt, sourceSharedRoot, storageFolder, targetFolder, targetSharedRoot })
+  }
+
+  async function storeMovedFileInBackground(options: {
+    file: FileRecord
+    movedFile: FileRecord
+    passphrase: string
+    removedAt: string
+    sourceSharedRoot: FolderRecord | undefined
+    storageFolder: FolderRecord
+    targetFolder: FolderRecord
+    targetSharedRoot: FolderRecord | undefined
+  }): Promise<void> {
+    const { file, movedFile, passphrase, removedAt, sourceSharedRoot, storageFolder, targetFolder, targetSharedRoot } = options
     setBusy(`move-file-${file.id}`)
     try {
+      syncLog('background storage_add start for moved file', { fileId: file.id, fileName: file.name, targetFolderId: targetFolder.id })
       const fileWithContent = await ensureFileContent(file)
-      const movedFileWithContent = { ...fileWithContent, folderId: targetFolderId }
+      const movedFileWithContent = { ...fileWithContent, folderId: targetFolder.id }
       const cid = await saveEncryptedFileToMist({ folder: storageFolder, file: movedFileWithContent, passphrase, originNode: settings.nodeId })
-      const movedFile = stripFileContent(stampFilePatch(file, { folderId: targetFolderId, lastCid: cid, deletedAt: undefined }, now, settings.nodeId))
+      const storedAt = new Date().toISOString()
+      const storedMovedFile = stripFileContent(stampFilePatch(movedFile, { lastCid: cid }, storedAt, settings.nodeId))
       if (fileWithContent.dataUrl) setFileContentCache((current) => ({ ...current, [file.id]: fileWithContent.dataUrl ?? '' }))
-      setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((item) => (item.id === file.id ? movedFile : item)) }, { actorNodeId: settings.nodeId, folderId: targetFolderId, fileId: file.id, action: 'file.move', detail: `${file.name} を ${targetFolder.name} に移動` }, now), settings.nodeId))
+      setSnapshot((current) => touchSnapshot({
+        ...current,
+        files: current.files.map((item) => (
+          item.id === file.id && !item.deletedAt && item.folderId === targetFolder.id && item.checksum === file.checksum && item.version === file.version
+            ? stampFilePatch(item, { lastCid: cid }, storedAt, settings.nodeId)
+            : item
+        )),
+      }, settings.nodeId))
       if (sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id) {
         announceFolderChange(sourceSharedRoot, 'file-deleted', stripFileContent(stampFilePatch(file, { deletedAt: removedAt }, removedAt, settings.nodeId)))
         scheduleSharedFolderSync(sourceSharedRoot, 'local file move out')
       }
       if (targetSharedRoot) {
-        announceFolderChange(targetSharedRoot, 'file-upserted', movedFile)
+        announceFolderChange(targetSharedRoot, 'file-upserted', storedMovedFile)
         scheduleSharedFolderSync(targetSharedRoot, 'local file move in')
       }
-      setNotice({ tone: 'success', text: `${file.name} を ${targetFolder.name} に移動しました` })
+      syncLog('background storage_add complete for moved file', { fileId: file.id, fileName: file.name, cid: shortLogValue(cid) })
     } catch (error) {
-      setNotice({ tone: 'error', text: describeError(error, 'ファイルを移動できませんでした') })
+      syncWarn('background storage_add failed for moved file', { fileId: file.id, fileName: file.name, error: describeError(error, 'unknown error') })
+      setNotice({ tone: 'error', text: describeError(error, 'ファイルは移動しましたがバックグラウンド保存に失敗しました') })
     } finally {
       setBusy('')
     }

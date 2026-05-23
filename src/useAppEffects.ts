@@ -320,4 +320,13 @@ export function useAppEffects(options: AppEffectsOptions): void {
     })
     return () => { cancelled = true }
   }, [expandedPreviewOpen, selectedFile?.id, selectedPreviewFile?.dataUrl])
+  useEffect(() => {
+    if (!expandedPreviewOpen || !selectedFileId) return
+    const currentIndex = previewFiles.findIndex((file) => file.id === selectedFileId)
+    if (currentIndex < 0) return
+    for (const file of [previewFiles[currentIndex - 1], previewFiles[currentIndex + 1]]) {
+      if (!file || fileDataUrls[file.id] || !canPreloadThumbnail(file) || !canResolveFileContent(file)) continue
+      preloadFileContent(file)
+    }
+  }, [canResolveFileContent, expandedPreviewOpen, fileDataUrls, preloadFileContent, previewFiles, selectedFileId])
 }

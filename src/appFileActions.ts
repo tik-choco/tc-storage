@@ -1,7 +1,7 @@
 import type { BrowserDragItem, DeleteRequest, Notice } from './appTypes.js'
 import type { FileContentActions, MistShare, MutableRef, SetState } from './appControllerTypes.js'
 import { mergeUploadedFiles } from './appHelpers.js'
-import { activeAncestorFolderId, nearestSharedAncestorFolder } from './appUtils.js'
+import { activeAncestorFolderId, nearestSharedAncestorFolder, shortLogValue, syncLog, syncWarn } from './appUtils.js'
 import { reserveClipboardWrite, writeReservedClipboard } from './clipboard.js'
 import { stampFilePatch } from './crdt.js'
 import { addActivity, stripFileContent, touchSnapshot, type FileRecord, type FolderRecord, type StorageSnapshot } from './domain.js'
@@ -69,26 +69,23 @@ export function createFileActions(options: FileActionOptions) {
     if (!folderKeysRef.current[targetFolderId]) setFolderKeys((current) => ({ ...current, [targetFolderId]: passphrase }))
     if (sharedRoot && !folderKeysRef.current[sharedRoot.id]) setFolderKeys((current) => ({ ...current, [sharedRoot.id]: passphrase }))
     const now = new Date().toISOString()
+    const browserFiles = [...fileList]
     setBusy('upload')
+    setNotice({ tone: 'info', text: `${browserFiles.length} 件のファイルを読み込み中...` })
     try {
-      const uploaded = await Promise.all([...fileList].map(async (file) => {
-        const record = await readBrowserFile(file, targetFolderId, now, settings.nodeId)
-        const cid = await saveEncryptedFileToMist({ folder: storageFolder, file: record, passphrase, originNode: settings.nodeId })
-        return stampFilePatch(record, { lastCid: cid }, now, settings.nodeId)
-      }))
+      const uploaded = await Promise.all(browserFiles.map((file) => readBrowserFile(file, targetFolderId, now, settings.nodeId)))
+      const optimisticFiles = optimisticUploadedFiles(snapshotRef.current.files, uploaded, now, settings.nodeId)
       setFileContentCache((current) => {
         const next = { ...current }
-        for (const file of uploaded) {
+        for (const file of optimisticFiles) {
           if (!file.dataUrl) continue
-          const existing = snapshotRef.current.files.find((item) => item.folderId === file.folderId && item.name === file.name && !item.deletedAt)
-          next[existing?.id ?? file.id] = file.dataUrl
+          next[file.id] = file.dataUrl
         }
         return next
       })
-      setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: mergeUploadedFiles(current.files, uploaded.map(stripFileContent), now, settings.nodeId) }, { actorNodeId: settings.nodeId, folderId: targetFolderId, action: 'file.upload', detail: `${uploaded.length} 件のファイルを追加` }, now), settings.nodeId))
-      for (const file of uploaded.map(stripFileContent)) announceFolderChange(storageFolder, 'file-upserted', file)
-      scheduleSharedFolderSync(storageFolder, 'local file upload')
-      setNotice({ tone: 'success', text: `${uploaded.length} 件のファイルを追加しました` })
+      setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: mergeUploadedFiles(current.files, optimisticFiles.map(stripFileContent), now, settings.nodeId) }, { actorNodeId: settings.nodeId, folderId: targetFolderId, action: 'file.upload', detail: `${uploaded.length} 件のファイルを追加` }, now), settings.nodeId))
+      setNotice({ tone: 'success', text: `${uploaded.length} 件のファイルを追加しました。保存はバックグラウンドで続行します` })
+      void storeUploadedFilesInBackground(optimisticFiles, storageFolder, passphrase)
     } catch (error) {
       setNotice({ tone: 'error', text: describeError(error, 'アップロードに失敗しました') })
     } finally {
@@ -181,5 +178,49 @@ export function createFileActions(options: FileActionOptions) {
     scheduleFolderSync(folder.id, reason)
   }
 
+  async function storeUploadedFilesInBackground(files: FileRecord[], storageFolder: FolderRecord, passphrase: string): Promise<void> {
+    let failures = 0
+    for (const file of files) {
+      try {
+        syncLog('background storage_add start for uploaded file', { fileId: file.id, fileName: file.name, folderId: storageFolder.id })
+        const cid = await saveEncryptedFileToMist({ folder: storageFolder, file, passphrase, originNode: settings.nodeId })
+        const storedAt = new Date().toISOString()
+        const storedFile = stripFileContent(stampFilePatch(file, { lastCid: cid }, storedAt, settings.nodeId))
+        setSnapshot((current) => touchSnapshot({
+          ...current,
+          files: current.files.map((item) => (
+            item.id === file.id && !item.deletedAt && item.folderId === file.folderId && item.checksum === file.checksum && item.version === file.version
+              ? stampFilePatch(item, { lastCid: cid }, storedAt, settings.nodeId)
+              : item
+          )),
+        }, settings.nodeId))
+        announceFolderChange(storageFolder, 'file-upserted', storedFile)
+        scheduleSharedFolderSync(storageFolder, 'local file upload')
+        syncLog('background storage_add complete for uploaded file', { fileId: file.id, fileName: file.name, cid: shortLogValue(cid) })
+      } catch (error) {
+        failures += 1
+        syncWarn('background storage_add failed for uploaded file', { fileId: file.id, fileName: file.name, error: describeError(error, 'unknown error') })
+      }
+    }
+    if (failures > 0) setNotice({ tone: 'error', text: `${failures} 件のバックグラウンド保存に失敗しました。次回同期で再試行します` })
+  }
+
   return { confirmDelete, requestDeleteFile, renameFile, shareFile, uploadFiles }
+}
+
+export function optimisticUploadedFiles(currentFiles: FileRecord[], uploaded: FileRecord[], now: string, nodeId: string): FileRecord[] {
+  return uploaded.map((file) => {
+    const existing = currentFiles.find((item) => item.folderId === file.folderId && item.name === file.name && !item.deletedAt)
+    return existing
+      ? stampFilePatch(existing, {
+        checksum: file.checksum,
+        dataUrl: file.dataUrl,
+        deletedAt: undefined,
+        lastCid: undefined,
+        mimeType: file.mimeType,
+        size: file.size,
+        version: existing.version + 1,
+      }, now, nodeId)
+      : file
+  })
 }
