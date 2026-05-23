@@ -4,14 +4,26 @@ import { stripFileContent, type FileBundle, type FileRecord, type FolderBundle, 
 
 export function mergeUploadedFiles(currentFiles: FileRecord[], uploaded: FileRecord[], now: string, nodeId: string): FileRecord[] {
   let filesNext = [...currentFiles]
-  for (const file of uploaded) {
-    const index = filesNext.findIndex((item) => item.folderId === file.folderId && item.name === file.name && !item.deletedAt)
+  for (const file of latestFilesByIdentity(uploaded)) {
+    const index = filesNext.findIndex((item) => sameFileIdentity(item, file) && !item.deletedAt)
     const existing = filesNext[index]
     filesNext = index >= 0 && existing
-      ? filesNext.with(index, stampFilePatch(existing, { mimeType: file.mimeType, size: file.size, dataUrl: file.dataUrl, checksum: file.checksum, lastCid: file.lastCid, version: existing.version + 1 }, now, nodeId))
+      ? filesNext.with(index, stampFilePatch(existing, { name: file.name, mimeType: file.mimeType, size: file.size, dataUrl: file.dataUrl, checksum: file.checksum, lastCid: file.lastCid, version: existing.version + 1 }, now, nodeId))
       : [...filesNext, file]
   }
   return filesNext
+}
+
+export function latestFilesByIdentity(files: FileRecord[]): FileRecord[] {
+  return [...files.reduce((map, file) => map.set(fileIdentityKey(file), file), new Map<string, FileRecord>()).values()]
+}
+
+export function sameFileIdentity(left: Pick<FileRecord, 'id' | 'lastCid'>, right: Pick<FileRecord, 'id' | 'lastCid'>): boolean {
+  return fileIdentityKey(left) === fileIdentityKey(right)
+}
+
+export function fileIdentityKey(file: Pick<FileRecord, 'id' | 'lastCid'>): string {
+  return file.lastCid ? `cid:${file.lastCid}` : `id:${file.id}`
 }
 
 export function remoteFolderSnapshot(bundle: FolderBundle, share: PendingShare, options: { preserveRootFolder?: FolderRecord } = {}): StorageSnapshot {

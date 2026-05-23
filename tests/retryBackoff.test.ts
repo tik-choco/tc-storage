@@ -212,6 +212,52 @@ test('auto folder import backs off after a storage_get failure for the same shar
   assert.deepEqual(Object.keys(failuresRef.current), [share.cid])
 })
 
+test('canceling a pending folder invite clears stored access request keys', () => {
+  const share: PendingShare = {
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    folderId: 'folder-fixed',
+    folderName: 'Fixed invite',
+    autoImport: true,
+  }
+  const entry = { folderId: 'folder-fixed', roomId: 'tc-storage-main' }
+  const accessRequestKeysRef = { current: { 'request-a': entry, 'tc-storage-main:folder:folder-fixed': entry, 'request-other': { folderId: 'folder-other', roomId: 'tc-storage-main' } } }
+  const pendingSharesRef = { current: [share] }
+  const actions = createShareImportActions({
+    accessRequestKeysRef,
+    autoImportCidsRef: { current: new Set() },
+    autoImportFailuresRef: { current: {} },
+    autoImportInFlightRef: { current: new Set() },
+    clearFolderSyncTimer: () => {},
+    importKeys: {},
+    materializeFolderBundleFiles: async (bundle) => bundle,
+    pendingSharesRef,
+    rememberFolderPeer: () => {},
+    setBusy: () => {},
+    setCurrentFolderId: () => {},
+    setDetailFileId: () => {},
+    setFileContentCache: () => {},
+    setFileShareKeys: () => {},
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: () => {},
+    setPendingShares: (update) => { pendingSharesRef.current = applyStateUpdate(pendingSharesRef.current, update) },
+    setSnapshot: () => {},
+    settingsRef: { current: testSettings() },
+    snapshotRef: { current: createInitialSnapshot('node-a') },
+    syncSignaturesRef: { current: {} },
+  })
+
+  actions.cancelPendingShare(share)
+
+  assert.deepEqual(pendingSharesRef.current, [])
+  assert.deepEqual(Object.keys(accessRequestKeysRef.current), ['request-other'])
+})
+
 function testSettings() {
   return { roomId: 'tc-storage-main', signalingUrl: '', nodeId: 'node-a', identity: null, autoConnect: false, profileName: 'Test user', avatarUrl: '', avatarFileId: '' }
 }

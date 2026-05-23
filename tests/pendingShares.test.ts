@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
 import type { PendingShare } from '../src/appTypes.js'
+import { loadFileShareKeys, saveFileShareKeys } from '../src/fileShareKeys.js'
 import { loadFolderAccessModes, saveFolderAccessModes } from '../src/folderAccess.js'
+import { loadFolderKeys, saveFolderKeys } from '../src/folderKeys.js'
 import { loadImportKeys, loadPendingShares, saveImportKeys, savePendingShares } from '../src/pendingShares.js'
 
 class MemoryStorage implements Storage {
@@ -69,6 +71,20 @@ test('pending shares and import keys survive a reload', () => {
 
   assert.deepEqual(loadPendingShares(), [share])
   assert.deepEqual(loadImportKeys(), { 'cid-folder': 'secret-key' })
+})
+
+test('stored key records ignore malformed non-string values', () => {
+  localStorage.setItem('tc-storage-folder-keys-v1', JSON.stringify({ 'folder-a': 'secret-a', 'folder-b': 123, 'folder-c': null }))
+  localStorage.setItem('tc-storage-file-share-keys-v1', JSON.stringify({ 'file-a': 'secret-file', 'file-b': false }))
+
+  assert.deepEqual(loadFolderKeys(), { 'folder-a': 'secret-a' })
+  assert.deepEqual(loadFileShareKeys(), { 'file-a': 'secret-file' })
+
+  saveFolderKeys({ 'folder-a': 'secret-a', 'folder-b': 123 as unknown as string })
+  saveFileShareKeys({ 'file-a': 'secret-file', 'file-b': false as unknown as string })
+
+  assert.equal(localStorage.getItem('tc-storage-folder-keys-v1'), JSON.stringify({ 'folder-a': 'secret-a' }))
+  assert.equal(localStorage.getItem('tc-storage-file-share-keys-v1'), JSON.stringify({ 'file-a': 'secret-file' }))
 })
 
 test('fixed folder invite pending shares survive without a cid', () => {

@@ -91,13 +91,10 @@ async function networkFirst(request, fallbackUrl) {
     const response = await fetch(request)
     if (response.ok) {
       const cache = await caches.open(APP_SHELL_CACHE)
-      await cache.put(request, response.clone())
+      await cache.put(fallbackUrl, response.clone())
     }
     return response
   } catch (error) {
-    const cached = await caches.match(request)
-    if (cached) return cached
-
     const fallback = await caches.match(fallbackUrl)
     if (fallback) return fallback
 

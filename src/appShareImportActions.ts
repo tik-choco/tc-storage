@@ -136,6 +136,7 @@ export function createShareImportActions(options: ShareImportOptions) {
     const key = pendingShareKey(share)
     setPendingShares((current) => current.filter((item) => pendingShareKey(item) !== key))
     if (share.cid) setImportKeys((current) => withoutRecordKey(current, share.cid ?? ''))
+    clearAccessRequestKeysForShare(share)
     setNotice({ tone: 'info', text: '共有待ちをキャンセルしました' })
   }
 
@@ -199,6 +200,15 @@ export function createShareImportActions(options: ShareImportOptions) {
     if (imported.type === 'folder-share' && pending.type === 'folder-share' && imported.folderId && pending.folderId === imported.folderId) return true
     if (imported.type === 'file-share' && pending.type === 'file-share' && imported.fileId && pending.fileId === imported.fileId) return true
     return false
+  }
+
+  function clearAccessRequestKeysForShare(share: PendingShare): void {
+    if (!accessRequestKeysRef || share.type !== 'folder-share' || !share.folderId) return
+    const shareKey = pendingShareKey(share)
+    accessRequestKeysRef.current = Object.fromEntries(Object.entries(accessRequestKeysRef.current).filter(([key, entry]) => (
+      key !== shareKey &&
+      !(entry.folderId === share.folderId && entry.roomId === share.roomId)
+    )))
   }
 
   function isShareFailureCoolingDown(share: PendingShare, passphrase: string): boolean {

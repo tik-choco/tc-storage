@@ -12,6 +12,7 @@ export type AppSettings = {
 }
 
 const settingsKey = 'tc-storage-settings-v1'
+const roomIdKey = 'tc-storage-room-id-v1'
 const defaultSignalingUrl = 'https://rtc.tik-choco.com/signaling'
 
 export function loadSettings(): AppSettings {
@@ -41,15 +42,38 @@ export function saveSettings(settings: AppSettings): void {
 
 function createDefaultSettings(): AppSettings {
   return {
-    roomId: 'tc-storage-main',
+    roomId: loadRoomId(),
     signalingUrl: defaultSignalingUrl,
     nodeId: loadNodeId(),
     identity: loadPublicDidIdentity(),
-    autoConnect: true,
+    autoConnect: false,
     profileName: 'Local user',
     avatarUrl: '',
     avatarFileId: '',
   }
+}
+
+export function defaultRoomId(): string {
+  return loadRoomId()
+}
+
+function loadRoomId(): string {
+  const stored = localStorage.getItem(roomIdKey)?.trim()
+  if (stored) return stored
+  const roomId = generateRoomId()
+  localStorage.setItem(roomIdKey, roomId)
+  return roomId
+}
+
+function generateRoomId(): string {
+  const cryptoApi = globalThis.crypto
+  if (typeof cryptoApi?.randomUUID === 'function') return `tc-storage-${cryptoApi.randomUUID()}`
+  const bytes = new Uint8Array(16)
+  if (typeof cryptoApi?.getRandomValues === 'function') {
+    cryptoApi.getRandomValues(bytes)
+    return `tc-storage-${[...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
+  }
+  return `tc-storage-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
 }
 
 function loadNodeId(): string {

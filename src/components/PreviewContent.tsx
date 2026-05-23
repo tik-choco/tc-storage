@@ -42,7 +42,7 @@ export function PreviewContent(props: { file: FileRecord; expanded?: boolean; im
       {dataUrl && isImage ? <img class={props.zoomable ? 'zoomable-preview-image' : ''} src={dataUrl} alt={props.file.name} style={props.imageStyle} /> : null}
       {dataUrl && isVideo ? <video src={dataUrl} controls /> : null}
       {dataUrl && isAudio ? <audio src={dataUrl} controls /> : null}
-      {dataUrl && isPdf ? <iframe src={dataUrl} title={props.file.name} /> : null}
+      {dataUrl && isPdf ? <iframe src={dataUrl} title={props.file.name} sandbox="" referrerPolicy="no-referrer" /> : null}
       {dataUrl && isText ? <pre>{textError || text || 'Loading...'}</pre> : null}
       {dataUrl && !isInlinePreview ? <BinaryPreview file={props.file} /> : null}
       {!dataUrl && !isLoading ? <BinaryPreview file={props.file} message="Content unavailable" /> : null}

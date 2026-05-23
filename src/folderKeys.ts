@@ -1,19 +1,19 @@
 import type { FolderRecord } from './domain.js'
 import { bytesToBase64 } from './cryptoEncoding.js'
+import { normalizeStringRecord } from './storageRecords.js'
 
 const folderKeysStorageKey = 'tc-storage-folder-keys-v1'
 
 export function loadFolderKeys(): Record<string, string> {
   try {
-    const parsed = JSON.parse(localStorage.getItem(folderKeysStorageKey) ?? '{}') as Record<string, string>
-    return parsed && typeof parsed === 'object' ? parsed : {}
+    return normalizeStringRecord(JSON.parse(localStorage.getItem(folderKeysStorageKey) ?? '{}') as unknown)
   } catch {
     return {}
   }
 }
 
 export function saveFolderKeys(keys: Record<string, string>): void {
-  localStorage.setItem(folderKeysStorageKey, JSON.stringify(keys))
+  localStorage.setItem(folderKeysStorageKey, JSON.stringify(normalizeStringRecord(keys)))
 }
 
 export function ensureFolderKeys(folders: FolderRecord[], current: Record<string, string>): Record<string, string> {

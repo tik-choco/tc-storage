@@ -1,5 +1,6 @@
 import type { PendingShare } from './appTypes.js'
 import type { ShareProfile } from './p2p.js'
+import { normalizeStringRecord } from './storageRecords.js'
 
 const pendingSharesStorageKey = 'tc-storage-pending-shares-v1'
 const importKeysStorageKey = 'tc-storage-import-keys-v1'
@@ -82,9 +83,4 @@ function normalizeShareProfile(value: unknown): ShareProfile | undefined {
 
 function assignOptionalString<T extends object, K extends keyof T>(target: T, key: K, value: unknown): void {
   if (typeof value === 'string') target[key] = value as T[K]
-}
-
-function normalizeStringRecord(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
 }

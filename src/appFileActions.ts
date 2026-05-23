@@ -1,6 +1,6 @@
 import type { BrowserDragItem, DeleteRequest, Notice } from './appTypes.js'
 import type { FileContentActions, MistShare, MutableRef, SetState } from './appControllerTypes.js'
-import { mergeUploadedFiles } from './appHelpers.js'
+import { latestFilesByIdentity, mergeUploadedFiles, sameFileIdentity } from './appHelpers.js'
 import { activeAncestorFolderId, nearestSharedAncestorFolder, shortLogValue, syncLog, syncWarn } from './appUtils.js'
 import { reserveClipboardWrite, writeReservedClipboard } from './clipboard.js'
 import { stampFilePatch } from './crdt.js'
@@ -209,8 +209,8 @@ export function createFileActions(options: FileActionOptions) {
 }
 
 export function optimisticUploadedFiles(currentFiles: FileRecord[], uploaded: FileRecord[], now: string, nodeId: string): FileRecord[] {
-  return uploaded.map((file) => {
-    const existing = currentFiles.find((item) => item.folderId === file.folderId && item.name === file.name && !item.deletedAt)
+  return latestFilesByIdentity(uploaded).map((file) => {
+    const existing = currentFiles.find((item) => sameFileIdentity(item, file) && !item.deletedAt)
     return existing
       ? stampFilePatch(existing, {
         checksum: file.checksum,
@@ -218,6 +218,7 @@ export function optimisticUploadedFiles(currentFiles: FileRecord[], uploaded: Fi
         deletedAt: undefined,
         lastCid: undefined,
         mimeType: file.mimeType,
+        name: file.name,
         size: file.size,
         version: existing.version + 1,
       }, now, nodeId)

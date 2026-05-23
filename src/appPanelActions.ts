@@ -2,7 +2,7 @@ import { pendingShareKey, type FolderPanelMode, type Notice, type PendingShare }
 import type { SetState } from './appControllerTypes.js'
 import { copyToClipboard } from './clipboard.js'
 import type { FileRecord, FolderRecord } from './domain.js'
-import type { AppSettings } from './localSettings.js'
+import { defaultRoomId, type AppSettings } from './localSettings.js'
 import type { LinkedShare } from './shareLinks.js'
 import type { PopoverKind, PopoverPosition } from './components/FloatingPopover.js'
 import { popoverPositionFromAnchor } from './components/FloatingPopover.js'
@@ -54,7 +54,7 @@ export function createPanelActions(options: PanelOptions) {
     const avatarFileId = settingsDraft.avatarFileId && profileImageFiles.some((file) => file.id === settingsDraft.avatarFileId) ? settingsDraft.avatarFileId : ''
     return {
       ...settingsDraft,
-      roomId: settingsDraft.roomId.trim() || 'tc-storage-main',
+      roomId: settingsDraft.roomId.trim() || defaultRoomId(),
       signalingUrl: settingsDraft.signalingUrl.trim(),
       nodeId: settings.nodeId,
       identity: settings.identity,
