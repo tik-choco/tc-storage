@@ -27,6 +27,50 @@ test('file reorder broadcasts immediate upserts for changed sort orders', () => 
   assert.deepEqual(harness.scheduled, [{ folderId: root.id, reason: 'local file reorder' }])
 }))
 
+test('multiple selected files reorder together in display order', () => withFakeHTMLElement(() => {
+  const { files, root, snapshot } = snapshotWithSharedFiles(4)
+  const harness = createDragDropHarness(snapshot, root.id)
+  harness.dragItemsRef.current = [
+    { type: 'file', id: files[1]!.id },
+    { type: 'file', id: files[3]!.id },
+  ]
+
+  harness.actions.handleBrowserItemDrop({ type: 'file', id: files[0]!.id }, fakeDropEventBefore())
+
+  assert.deepEqual(
+    harness.snapshot().files.filter((file) => file.folderId === root.id).sort(compareFilesForDisplay).map((file) => file.id),
+    ['file-b', 'file-d', 'file-a', 'file-c'],
+  )
+  assert.deepEqual(
+    harness.announcements.map((item) => [item.changeType, item.folderId, item.fileId]),
+    [
+      ['file-upserted', root.id, 'file-a'],
+      ['file-upserted', root.id, 'file-b'],
+      ['file-upserted', root.id, 'file-c'],
+      ['file-upserted', root.id, 'file-d'],
+    ],
+  )
+  assert.deepEqual(harness.scheduled, [{ folderId: root.id, reason: 'local file reorder' }])
+}))
+
+test('multiple selected files do not reorder onto their own selection block', () => withFakeHTMLElement(() => {
+  const { files, root, snapshot } = snapshotWithSharedFiles(4)
+  const harness = createDragDropHarness(snapshot, root.id)
+  harness.dragItemsRef.current = [
+    { type: 'file', id: files[1]!.id },
+    { type: 'file', id: files[3]!.id },
+  ]
+
+  harness.actions.handleBrowserItemDrop({ type: 'file', id: files[3]!.id }, fakeDropEventBefore())
+
+  assert.deepEqual(
+    harness.snapshot().files.filter((file) => file.folderId === root.id).sort(compareFilesForDisplay).map((file) => file.id),
+    ['file-a', 'file-b', 'file-c', 'file-d'],
+  )
+  assert.deepEqual(harness.announcements, [])
+  assert.deepEqual(harness.scheduled, [])
+}))
+
 test('folder reorder broadcasts immediate upserts for changed sort orders', () => withFakeHTMLElement(() => {
   const { folders, root, snapshot } = snapshotWithSharedFolders()
   const harness = createDragDropHarness(snapshot, root.id)
@@ -44,6 +88,32 @@ test('folder reorder broadcasts immediate upserts for changed sort orders', () =
       ['folder-upserted', root.id, 'folder-a'],
       ['folder-upserted', root.id, 'folder-b'],
       ['folder-upserted', root.id, 'folder-c'],
+    ],
+  )
+  assert.deepEqual(harness.scheduled, [{ folderId: root.id, reason: 'local folder reorder' }])
+}))
+
+test('multiple selected folders reorder together in display order', () => withFakeHTMLElement(() => {
+  const { folders, root, snapshot } = snapshotWithSharedFolders(4)
+  const harness = createDragDropHarness(snapshot, root.id)
+  harness.dragItemsRef.current = [
+    { type: 'folder', id: folders[1]!.id },
+    { type: 'folder', id: folders[3]!.id },
+  ]
+
+  harness.actions.handleBrowserItemDrop({ type: 'folder', id: folders[0]!.id }, fakeDropEventBefore())
+
+  assert.deepEqual(
+    harness.snapshot().folders.filter((folder) => folder.parentId === root.id).sort(compareFoldersForDisplay).map((folder) => folder.id),
+    ['folder-b', 'folder-d', 'folder-a', 'folder-c'],
+  )
+  assert.deepEqual(
+    harness.announcements.map((item) => [item.changeType, item.folderId, item.changedFolderId]),
+    [
+      ['folder-upserted', root.id, 'folder-a'],
+      ['folder-upserted', root.id, 'folder-b'],
+      ['folder-upserted', root.id, 'folder-c'],
+      ['folder-upserted', root.id, 'folder-d'],
     ],
   )
   assert.deepEqual(harness.scheduled, [{ folderId: root.id, reason: 'local folder reorder' }])
@@ -100,14 +170,15 @@ function createDragDropHarness(snapshot: StorageSnapshot, currentFolderId: strin
   return { actions, announcements, dragItemsRef, scheduled, snapshot: () => snapshotValue }
 }
 
-function snapshotWithSharedFiles(): { files: FileRecord[]; root: FolderRecord; snapshot: StorageSnapshot } {
+function snapshotWithSharedFiles(count = 3): { files: FileRecord[]; root: FolderRecord; snapshot: StorageSnapshot } {
   const now = '2026-05-21T00:00:00.000Z'
   const root = { ...makeTestFolder('folder-root', 'Root', null, 1000), shareEnabled: true }
   const files = [
-    makeTestFile('file-a', root.id, 'A.txt', 1000),
-    makeTestFile('file-b', root.id, 'B.txt', 2000),
-    makeTestFile('file-c', root.id, 'C.txt', 3000),
-  ]
+    ['file-a', 'A.txt'],
+    ['file-b', 'B.txt'],
+    ['file-c', 'C.txt'],
+    ['file-d', 'D.txt'],
+  ].slice(0, count).map(([id, name], index) => makeTestFile(id!, root.id, name!, (index + 1) * 1000))
   return { files, root, snapshot: { ...createInitialSnapshot('node-a'), folders: [root], files, activity: [], clock: 1, originNode: 'node-a' } }
 
   function makeTestFile(id: string, folderId: string, name: string, sortOrder: number): FileRecord {
@@ -115,13 +186,14 @@ function snapshotWithSharedFiles(): { files: FileRecord[]; root: FolderRecord; s
   }
 }
 
-function snapshotWithSharedFolders(): { folders: FolderRecord[]; root: FolderRecord; snapshot: StorageSnapshot } {
+function snapshotWithSharedFolders(count = 3): { folders: FolderRecord[]; root: FolderRecord; snapshot: StorageSnapshot } {
   const root = { ...makeTestFolder('folder-root', 'Root', null, 1000), shareEnabled: true }
   const folders = [
-    makeTestFolder('folder-a', 'A', root.id, 1000),
-    makeTestFolder('folder-b', 'B', root.id, 2000),
-    makeTestFolder('folder-c', 'C', root.id, 3000),
-  ]
+    ['folder-a', 'A'],
+    ['folder-b', 'B'],
+    ['folder-c', 'C'],
+    ['folder-d', 'D'],
+  ].slice(0, count).map(([id, name], index) => makeTestFolder(id!, name!, root.id, (index + 1) * 1000))
   return { folders, root, snapshot: { ...createInitialSnapshot('node-a'), folders: [root, ...folders], files: [], activity: [], clock: 1, originNode: 'node-a' } }
 }
 

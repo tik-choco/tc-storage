@@ -1,5 +1,6 @@
 import { Check, Download, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, Video, X } from 'lucide-preact'
 import { useEffect, useRef } from 'preact/hooks'
+import { selectFromPointerEvent } from '../appSelectionActions.js'
 import type { BrowserDragItem, BrowserReorderTarget, PendingShare, ProgressStatus } from '../appTypes.js'
 import { isImageFile, isMediaFile, isVideoFile, shouldPreloadVisibleThumbnail } from '../appUtils.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
@@ -36,6 +37,7 @@ export function FolderTile(props: {
   files: FileRecord[]
   reorderTarget: BrowserReorderTarget | null
   selected: boolean
+  selectionActive: boolean
   shareBusy: boolean
   onDeleteFolder: (folder: FolderRecord) => void
   onDownloadFolder: (folder: FolderRecord) => void
@@ -45,6 +47,7 @@ export function FolderTile(props: {
   onItemDragOver: (target: BrowserDragItem, event: DragEvent) => void
   onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onSelectFolder: (folderId: string | null) => void
+  onSelectItem: (item: BrowserDragItem, selected: boolean, range?: boolean) => void
   onShareFolder: (folder: FolderRecord, anchor?: HTMLElement) => void
   onShowFolderDetails: (folder: FolderRecord, anchor?: HTMLElement) => void
 }) {
@@ -60,7 +63,9 @@ export function FolderTile(props: {
       data-select-type="folder"
       draggable
       onClick={(event) => {
-        if (!isActionClick(event)) props.onSelectFolder(props.folder.id)
+        if (isActionClick(event)) return
+        if (props.selectionActive) selectTileItem(event, { type: 'folder', id: props.folder.id }, props.selected, props.onSelectItem)
+        else props.onSelectFolder(props.folder.id)
       }}
       onDragEnd={props.onDragEnd}
       onDragLeave={(event) => props.onItemDragLeave({ type: 'folder', id: props.folder.id }, event)}
@@ -69,7 +74,10 @@ export function FolderTile(props: {
       onDrop={(event) => props.onItemDrop({ type: 'folder', id: props.folder.id }, event)}
       role="listitem"
     >
-      <button class="tile-open" onClick={() => props.onSelectFolder(props.folder.id)} title="Open folder">
+      <button class="tile-open" onClick={(event) => {
+        if (props.selectionActive) selectTileItem(event, { type: 'folder', id: props.folder.id }, props.selected, props.onSelectItem)
+        else props.onSelectFolder(props.folder.id)
+      }} title={props.selectionActive ? 'Select folder' : 'Open folder'}>
         <span class="tile-icon">
           <Folder size={34} class={`folder-stroke ${props.folder.shareEnabled ? 'shared' : props.folder.color}`} />
         </span>
@@ -126,6 +134,7 @@ export function FileTile(props: {
   progress?: ProgressStatus
   reorderTarget: BrowserReorderTarget | null
   selected: boolean
+  selectionActive: boolean
   onDeleteFile: (file: FileRecord) => void
   onDownloadFile: (file: FileRecord) => void
   onDragEnd: () => void
@@ -135,6 +144,7 @@ export function FileTile(props: {
   onItemDrop: (target: BrowserDragItem, event: DragEvent) => void
   onOpenFile: (file: FileRecord) => void
   onPreloadFile: (file: FileRecord) => void
+  onSelectItem: (item: BrowserDragItem, selected: boolean, range?: boolean) => void
   onShareFile: (file: FileRecord) => void
   onShowFileDetails: (file: FileRecord, anchor?: HTMLElement) => void
 }) {
@@ -176,7 +186,9 @@ export function FileTile(props: {
         data-select-type="file"
         draggable
         onClick={(event) => {
-          if (!isActionClick(event)) props.onOpenFile(props.file)
+          if (isActionClick(event)) return
+          if (props.selectionActive) selectTileItem(event, { type: 'file', id: props.file.id }, props.selected, props.onSelectItem)
+          else props.onOpenFile(props.file)
         }}
         onDragEnd={props.onDragEnd}
         onDragLeave={(event) => props.onItemDragLeave({ type: 'file', id: props.file.id }, event)}
@@ -185,7 +197,10 @@ export function FileTile(props: {
         onDrop={(event) => props.onItemDrop({ type: 'file', id: props.file.id }, event)}
         role="listitem"
       >
-        <button class="media-only-button" onClick={() => props.onOpenFile(props.file)} aria-label={`Open preview for ${props.file.name}`}>
+        <button class="media-only-button" onClick={(event) => {
+          if (props.selectionActive) selectTileItem(event, { type: 'file', id: props.file.id }, props.selected, props.onSelectItem)
+          else props.onOpenFile(props.file)
+        }} aria-label={props.selectionActive ? `Select ${props.file.name}` : `Open preview for ${props.file.name}`}>
           <FileTilePreview dataUrl={props.dataUrl} file={props.file} isLoading={previewLoading} mediaOnly={true} />
         </button>
         <ProgressIndicator className="tile-progress media-progress" progress={props.progress} />
@@ -210,7 +225,9 @@ export function FileTile(props: {
       data-select-type="file"
       draggable
       onClick={(event) => {
-        if (!isActionClick(event)) props.onOpenFile(props.file)
+        if (isActionClick(event)) return
+        if (props.selectionActive) selectTileItem(event, { type: 'file', id: props.file.id }, props.selected, props.onSelectItem)
+        else props.onOpenFile(props.file)
       }}
       onDragEnd={props.onDragEnd}
       onDragLeave={(event) => props.onItemDragLeave({ type: 'file', id: props.file.id }, event)}
@@ -219,7 +236,10 @@ export function FileTile(props: {
       onDrop={(event) => props.onItemDrop({ type: 'file', id: props.file.id }, event)}
       role="listitem"
     >
-      <button class="tile-open" onClick={() => props.onOpenFile(props.file)} title="Open preview">
+      <button class="tile-open" onClick={(event) => {
+        if (props.selectionActive) selectTileItem(event, { type: 'file', id: props.file.id }, props.selected, props.onSelectItem)
+        else props.onOpenFile(props.file)
+      }} title={props.selectionActive ? 'Select file' : 'Open preview'}>
         <FileTilePreview dataUrl={props.dataUrl} file={props.file} isLoading={previewLoading} />
         <strong>{props.file.name}</strong>
       </button>
@@ -290,4 +310,16 @@ function FileTilePreview(props: { dataUrl: string | undefined; file: FileRecord;
 function isActionClick(event: MouseEvent): boolean {
   const target = event.target
   return target instanceof Element && Boolean(target.closest('button,input,a,select,textarea'))
+}
+
+function selectTileItem(
+  event: MouseEvent,
+  item: BrowserDragItem,
+  selected: boolean,
+  onSelectItem: (item: BrowserDragItem, selected: boolean, range?: boolean) => void,
+) {
+  event.preventDefault()
+  event.stopPropagation()
+  const next = selectFromPointerEvent(event, selected)
+  onSelectItem(item, next.selected, next.range)
 }

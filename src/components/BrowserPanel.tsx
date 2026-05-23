@@ -87,11 +87,29 @@ export function BrowserPanel(props: {
 }
 
 function SelectionBar(props: { selection: SelectionActions }) {
+  const moveDisabled = props.selection.selectedCount === 0 || props.selection.moveTargetFolders.length === 0
+
   return (
     <div class="selection-bar">
       <label class="selection-toggle">
         <input type="checkbox" checked={props.selection.allVisibleSelected} onChange={() => props.selection.toggleSelectAllVisible()} />
         <span>{props.selection.selectedCount} selected</span>
+      </label>
+      <label class={`selection-move ${moveDisabled ? 'disabled' : ''}`} title={moveDisabled ? 'No move targets' : 'Move selected'}>
+        <Folder size={16} />
+        <select
+          aria-label="Move selected"
+          disabled={moveDisabled}
+          value=""
+          onChange={(event) => {
+            const targetFolderId = event.currentTarget.value
+            event.currentTarget.value = ''
+            if (targetFolderId) void props.selection.moveSelectionToFolder(targetFolderId)
+          }}
+        >
+          <option value="">Move to...</option>
+          {props.selection.moveTargetFolders.map((folder) => <option value={folder.id} key={folder.id}>{folder.name}</option>)}
+        </select>
       </label>
       <button type="button" class="danger" onClick={props.selection.requestDeleteSelection} disabled={props.selection.selectedCount === 0} title="Delete selected">
         <Trash2 size={16} />

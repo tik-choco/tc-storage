@@ -8,6 +8,18 @@ export function reorderIds(ids: string[], sourceId: string, targetId: string, po
   return [...withoutSource.slice(0, insertIndex), sourceId, ...withoutSource.slice(insertIndex)]
 }
 
+export function reorderIdBlock(ids: string[], sourceIds: string[], targetId: string, position: BrowserReorderTarget['position']): string[] {
+  const sourceSet = new Set(sourceIds)
+  if (sourceSet.size === 0 || sourceSet.has(targetId)) return ids
+  const movedIds = ids.filter((id) => sourceSet.has(id))
+  if (movedIds.length === 0) return ids
+  const withoutSources = ids.filter((id) => !sourceSet.has(id))
+  const targetIndex = withoutSources.indexOf(targetId)
+  if (targetIndex < 0) return ids
+  const insertIndex = position === 'before' ? targetIndex : targetIndex + 1
+  return [...withoutSources.slice(0, insertIndex), ...movedIds, ...withoutSources.slice(insertIndex)]
+}
+
 export function uniqueItems(items: BrowserDragItem[]): BrowserDragItem[] {
   const seen = new Set<string>()
   return items.filter((item) => {

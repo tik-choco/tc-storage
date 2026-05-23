@@ -1,6 +1,6 @@
 import type { BrowserDragItem, BrowserReorderTarget, Notice } from './appTypes.js'
 import type { MoveActions, MutableRef, SetState } from './appControllerTypes.js'
-import { reorderIds, sameItem, uniqueItems } from './appDragDropUtils.js'
+import { reorderIdBlock, sameItem, uniqueItems } from './appDragDropUtils.js'
 import { descendantFolderIds } from './appHelpers.js'
 import { nearestSharedAncestorFolder } from './appUtils.js'
 import { stampFilePatch, stampFolderPatch } from './crdt.js'
@@ -59,7 +59,8 @@ export function createDragDropActions(options: DragDropOptions) {
       if (target.type === 'folder' && hasExternalFiles(event.dataTransfer)) handleMoveTargetDragOver(target.id, event)
       return
     }
-    const reorder = dragItemsRef.current.length <= 1 ? reorderTargetFromEvent(item, target, event) : null
+    const reorderItems = dragItemsRef.current.length ? dragItemsRef.current : [item]
+    const reorder = reorderTargetFromEvent(reorderItems, target, event)
     if (reorder) {
       event.preventDefault()
       event.stopPropagation()
@@ -87,12 +88,12 @@ export function createDragDropActions(options: DragDropOptions) {
       if (target.type === 'folder') handleMoveTargetDrop(target.id, event)
       return
     }
-    const reorder = items.length <= 1 ? reorderTargetFromEvent(item, target, event) : null
-    if (reorder?.type === target.type && reorder.id === target.id && canReorderDraggedItem(item, target)) {
+    const reorder = reorderTargetFromEvent(items, target, event)
+    if (reorder?.type === target.type && reorder.id === target.id) {
       event.preventDefault()
       event.stopPropagation()
       endItemDrag()
-      reorderDraggedItem(item, reorder)
+      reorderDraggedItems(items, reorder)
       return
     }
     if (target.type === 'folder') handleMoveTargetDrop(target.id, event)
@@ -135,8 +136,8 @@ export function createDragDropActions(options: DragDropOptions) {
     void uploadFiles(filesToUpload, targetFolderId)
   }
 
-  function reorderTargetFromEvent(item: BrowserDragItem, target: BrowserDragItem, event: DragEvent): BrowserReorderTarget | null {
-    if (!canReorderDraggedItem(item, target)) return null
+  function reorderTargetFromEvent(items: BrowserDragItem[], target: BrowserDragItem, event: DragEvent): BrowserReorderTarget | null {
+    if (!canReorderDraggedItems(items, target)) return null
     const ratio = itemDropRatio(event)
     if (target.type === 'folder' && ratio > 0.3 && ratio < 0.7) return null
     return { ...target, position: ratio < 0.5 ? 'before' : 'after' }
@@ -150,28 +151,33 @@ export function createDragDropActions(options: DragDropOptions) {
     return rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5
   }
 
-  function canReorderDraggedItem(item: BrowserDragItem, target: BrowserDragItem): boolean {
-    if (item.type !== target.type || item.id === target.id) return false
+  function canReorderDraggedItems(items: BrowserDragItem[], target: BrowserDragItem): boolean {
+    const sources = uniqueItems(items)
+    if (sources.length === 0 || sources.some((item) => item.type !== target.type || item.id === target.id)) return false
     const snapshotValue = snapshotRef.current
-    if (item.type === 'file') {
-      const file = snapshotValue.files.find((value) => value.id === item.id && !value.deletedAt)
-      const targetFile = snapshotValue.files.find((value) => value.id === target.id && !value.deletedAt)
-      return Boolean(file && targetFile && file.folderId === currentFolderId && targetFile.folderId === currentFolderId)
+    if (target.type === 'file') {
+      const filesById = new Map(snapshotValue.files.filter((value) => !value.deletedAt).map((file) => [file.id, file]))
+      const targetFile = filesById.get(target.id)
+      return Boolean(targetFile && targetFile.folderId === currentFolderId && sources.every((item) => filesById.get(item.id)?.folderId === currentFolderId))
     }
-    const folder = snapshotValue.folders.find((value) => value.id === item.id && !value.deletedAt)
-    const targetFolder = snapshotValue.folders.find((value) => value.id === target.id && !value.deletedAt)
-    return Boolean(folder && targetFolder && folder.parentId === currentFolderId && targetFolder.parentId === currentFolderId)
+    const foldersById = new Map(snapshotValue.folders.filter((value) => !value.deletedAt).map((folder) => [folder.id, folder]))
+    const targetFolder = foldersById.get(target.id)
+    return Boolean(targetFolder && targetFolder.parentId === currentFolderId && sources.every((item) => foldersById.get(item.id)?.parentId === currentFolderId))
   }
 
-  function reorderDraggedItem(item: BrowserDragItem, target: BrowserReorderTarget): void {
-    if (!canReorderDraggedItem(item, target)) return
+  function reorderDraggedItems(items: BrowserDragItem[], target: BrowserReorderTarget): void {
+    const sources = uniqueItems(items)
+    if (!canReorderDraggedItems(sources, target)) return
     const now = new Date().toISOString()
     const snapshotValue = snapshotRef.current
-    if (item.type === 'file') {
+    if (target.type === 'file') {
       const currentRows = snapshotValue.files.filter((file) => !file.deletedAt && file.folderId === currentFolderId).sort(compareFilesForDisplay)
-      const nextIds = reorderIds(currentRows.map((file) => file.id), item.id, target.id, target.position)
+      const sourceIdSet = new Set(sources.map((item) => item.id))
+      const sourceIds = currentRows.map((file) => file.id).filter((id) => sourceIdSet.has(id))
+      const nextIds = reorderIdBlock(currentRows.map((file) => file.id), sourceIds, target.id, target.position)
       const orderById = new Map(nextIds.map((id, index) => [id, (index + 1) * 1000]))
-      const movedFile = currentRows.find((file) => file.id === item.id)
+      const movedFile = sourceIds.length === 1 ? currentRows.find((file) => file.id === sourceIds[0]) : undefined
+      const detail = sourceIds.length > 1 ? `${sourceIds.length} 件のファイルを並び替え` : `${movedFile?.name ?? 'ファイル'} を並び替え`
       const changedFiles = currentRows.flatMap((file) => {
         const sortOrder = orderById.get(file.id)
         return sortOrder === undefined || file.sortOrder === sortOrder ? [] : [stampFilePatch(file, { sortOrder }, now, settings.nodeId)]
@@ -179,15 +185,18 @@ export function createDragDropActions(options: DragDropOptions) {
       const changedFilesById = new Map(changedFiles.map((file) => [file.id, file]))
       setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((file) => {
         return changedFilesById.get(file.id) ?? file
-      }) }, { actorNodeId: settings.nodeId, folderId: currentFolderId ?? undefined, fileId: item.id, action: 'file.reorder', detail: `${movedFile?.name ?? 'ファイル'} を並び替え` }, now), settings.nodeId))
+      }) }, { actorNodeId: settings.nodeId, folderId: currentFolderId ?? undefined, fileId: sourceIds[0], action: 'file.reorder', detail }, now), settings.nodeId))
       announceReorderedSharedFiles(changedFiles)
-      setNotice({ tone: 'success', text: 'ファイルの並び順を更新しました' })
+      setNotice({ tone: 'success', text: sourceIds.length > 1 ? `${sourceIds.length} 件のファイルの並び順を更新しました` : 'ファイルの並び順を更新しました' })
       return
     }
     const currentRows = snapshotValue.folders.filter((folder) => !folder.deletedAt && folder.parentId === currentFolderId).sort(compareFoldersForDisplay)
-    const nextIds = reorderIds(currentRows.map((folder) => folder.id), item.id, target.id, target.position)
+    const sourceIdSet = new Set(sources.map((item) => item.id))
+    const sourceIds = currentRows.map((folder) => folder.id).filter((id) => sourceIdSet.has(id))
+    const nextIds = reorderIdBlock(currentRows.map((folder) => folder.id), sourceIds, target.id, target.position)
     const orderById = new Map(nextIds.map((id, index) => [id, (index + 1) * 1000]))
-    const movedFolder = currentRows.find((folder) => folder.id === item.id)
+    const movedFolder = sourceIds.length === 1 ? currentRows.find((folder) => folder.id === sourceIds[0]) : undefined
+    const detail = sourceIds.length > 1 ? `${sourceIds.length} 件のフォルダーを並び替え` : `${movedFolder?.name ?? 'フォルダー'} を並び替え`
     const changedFolders = currentRows.flatMap((folder) => {
       const sortOrder = orderById.get(folder.id)
       return sortOrder === undefined || folder.sortOrder === sortOrder ? [] : [stampFolderPatch(folder, { sortOrder }, now, settings.nodeId)]
@@ -195,9 +204,9 @@ export function createDragDropActions(options: DragDropOptions) {
     const changedFoldersById = new Map(changedFolders.map((folder) => [folder.id, folder]))
     setSnapshot((current) => touchSnapshot(addActivity({ ...current, folders: current.folders.map((folder) => {
       return changedFoldersById.get(folder.id) ?? folder
-    }) }, { actorNodeId: settings.nodeId, folderId: item.id, action: 'folder.reorder', detail: `${movedFolder?.name ?? 'フォルダー'} を並び替え` }, now), settings.nodeId))
+    }) }, { actorNodeId: settings.nodeId, folderId: sourceIds[0], action: 'folder.reorder', detail }, now), settings.nodeId))
     announceReorderedSharedFolders(changedFolders)
-    setNotice({ tone: 'success', text: 'フォルダーの並び順を更新しました' })
+    setNotice({ tone: 'success', text: sourceIds.length > 1 ? `${sourceIds.length} 件のフォルダーの並び順を更新しました` : 'フォルダーの並び順を更新しました' })
   }
 
   function announceReorderedSharedFiles(files: FileRecord[]): void {
