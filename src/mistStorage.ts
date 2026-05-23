@@ -17,6 +17,9 @@ type MistConfigBridge = {
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 export const mistStorageMaxCapacityMb = 256 * 1024
+const verifyStorageAddEnabled =
+  typeof import.meta.env !== 'undefined' &&
+  import.meta.env.VITE_VERIFY_MIST_STORAGE === 'true'
 let mistModulePromise: Promise<MistModule> | undefined
 
 function storageLog(message: string, details?: Record<string, unknown>): void {
@@ -33,7 +36,7 @@ export async function loadMistModule(): Promise<MistModule> {
     mistModulePromise = import('./vendor/mistlib-wasm/mistlib_wasm.js').then(async (module) => {
       await module.default()
       configureMistStorageCapacity(module)
-      storageLog('mistlib wasm module initialized')
+      storageLog('mistlib wasm module initialized', storageContextDetails())
       return module
     })
   }
@@ -81,13 +84,21 @@ export async function saveEncryptedFolderToMist(options: {
   const encrypted = await encryptJson(bundle, options.passphrase)
   const bytes = encoder.encode(JSON.stringify(encrypted))
   const name = `${options.folder.id}.tc-folder.enc.json`
-  storageLog('storage_add folder start', { name, folderId: options.folder.id, fileCount: options.files.length, bytes: bytes.byteLength })
+  storageLog('storage_add folder start', {
+    name,
+    folderId: options.folder.id,
+    folderName: options.folder.name,
+    fileCount: options.files.length,
+    fileCidCount: options.files.filter((file) => Boolean(file.lastCid)).length,
+    bytes: bytes.byteLength,
+  })
   try {
     const cid = await mist.storage_add(name, bytes)
-    storageLog('storage_add folder complete', { name, folderId: options.folder.id, cid, bytes: bytes.byteLength })
+    storageLog('storage_add folder complete', { name, folderId: options.folder.id, folderName: options.folder.name, cid, bytes: bytes.byteLength })
+    await verifyStorageAdd(mist, 'folder', cid, { name, folderId: options.folder.id, folderName: options.folder.name })
     return cid
   } catch (error) {
-    storageWarn('storage_add folder failed', { name, folderId: options.folder.id, error: describeStorageError(error) })
+    storageWarn('storage_add folder failed', { name, folderId: options.folder.id, folderName: options.folder.name, error: describeStorageError(error), ...storageContextDetails() })
     throw error
   }
 }
@@ -111,13 +122,24 @@ export async function saveEncryptedFileToMist(options: {
   const encrypted = await encryptJson(bundle, options.passphrase)
   const bytes = encoder.encode(JSON.stringify(encrypted))
   const name = `${options.file.id}.tc-file.enc.json`
-  storageLog('storage_add file start', { name, folderId: options.folder.id, fileId: options.file.id, bytes: bytes.byteLength })
+  storageLog('storage_add file start', {
+    name,
+    folderId: options.folder.id,
+    folderName: options.folder.name,
+    fileId: options.file.id,
+    fileName: options.file.name,
+    mimeType: options.file.mimeType,
+    size: options.file.size,
+    checksum: options.file.checksum,
+    bytes: bytes.byteLength,
+  })
   try {
     const cid = await mist.storage_add(name, bytes)
-    storageLog('storage_add file complete', { name, folderId: options.folder.id, fileId: options.file.id, cid, bytes: bytes.byteLength })
+    storageLog('storage_add file complete', { name, folderId: options.folder.id, folderName: options.folder.name, fileId: options.file.id, fileName: options.file.name, cid, bytes: bytes.byteLength })
+    await verifyStorageAdd(mist, 'file', cid, { name, folderId: options.folder.id, folderName: options.folder.name, fileId: options.file.id, fileName: options.file.name })
     return cid
   } catch (error) {
-    storageWarn('storage_add file failed', { name, folderId: options.folder.id, fileId: options.file.id, error: describeStorageError(error) })
+    storageWarn('storage_add file failed', { name, folderId: options.folder.id, folderName: options.folder.name, fileId: options.file.id, fileName: options.file.name, error: describeStorageError(error), ...storageContextDetails() })
     throw error
   }
 }
@@ -132,10 +154,18 @@ export async function loadEncryptedFolderFromMist(cid: string, passphrase: strin
     storageLog('storage_get folder complete', { cid: normalizedCid, bytes: bytes.byteLength })
     const encrypted = JSON.parse(decoder.decode(bytes)) as EncryptedPayload
     const bundle = await decryptJson<FolderBundle>(encrypted, passphrase)
-    storageLog('storage_get folder decrypted', { cid: normalizedCid, folderId: bundle.folder.id, fileCount: bundle.files.length })
+    storageLog('storage_get folder decrypted', {
+      cid: normalizedCid,
+      folderId: bundle.folder.id,
+      folderName: bundle.folder.name,
+      fileCount: bundle.files.length,
+      fileCidCount: bundle.files.filter((file) => Boolean(file.lastCid)).length,
+      fileDataUrlCount: bundle.files.filter((file) => Boolean(file.dataUrl)).length,
+      originNode: bundle.originNode,
+    })
     return bundle
   } catch (error) {
-    storageWarn('storage_get folder failed', { cid: normalizedCid, error: describeStorageError(error) })
+    storageWarn('storage_get folder failed', { cid: normalizedCid, error: describeStorageError(error), ...storageContextDetails() })
     throw error
   }
 }
@@ -150,10 +180,21 @@ export async function loadEncryptedFileFromMist(cid: string, passphrase: string)
     storageLog('storage_get file complete', { cid: normalizedCid, bytes: bytes.byteLength })
     const encrypted = JSON.parse(decoder.decode(bytes)) as EncryptedPayload
     const bundle = await decryptJson<FileBundle>(encrypted, passphrase)
-    storageLog('storage_get file decrypted', { cid: normalizedCid, folderId: bundle.folder.id, fileId: bundle.file.id })
+    storageLog('storage_get file decrypted', {
+      cid: normalizedCid,
+      folderId: bundle.folder.id,
+      folderName: bundle.folder.name,
+      fileId: bundle.file.id,
+      fileName: bundle.file.name,
+      mimeType: bundle.file.mimeType,
+      size: bundle.file.size,
+      checksum: bundle.file.checksum,
+      hasDataUrl: Boolean(bundle.file.dataUrl),
+      originNode: bundle.originNode,
+    })
     return bundle
   } catch (error) {
-    storageWarn('storage_get file failed', { cid: normalizedCid, error: describeStorageError(error) })
+    storageWarn('storage_get file failed', { cid: normalizedCid, error: describeStorageError(error), ...storageContextDetails() })
     throw error
   }
 }
@@ -175,4 +216,27 @@ function mistStorageUnavailableMessage(): string {
 
 function describeStorageError(error: unknown): string {
   return describeError(error, 'unknown storage error')
+}
+
+async function verifyStorageAdd(mist: Pick<MistModule, 'storage_get'>, kind: 'file' | 'folder', cid: string, details: Record<string, unknown>): Promise<void> {
+  if (!verifyStorageAddEnabled) return
+  storageLog('storage_add verify start', { kind, cid, ...details })
+  try {
+    const bytes = await mist.storage_get(cid)
+    storageLog('storage_add verify complete', { kind, cid, bytes: bytes.byteLength, ...details })
+  } catch (error) {
+    storageWarn('storage_add verify failed', { kind, cid, error: describeStorageError(error), ...details, ...storageContextDetails() })
+  }
+}
+
+function storageContextDetails(): Record<string, unknown> {
+  const locationValue = globalThis.location
+  const navigatorValue = globalThis.navigator as NavigatorWithOpfs | undefined
+  return {
+    origin: locationValue?.origin,
+    pathname: locationValue?.pathname,
+    isSecureContext: globalThis.isSecureContext,
+    hasOpfs: typeof navigatorValue?.storage?.getDirectory === 'function',
+    verifyStorageAdd: verifyStorageAddEnabled,
+  }
 }

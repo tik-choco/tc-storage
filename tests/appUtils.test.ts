@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
-import { browserViewModeKey, loadBrowserViewMode, shouldPreloadVisibleThumbnail } from '../src/appUtils.js'
+import { browserViewModeKey, isMediaFile, loadBrowserViewMode, shouldPreloadVisibleThumbnail } from '../src/appUtils.js'
 
 let originalLocalStorage: Storage | undefined
 let store: Record<string, string>
@@ -42,4 +42,11 @@ test('visible thumbnail preload is limited to uncached media with a cid', () => 
   assert.equal(shouldPreloadVisibleThumbnail({ dataUrl: undefined, file: image, visible: false }), false)
   assert.equal(shouldPreloadVisibleThumbnail({ dataUrl: undefined, file: { ...image, lastCid: '', lastShareCid: '' }, visible: true }), false)
   assert.equal(shouldPreloadVisibleThumbnail({ dataUrl: undefined, file: { ...image, mimeType: 'application/pdf' }, visible: true }), false)
+  assert.equal(shouldPreloadVisibleThumbnail({ dataUrl: undefined, file: { ...image, mimeType: 'video/mp4' }, visible: true }), true)
+})
+
+test('media file detection includes images and video', () => {
+  assert.equal(isMediaFile({ mimeType: 'image/png' }), true)
+  assert.equal(isMediaFile({ mimeType: 'video/mp4' }), true)
+  assert.equal(isMediaFile({ mimeType: 'application/pdf' }), false)
 })

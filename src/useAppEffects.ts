@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type Dispatch, type StateUpdater } from 'preact/hooks'
 import type { BrowserViewMode, FolderAccessMode, Notice, PendingShare } from './appTypes.js'
-import { activeAncestorFolderId, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
+import { activeAncestorFolderId, canPreloadThumbnail, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import { ensureDidIdentity, publicDidIdentity } from './didIdentity.js'
 import type { FileRecord, FolderRecord, StorageSnapshot } from './domain.js'
 import { describeError } from './errors.js'
@@ -51,6 +51,15 @@ export function shouldPreloadProfileAvatar(options: {
   return options.profileOpen && Boolean(options.avatarFileId) && !options.hasDataUrl
 }
 
+export function failedThumbnailRetryPeerKey(options: {
+  networkMode: string
+  stablePeerCount: number
+  stablePeerKey: string
+}): string {
+  if (options.networkMode !== 'mistlib' || options.stablePeerCount === 0) return ''
+  return options.stablePeerKey
+}
+
 interface AppEffectsOptions {
   acceptLinkedShare: (share: LinkedShare) => void
   announceSharedFolders: (options?: { publishLocalChangesImmediately?: boolean }) => void
@@ -68,6 +77,7 @@ interface AppEffectsOptions {
   ensureFileContent: (file: FileRecord, options?: { trackProgress?: boolean }) => Promise<FileRecord>
   expandedPreviewOpen: boolean
   fileContentCacheRef: MutableRef<Record<string, string>>
+  fileContentFailuresRef: MutableRef<Record<string, { retryAfter: number; signature: string }>>
   fileContentCache: Record<string, string>
   fileDataUrls: Record<string, string>
   fileShareKeys: Record<string, string>
@@ -114,7 +124,6 @@ interface AppEffectsOptions {
   syncSignaturesRef: MutableRef<Record<string, string>>
   syncTimersRef: MutableRef<Record<string, number>>
   networkMode: string
-  peerCount: number
   stablePeerCount: number
   stablePeerKey: string
   selectFolder: (folderId: string | null) => void
@@ -125,15 +134,16 @@ export function useAppEffects(options: AppEffectsOptions): void {
     acceptLinkedShare, announceSharedFolders, autoImportCidsRef, autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare,
     browserViewMode, browserViewModeKey, canResolveFileContent, clearFolderSyncTimer, currentFolder,
     currentFolderId, detailFileId, ensureFileContent, expandedPreviewOpen, fileContentCache, fileContentCacheRef, fileDataUrls,
-    fileShareKeys, fileShareKeysRef, files, folderAccessModes, folderAccessModesRef, folderKeys, folderKeysRef, folderPeers, folders,
+    fileContentFailuresRef, fileShareKeys, fileShareKeysRef, files, folderAccessModes, folderAccessModesRef, folderKeys, folderKeysRef, folderPeers, folders,
     handlePreviewKey, importKeys, importKeysRef, isPendingShareAlreadyImported, markPendingShareImported,
-    network, networkRef, networkMode, peerCount, pendingShares, pendingSharesRef, preloadFileContent,
+    network, networkRef, networkMode, pendingShares, pendingSharesRef, preloadFileContent,
     previewFiles, profileOpen, requestFolderAccess, scheduleFolderSync, selectedFile, selectedFileId, selectedPreviewFile,
     selectFolder, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setNotice, setSelectedFileId, setSettings, setSettingsDraft, settings, settingsOpen,
     setSnapshot, settingsRef, snapshot, snapshotRef, stablePeerCount, stablePeerKey, syncSignaturesRef, syncTimersRef,
   } = options
   const lastConnectionAnnounceKeyRef = useRef('')
+  const lastFailedThumbnailRetryPeerKeyRef = useRef('')
 
   useEffect(() => { snapshotRef.current = snapshot }, [snapshot])
   useEffect(() => { folderAccessModesRef.current = folderAccessModes }, [folderAccessModes])
@@ -191,6 +201,23 @@ export function useAppEffects(options: AppEffectsOptions): void {
     const file = files.find((item) => item.id === settings.avatarFileId)
     if (file && canResolveFileContent(file)) preloadFileContent(file)
   }, [fileDataUrls, fileShareKeys, files, folderKeys, profileOpen, settings.avatarFileId])
+  useEffect(() => {
+    const retryPeerKey = failedThumbnailRetryPeerKey({ networkMode, stablePeerCount, stablePeerKey })
+    if (!retryPeerKey) {
+      lastFailedThumbnailRetryPeerKeyRef.current = ''
+      return
+    }
+    if (lastFailedThumbnailRetryPeerKeyRef.current === retryPeerKey) return
+    lastFailedThumbnailRetryPeerKeyRef.current = retryPeerKey
+    const failedIds = Object.keys(fileContentFailuresRef.current)
+    if (failedIds.length === 0) return
+    fileContentFailuresRef.current = {}
+    syncLog('retrying failed thumbnail preloads after stable peer connection', { failedCount: failedIds.length, stablePeerCount })
+    const failed = new Set(failedIds)
+    for (const file of files) {
+      if (failed.has(file.id) && canPreloadThumbnail(file) && canResolveFileContent(file)) preloadFileContent(file)
+    }
+  }, [canResolveFileContent, fileContentFailuresRef, files, networkMode, preloadFileContent, stablePeerCount, stablePeerKey])
   useShareLinkImport(useCallback(acceptLinkedShare, []))
   useEffect(() => {
     const sharedFolders = snapshot.folders.filter((folder) => folder.shareEnabled && folderKeys[folder.id])
@@ -240,11 +267,17 @@ export function useAppEffects(options: AppEffectsOptions): void {
       const folder = snapshot.folders.find((item) => item.id === share.folderId)
       const passphrase = folderKeys[share.folderId]
       if (!folder || !passphrase || !canAutoImportFolderShare({ folder, incomingCid: share.cid, passphrase })) continue
+      const localSignature = sharedFolderSignature(snapshot, share.folderId)
+      if (share.folderSignature && share.folderSignature === localSignature) {
+        syncLog('pending folder-share skipped: signatures match', { ...shareLogDetails(share), signatureLength: localSignature.length })
+        markPendingShareImported(share)
+        continue
+      }
       if (autoImportCidsRef.current.has(share.cid) || autoImportInFlightRef.current.has(share.cid)) continue
       syncLog('pending folder-share accepted: storage_get will start', { ...shareLogDetails(share), localCid: shortLogValue(folder.lastCid) })
       void autoImportFolderShare(share, passphrase)
     }
-  }, [folderKeys, importKeys, networkMode, peerCount, pendingShares, snapshot.files, snapshot.folders, stablePeerCount])
+  }, [folderKeys, importKeys, networkMode, pendingShares, snapshot.files, snapshot.folders, stablePeerCount])
   useEffect(() => () => {
     for (const timer of Object.values(syncTimersRef.current)) window.clearTimeout(timer)
   }, [])

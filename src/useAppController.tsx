@@ -81,14 +81,15 @@ export function useAppController() {
   const network = useMistShare(settings, useCallback((envelope: ShareEnvelope) => envelopeHandlerRef.current(envelope), []))
   const {
     accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
-    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentStorageRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
+    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
+    folderStateAnnouncementsRef,
     helloResponseAtRef, importKeysRef, networkRef, pendingSharesRef, settingsRef, snapshotRef,
     syncInFlightRef, syncSignaturesRef, syncTimersRef,
   } = useAppControllerRefs({ fileContentCache, fileShareKeys, folderAccessModes, folderKeys, importKeys, network, pendingShares, settings, snapshot })
 
   const peerActions = createPeerActions({ setFolderPeers, settingsRef })
-  const fileContent = createFileContentActions({ ...transfer, fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentStorageRef, fileShareKeysRef, folderKeysRef, setFileContentCache, setNotice, setSnapshot, settingsRef, snapshotRef })
-  const folderSync = createFolderSyncActions({ ensureFolderFilesStored: fileContent.ensureFolderFilesStored, folderKeysRef, hasUntrustedFolderContent: fileContent.hasUntrustedFolderContent, networkRef, setNotice, setSnapshot, settingsRef, snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef })
+  const fileContent = createFileContentActions({ ...transfer, fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderKeysRef, setFileContentCache, setNotice, setSnapshot, settingsRef, snapshotRef })
+  const folderSync = createFolderSyncActions({ ensureFolderFilesStored: fileContent.ensureFolderFilesStored, folderKeysRef, folderStateAnnouncementsRef, hasUntrustedFolderContent: fileContent.hasUntrustedFolderContent, networkRef, setNotice, setSnapshot, settingsRef, snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef })
   const access = createAccessActions({
     accessRequestKeysRef,
     folderAccessModesRef,
@@ -139,6 +140,7 @@ export function useAppController() {
     expandedPreviewOpen,
     fileContentCache,
     fileContentCacheRef,
+    fileContentFailuresRef,
     fileDataUrls,
     fileShareKeys,
     fileShareKeysRef,
@@ -157,7 +159,6 @@ export function useAppController() {
     network,
     networkMode: network.state.mode,
     networkRef,
-    peerCount: network.state.peers.length,
     stablePeerCount: network.state.stablePeers.length,
     stablePeerKey: network.state.stablePeers.toSorted().join(','),
     pendingShares,

@@ -16,17 +16,12 @@ export function mergeUploadedFiles(currentFiles: FileRecord[], uploaded: FileRec
 
 export function remoteFolderSnapshot(bundle: FolderBundle, share: PendingShare, options: { preserveRootFolder?: FolderRecord } = {}): StorageSnapshot {
   const sharedAt = share.sentAt || bundle.exportedAt
-  const rootPatch: Partial<FolderRecord> = {
-    shareEnabled: true,
-    sharedRoomId: share.roomId,
-    lastCid: share.cid,
-    lastSavedAt: bundle.exportedAt,
-    lastSharedAt: sharedAt,
-  }
-  if (!options.preserveRootFolder) rootPatch.parentId = null
+  const contentPatch: Partial<FolderRecord> = { lastCid: share.cid, lastSavedAt: bundle.exportedAt }
+  const sharePatch: Partial<FolderRecord> = { shareEnabled: true, sharedRoomId: share.roomId, lastSharedAt: sharedAt }
+  if (!options.preserveRootFolder) sharePatch.parentId = null
   const rootFolder = stampFolderPatch(
-    bundle.folder,
-    rootPatch,
+    stampFolderPatch(bundle.folder, contentPatch, bundle.exportedAt, bundle.originNode),
+    sharePatch,
     sharedAt,
     bundle.originNode,
   )

@@ -24,8 +24,20 @@ export function isSeededLegacySnapshot(snapshot: StorageSnapshot): boolean {
   )
 }
 
+export function isImageFile(file: Pick<FileRecord, 'mimeType'>): boolean {
+  return file.mimeType.startsWith('image/')
+}
+
+export function isVideoFile(file: Pick<FileRecord, 'mimeType'>): boolean {
+  return file.mimeType.startsWith('video/')
+}
+
+export function isMediaFile(file: Pick<FileRecord, 'mimeType'>): boolean {
+  return isImageFile(file) || isVideoFile(file)
+}
+
 export function canPreloadThumbnail(file: Pick<FileRecord, 'deletedAt' | 'mimeType'>): boolean {
-  return !file.deletedAt && (file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/'))
+  return !file.deletedAt && isMediaFile(file)
 }
 
 export function shouldPreloadVisibleThumbnail(options: {

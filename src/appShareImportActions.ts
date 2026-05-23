@@ -58,12 +58,13 @@ export function createShareImportActions(options: ShareImportOptions) {
       const now = new Date().toISOString()
       clearFolderSyncTimer(bundle.folder.id)
       setSnapshot((current) => {
+        const previousLocalSignature = sharedFolderSignature(current, bundle.folder.id)
         const remoteSnapshot = remoteFolderSnapshot(bundle, share, {
           preserveRootFolder: current.folders.find((item) => item.id === bundle.folder.id && !item.deletedAt),
         })
         const merged = mergeSnapshots(current, remoteSnapshot)
         const next = addActivity(merged, { actorNodeId: settingsRef.current.nodeId, folderId: bundle.folder.id, action: 'folder.sync', detail: `${bundle.folder.name} を自動同期` }, now)
-        rememberImportedFolderSignature(bundle.folder.id, next, remoteSnapshot)
+        rememberImportedFolderSignature(bundle.folder.id, previousLocalSignature, next, remoteSnapshot)
         return next
       })
       setFolderKeys((current) => ({ ...current, ...folderKeyUpdatesForBundle(bundle, passphrase) }))
@@ -104,6 +105,7 @@ export function createShareImportActions(options: ShareImportOptions) {
     const snapshotValue = snapshotRef.current
     if (share.type === 'folder-share') {
       const folder = share.folderId ? snapshotValue.folders.find((item) => item.id === share.folderId && !item.deletedAt) : undefined
+      if (folder && share.folderSignature && share.folderSignature === sharedFolderSignature(snapshotValue, folder.id)) return true
       if (!share.cid) return Boolean(folder)
       return folder?.lastCid === share.cid
     }
@@ -157,11 +159,12 @@ export function createShareImportActions(options: ShareImportOptions) {
     const bundle = await materializeFolderBundleFiles(await loadEncryptedFolderFromMist(share.cid ?? '', passphrase), passphrase)
     clearFolderSyncTimer(bundle.folder.id)
     setSnapshot((current) => {
+      const previousLocalSignature = sharedFolderSignature(current, bundle.folder.id)
       const remoteSnapshot = remoteFolderSnapshot(bundle, share, {
         preserveRootFolder: current.folders.find((item) => item.id === bundle.folder.id && !item.deletedAt),
       })
       const next = addActivity(mergeSnapshots(current, remoteSnapshot), { actorNodeId: settingsRef.current.nodeId, folderId: bundle.folder.id, action: 'folder.import', detail: `${bundle.folder.name} を復号して取り込み` })
-      rememberImportedFolderSignature(bundle.folder.id, next, remoteSnapshot)
+      rememberImportedFolderSignature(bundle.folder.id, previousLocalSignature, next, remoteSnapshot)
       return next
     })
     setFolderKeys((current) => ({ ...current, ...folderKeyUpdatesForBundle(bundle, passphrase) }))
@@ -181,10 +184,14 @@ export function createShareImportActions(options: ShareImportOptions) {
     setNotice({ tone: 'success', text: `${bundle.file.name} を取り込みました` })
   }
 
-  function rememberImportedFolderSignature(folderId: string, merged: StorageSnapshot, remote: StorageSnapshot) {
+  function rememberImportedFolderSignature(folderId: string, previousLocalSignature: string, merged: StorageSnapshot, remote: StorageSnapshot) {
     const mergedSignature = sharedFolderSignature(merged, folderId)
     const remoteSignature = sharedFolderSignature(remote, folderId)
-    syncSignaturesRef.current[folderId] = mergedSignature === remoteSignature ? mergedSignature : remoteSignature
+    syncSignaturesRef.current[folderId] = folderSignatureForImportedShareTracking({
+      previousLocalSignature,
+      mergedSignature,
+      remoteSignature,
+    })
   }
 
   function pendingShareMatchesImported(pending: PendingShare, imported: PendingShare): boolean {
@@ -221,4 +228,14 @@ export function createShareImportActions(options: ShareImportOptions) {
   }
 
   return { autoImportFolderShare, autoImportLinkedShare, cancelPendingShare, importShare, isPendingShareAlreadyImported, markPendingShareImported }
+}
+
+export function folderSignatureForImportedShareTracking(options: {
+  previousLocalSignature: string
+  mergedSignature: string
+  remoteSignature: string
+}): string {
+  if (options.mergedSignature === options.remoteSignature) return options.mergedSignature
+  if (options.mergedSignature === options.previousLocalSignature) return options.mergedSignature
+  return options.remoteSignature
 }

@@ -101,6 +101,13 @@
   object-fit: cover;
 }
 
+.video-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+}
+
 .thumbnail-loading {
   position: relative;
 }

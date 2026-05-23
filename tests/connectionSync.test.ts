@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { immediateConnectionAnnounceKey, sharedFolderReannounceIntervalMs, shouldPreloadProfileAvatar, shouldRunSharedFolderReannounce } from '../src/useAppEffects.js'
+import { failedThumbnailRetryPeerKey, immediateConnectionAnnounceKey, sharedFolderReannounceIntervalMs, shouldPreloadProfileAvatar, shouldRunSharedFolderReannounce } from '../src/useAppEffects.js'
 
 test('immediateConnectionAnnounceKey waits for stable mist peers', () => {
   const base = {
@@ -44,4 +44,10 @@ test('profile avatar preload is gated behind the profile panel', () => {
   assert.equal(shouldPreloadProfileAvatar({ avatarFileId: '', hasDataUrl: false, profileOpen: true }), false)
   assert.equal(shouldPreloadProfileAvatar({ avatarFileId: 'file-a', hasDataUrl: true, profileOpen: true }), false)
   assert.equal(shouldPreloadProfileAvatar({ avatarFileId: 'file-a', hasDataUrl: false, profileOpen: true }), true)
+})
+
+test('failed thumbnail retry key advances only for stable mist peers', () => {
+  assert.equal(failedThumbnailRetryPeerKey({ networkMode: 'mistlib', stablePeerCount: 1, stablePeerKey: 'node-b' }), 'node-b')
+  assert.equal(failedThumbnailRetryPeerKey({ networkMode: 'mistlib', stablePeerCount: 0, stablePeerKey: '' }), '')
+  assert.equal(failedThumbnailRetryPeerKey({ networkMode: 'local-gossip', stablePeerCount: 1, stablePeerKey: 'node-b' }), '')
 })

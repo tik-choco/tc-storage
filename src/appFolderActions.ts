@@ -149,7 +149,11 @@ export function createFolderActions(options: FolderActionOptions) {
       const filesForSave = await ensureFolderFilesStored(folderForSave, folderFilesForSync(sourceSnapshot, targetFolder.id), passphrase)
       const cid = await saveEncryptedFolderToMist({ folder: folderForSave, folders: foldersForSave, files: filesForSave, passphrase, originNode: settings.nodeId })
       clearFolderSyncTimer(targetFolder.id)
-      const filesForSaveById = new Map(filesForSave.map((file) => [file.id, stripFileContent(file)]))
+      const filesForSaveById = new Map(
+        filesForSave
+          .filter((file) => shouldPersistStoredFileForFolder(sourceSnapshot, file, targetFolder.id))
+          .map((file) => [file.id, stripFileContent(file)]),
+      )
       syncSignaturesRef.current[targetFolder.id] = sharedFolderSignature({ ...sourceSnapshot, folders: sourceSnapshot.folders.map((item) => (item.id === targetFolder.id ? folderForSave : item)), files: sourceSnapshot.files.map((file) => filesForSaveById.get(file.id) ?? file) }, targetFolder.id)
       markFolderSaved(targetFolder, cid, now, shareAfterSave, filesForSave)
       if (shareAfterSave) networkRef.current.broadcastShare({ clock: sourceSnapshot.clock + 1, folderId: targetFolder.id, folderName: targetFolder.name, cid })
@@ -167,7 +171,11 @@ export function createFolderActions(options: FolderActionOptions) {
     setSnapshot((current) => {
       const patch = { lastCid: cid, lastSavedAt: now, lastSharedAt: shared ? now : folder.lastSharedAt, shareEnabled: shared ? true : folder.shareEnabled, sharedRoomId: settings.roomId }
       const foldersNext = current.folders.map((item) => (item.id === folder.id ? stampFolderPatch(item, patch, now, settings.nodeId) : item))
-      const storedFilesById = new Map(storedFiles.map((file) => [file.id, stripFileContent(file)]))
+      const storedFilesById = new Map(
+        storedFiles
+          .filter((file) => shouldPersistStoredFileForFolder(current, file, folder.id))
+          .map((file) => [file.id, stripFileContent(file)]),
+      )
       const filesNext = current.files.map((item) => storedFilesById.get(item.id) ?? item)
       return touchSnapshot(addActivity({ ...current, folders: foldersNext, files: filesNext }, { actorNodeId: settings.nodeId, folderId: folder.id, action: shared ? 'folder.share' : 'folder.save', detail: shared ? `${folder.name} をmistlib共有` : `${folder.name} を暗号化保存` }, now), settings.nodeId)
     })
@@ -213,4 +221,9 @@ export function createFolderActions(options: FolderActionOptions) {
   }
 
   return { beginCreateFolder, cancelCreateFolder, confirmCreateFolder, deleteCurrentFolder, deleteFolder, patchCurrentFolder, requestDeleteFolder, saveFolderToMist, shareFolder }
+}
+
+function shouldPersistStoredFileForFolder(snapshot: StorageSnapshot, file: FileRecord, folderId: string): boolean {
+  const sharedRoot = nearestSharedAncestorFolder(snapshot, file.folderId)
+  return !sharedRoot || sharedRoot.id === folderId
 }

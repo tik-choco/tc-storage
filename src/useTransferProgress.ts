@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useRef, useState } from 'preact/hooks'
 import type { DownloadProgress, ProgressStatus } from './appTypes.js'
 import type { FileRecord } from './domain.js'
 import { withoutRecordKey } from './appUtils.js'
@@ -9,11 +9,6 @@ export function useTransferProgress() {
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
   const [fileLoadProgress, setFileLoadProgress] = useState<Record<string, ProgressStatus>>({})
   const downloadRequestRef = useRef(0)
-  const fileLoadIdsRef = useRef<Set<string>>(new Set())
-
-  useEffect(() => () => {
-    fileLoadIdsRef.current.clear()
-  }, [])
 
   function startDownloadProgress(file: DownloadTarget, cached: boolean): number {
     const requestId = downloadRequestRef.current + 1
@@ -44,18 +39,15 @@ export function useTransferProgress() {
   }
 
   function startFileLoadProgress(file: FileRecord): string {
-    fileLoadIdsRef.current.add(file.id)
     setFileLoadProgress((current) => ({ ...current, [file.id]: { label: 'Loading' } }))
     return file.id
   }
 
   function finishFileLoadProgress(fileId: string): void {
-    fileLoadIdsRef.current.delete(fileId)
     setFileLoadProgress((current) => withoutRecordKey(current, fileId))
   }
 
   function failFileLoadProgress(fileId: string): void {
-    fileLoadIdsRef.current.delete(fileId)
     window.setTimeout(() => setFileLoadProgress((current) => withoutRecordKey(current, fileId)), 650)
   }
 

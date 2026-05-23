@@ -1,6 +1,7 @@
 import { useRef } from 'preact/hooks'
 import type { RequestKeyEntry } from './appAccessActions.js'
 import type { BrowserDragItem, FolderAccessMode, PendingShare } from './appTypes.js'
+import type { FileContentPreloadQueue, FolderStateAnnouncement } from './appControllerTypes.js'
 import type { StorageSnapshot } from './domain.js'
 import type { AppSettings } from './localSettings.js'
 
@@ -26,7 +27,9 @@ export function useAppControllerRefs<TNetwork>(options: AppControllerRefsOptions
   const importKeysRef = useRef(options.importKeys)
   const pendingSharesRef = useRef(options.pendingShares)
   const fileContentLoadsRef = useRef<Partial<Record<string, Promise<string>>>>({})
+  const fileContentPreloadQueueRef = useRef<FileContentPreloadQueue>({ items: new Map(), running: false })
   const fileContentStorageRef = useRef<Record<string, string>>({})
+  const folderStateAnnouncementsRef = useRef<Record<string, FolderStateAnnouncement>>({})
   const settingsRef = useRef(options.settings)
   const networkRef = useRef(options.network)
   const autoImportFailuresRef = useRef<Record<string, { retryAfter: number; signature: string }>>({})
@@ -42,7 +45,8 @@ export function useAppControllerRefs<TNetwork>(options: AppControllerRefsOptions
 
   return {
     accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
-    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentStorageRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
+    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
+    folderStateAnnouncementsRef,
     helloResponseAtRef, importKeysRef, networkRef, pendingSharesRef, settingsRef, snapshotRef,
     syncInFlightRef, syncSignaturesRef, syncTimersRef,
   }

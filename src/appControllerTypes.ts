@@ -7,6 +7,18 @@ export type MutableRef<T> = { current: T }
 export type SetState<T> = Dispatch<StateUpdater<T>>
 export type MistShare = ReturnType<typeof useMistShare>
 
+export interface FileContentPreloadQueue {
+  items: Map<string, FileRecord>
+  running: boolean
+}
+
+export type FolderStateAnnouncement = {
+  audienceKey: string
+  cid: string
+  sentAt: number
+  signature: string
+}
+
 export interface FileContentActions {
   canResolveFileContent: (file: FileRecord) => boolean
   downloadFolderAsZip: (folder: FolderRecord) => Promise<void>

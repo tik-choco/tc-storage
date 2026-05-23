@@ -1,7 +1,7 @@
-import { Check, Download, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, X } from 'lucide-preact'
+import { Check, Download, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, Video, X } from 'lucide-preact'
 import { useEffect, useRef } from 'preact/hooks'
 import type { BrowserDragItem, BrowserReorderTarget, PendingShare, ProgressStatus } from '../appTypes.js'
-import { shouldPreloadVisibleThumbnail } from '../appUtils.js'
+import { isImageFile, isMediaFile, isVideoFile, shouldPreloadVisibleThumbnail } from '../appUtils.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../domain.js'
 import { dateLabel } from '../format.js'
 import type { DraftFolderProps } from './BrowserTableTypes.js'
@@ -141,6 +141,7 @@ export function FileTile(props: {
   const tileRef = useRef<HTMLDivElement>(null)
   const isDragSource = props.dragItem?.type === 'file' && props.dragItem.id === props.file.id
   const reorderClass = reorderTargetClass(props.reorderTarget, 'file', props.file.id)
+  const previewLoading = Boolean(props.progress) || shouldPreloadVisibleThumbnail({ dataUrl: props.dataUrl, file: props.file, visible: true })
 
   useEffect(() => {
     if (!shouldPreloadVisibleThumbnail({ dataUrl: props.dataUrl, file: props.file, visible: true })) return
@@ -185,7 +186,7 @@ export function FileTile(props: {
         role="listitem"
       >
         <button class="media-only-button" onClick={() => props.onOpenFile(props.file)} aria-label={`Open preview for ${props.file.name}`}>
-          <FileTilePreview dataUrl={props.dataUrl} file={props.file} mediaOnly={true} />
+          <FileTilePreview dataUrl={props.dataUrl} file={props.file} isLoading={previewLoading} mediaOnly={true} />
         </button>
         <ProgressIndicator className="tile-progress media-progress" progress={props.progress} />
         <div class="media-only-overlay">
@@ -219,7 +220,7 @@ export function FileTile(props: {
       role="listitem"
     >
       <button class="tile-open" onClick={() => props.onOpenFile(props.file)} title="Open preview">
-        <FileTilePreview dataUrl={props.dataUrl} file={props.file} />
+        <FileTilePreview dataUrl={props.dataUrl} file={props.file} isLoading={previewLoading} />
         <strong>{props.file.name}</strong>
       </button>
       <div class="tile-meta-row">
@@ -242,19 +243,15 @@ function reorderTargetClass(target: BrowserReorderTarget | null, type: BrowserDr
   return target?.type === type && target.id === id ? `reorder-${target.position}` : ''
 }
 
-function isMediaFile(file: FileRecord) {
-  return file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/')
-}
-
-function FileTilePreview(props: { dataUrl: string | undefined; file: FileRecord; mediaOnly?: boolean }) {
-  const isImage = props.file.mimeType.startsWith('image/')
-  const isVideo = props.file.mimeType.startsWith('video/')
+function FileTilePreview(props: { dataUrl: string | undefined; file: FileRecord; isLoading?: boolean; mediaOnly?: boolean }) {
+  const isImage = isImageFile(props.file)
+  const isVideo = isVideoFile(props.file)
   const previewClass = `tile-preview media-tile-preview${props.mediaOnly ? ' media-only-preview' : ''}`
 
   if (isImage && props.dataUrl) {
     return (
       <span class={previewClass}>
-        <img src={props.dataUrl} alt="" loading="lazy" />
+        <img src={props.dataUrl} alt="" decoding="async" loading="eager" />
       </span>
     )
   }
@@ -267,10 +264,18 @@ function FileTilePreview(props: { dataUrl: string | undefined; file: FileRecord;
     )
   }
 
-  if (isImage || isVideo) {
+  if ((isImage || isVideo) && props.isLoading) {
     return (
       <span class={`${previewClass} thumbnail-loading`} aria-label="Loading preview">
         <span class="thumbnail-skeleton" aria-hidden="true" />
+      </span>
+    )
+  }
+
+  if (isVideo) {
+    return (
+      <span class={`${previewClass} video-placeholder`} aria-label="Video preview">
+        <Video size={34} aria-hidden="true" />
       </span>
     )
   }

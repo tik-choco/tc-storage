@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { remoteFolderSnapshot } from '../src/appHelpers.js'
-import { stampFilePatch, stampFolderPatch } from '../src/crdt.js'
+import { folderStateAnnouncementDedupMs, shouldSkipFolderStateAnnouncement } from '../src/appFolderSyncActions.js'
+import { folderSignatureForImportedShareTracking } from '../src/appShareImportActions.js'
+import { mergeSnapshots, stampFilePatch, stampFolderPatch } from '../src/crdt.js'
 import { createInitialSnapshot, makeFileFromDataUrl, makeFolder } from '../src/domain.js'
 import { canAutoImportFolderShare, canAutoImportFolderState, folderFilesForSync, foldersForSync, hasSharedFolderChangesSinceLastShare, sharedFolderSignature, shouldDeferRemoteFolderStateImport } from '../src/folderSync.js'
 
@@ -111,6 +113,58 @@ test('remoteFolderSnapshot marks imported folder shares as shared', () => {
 
   assert.equal(remote.folders[0]?.shareEnabled, true)
   assert.equal(remote.folders[0]?.lastCid, 'cid-folder')
+})
+
+test('remoteFolderSnapshot does not make stale rebroadcasted folder CIDs look newer', () => {
+  const { folder, snapshot } = snapshotWithFolderAndFile()
+  const localSharedAt = '2026-05-17T00:00:05.000Z'
+  const localFolder = stampFolderPatch(folder, { shareEnabled: true, lastCid: 'cid-local-new', lastSharedAt: localSharedAt }, localSharedAt, 'node-local')
+  const remote = remoteFolderSnapshot(
+    {
+      version: 1,
+      exportedAt: '2026-05-17T00:00:00.000Z',
+      originNode: 'node-remote',
+      folder,
+      folders: [folder],
+      files: [],
+    },
+    {
+      type: 'folder-share',
+      from: 'node-remote',
+      roomId: 'tc-storage-main',
+      sentAt: '2026-05-17T00:00:10.000Z',
+      receivedAt: '2026-05-17T00:00:11.000Z',
+      clock: 3,
+      folderId: folder.id,
+      folderName: folder.name,
+      cid: 'cid-remote-old',
+    },
+  )
+
+  const merged = mergeSnapshots({ ...snapshot, folders: [localFolder] }, remote)
+
+  assert.equal(remote.folders[0]?.fieldVersions?.lastCid?.updatedAt, '2026-05-17T00:00:00.000Z')
+  assert.equal(remote.folders[0]?.fieldVersions?.lastSharedAt?.updatedAt, '2026-05-17T00:00:10.000Z')
+  assert.equal(merged.folders.find((item) => item.id === folder.id)?.lastCid, 'cid-local-new')
+})
+
+test('imported folder-share tracking does not force publish when merge kept local content', () => {
+  assert.equal(
+    folderSignatureForImportedShareTracking({
+      previousLocalSignature: 'local',
+      mergedSignature: 'local',
+      remoteSignature: 'remote',
+    }),
+    'local',
+  )
+  assert.equal(
+    folderSignatureForImportedShareTracking({
+      previousLocalSignature: 'local',
+      mergedSignature: 'merged',
+      remoteSignature: 'remote',
+    }),
+    'remote',
+  )
 })
 
 test('remoteFolderSnapshot imports descendant folders from folder bundle', () => {
@@ -234,6 +288,17 @@ test('remote folder-state import is deferred while local shared changes are unpu
 
   assert.equal(shouldDeferRemoteFolderStateImport({ folder: sharedFolder, snapshot: sharedSnapshot }), false)
   assert.equal(shouldDeferRemoteFolderStateImport({ folder: sharedFolder, snapshot: reorderedSnapshot }), true)
+})
+
+test('folder-state announcements skip unchanged state only inside the dedupe window', () => {
+  const previous = { audienceKey: 'mistlib:node-b', cid: 'cid-a', signature: 'signature-a', sentAt: 1_000 }
+
+  assert.equal(shouldSkipFolderStateAnnouncement({ audienceKey: 'mistlib:node-b', cid: 'cid-a', signature: 'signature-a', previous, now: 1_500 }), true)
+  assert.equal(shouldSkipFolderStateAnnouncement({ audienceKey: 'mistlib:node-c', cid: 'cid-a', signature: 'signature-a', previous, now: 1_500 }), false)
+  assert.equal(shouldSkipFolderStateAnnouncement({ audienceKey: 'mistlib:node-b', cid: 'cid-b', signature: 'signature-a', previous, now: 1_500 }), false)
+  assert.equal(shouldSkipFolderStateAnnouncement({ audienceKey: 'mistlib:node-b', cid: 'cid-a', signature: 'signature-b', previous, now: 1_500 }), false)
+  assert.equal(shouldSkipFolderStateAnnouncement({ audienceKey: 'mistlib:node-b', cid: 'cid-a', signature: 'signature-a', previous, now: previous.sentAt + folderStateAnnouncementDedupMs }), false)
+  assert.equal(shouldSkipFolderStateAnnouncement({ audienceKey: 'mistlib:node-b', cid: 'cid-a', signature: 'signature-a', previous: undefined, now: 1_500 }), false)
 })
 
 function snapshotWithFolderAndFile() {
