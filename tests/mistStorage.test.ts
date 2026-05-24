@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { makeFileFromDataUrl, makeFolder } from '../src/domain.js'
-import { configureMistStorageCapacity, mistStorageMaxCapacityMb, saveEncryptedFileToMist } from '../src/mistStorage.js'
+import { configureMistStorageCapacity, ensureMistRuntimeInitialized, mistStorageMaxCapacityMb, saveEncryptedFileToMist } from '../src/mistStorage.js'
 
 const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
 const locationDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'location')
@@ -79,4 +79,22 @@ test('configureMistStorageCapacity sets mistlib storage capacity to 256 GiB', ()
     maxConnectionCount: 30,
     storageMaxCapacityMb: mistStorageMaxCapacityMb,
   })
+})
+
+test('ensureMistRuntimeInitialized initializes mistlib storage runtime once per settings', () => {
+  const calls: string[] = []
+  const mist = {
+    init(id: string, url: string) {
+      calls.push(`${id}:${url}`)
+    },
+  }
+
+  ensureMistRuntimeInitialized(mist, { nodeId: 'node-storage-test-a', signalingUrl: 'wss://rtc.example/signaling' })
+  ensureMistRuntimeInitialized(mist, { nodeId: 'node-storage-test-a', signalingUrl: 'wss://rtc.example/signaling' })
+  ensureMistRuntimeInitialized(mist, { nodeId: 'node-storage-test-b', signalingUrl: 'wss://rtc.example/signaling' })
+
+  assert.deepEqual(calls, [
+    'node-storage-test-a:wss://rtc.example/signaling',
+    'node-storage-test-b:wss://rtc.example/signaling',
+  ])
 })

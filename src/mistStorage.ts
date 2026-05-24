@@ -13,15 +13,23 @@ type MistConfigBridge = {
   get_config: () => string
   set_config: (data: string) => boolean
 }
+type MistRuntimeController = Pick<MistModule, 'init'>
+export type MistRuntimeSettings = {
+  nodeId?: string
+  signalingUrl?: string
+}
 type StoredBundleKind = 'file' | 'folder'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 export const mistStorageMaxCapacityMb = 256 * 1024
+const defaultMistSignalingUrl = 'https://rtc.tik-choco.com/signaling'
 const verifyStorageAddEnabled =
   typeof import.meta.env !== 'undefined' &&
   import.meta.env.VITE_VERIFY_MIST_STORAGE === 'true'
 let mistModulePromise: Promise<MistModule> | undefined
+let mistRuntimeInitKey = ''
+let fallbackRuntimeNodeId = ''
 
 function storageLog(message: string, details?: Record<string, unknown>): void {
   debugInfo('mist-storage', message, details)
@@ -58,6 +66,30 @@ export function configureMistStorageCapacity(mist: MistConfigBridge, capacityMb 
   }
 }
 
+export function ensureMistRuntimeInitialized(
+  mist: MistRuntimeController,
+  settings: MistRuntimeSettings = {},
+  options: { force?: boolean; reason?: string } = {},
+): void {
+  const runtime = normalizeMistRuntimeSettings(settings)
+  const initKey = `${runtime.nodeId}\0${runtime.signalingUrl}`
+  if (!options.force && mistRuntimeInitKey === initKey) return
+  const reason = options.reason ?? 'storage'
+  storageLog('mist runtime init start', {
+    reason,
+    force: Boolean(options.force),
+    nodeId: shortRuntimeValue(runtime.nodeId),
+    signalingUrl: runtime.signalingUrl,
+  })
+  mist.init(runtime.nodeId, runtime.signalingUrl)
+  mistRuntimeInitKey = initKey
+  storageLog('mist runtime init complete', {
+    reason,
+    nodeId: shortRuntimeValue(runtime.nodeId),
+    signalingUrl: runtime.signalingUrl,
+  })
+}
+
 function parseMistConfig(raw: string): Record<string, unknown> {
   const parsed = JSON.parse(raw) as unknown
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
@@ -69,9 +101,12 @@ export async function saveEncryptedFolderToMist(options: {
   files: FileRecord[]
   passphrase: string
   originNode: string
+  runtimeNodeId?: string
+  signalingUrl?: string
 }): Promise<string> {
   assertMistStorageAvailable()
   const mist = await loadMistModule()
+  ensureMistRuntimeInitialized(mist, { nodeId: options.runtimeNodeId ?? options.originNode, signalingUrl: options.signalingUrl })
   const rootFolder = { ...options.folder, parentId: null }
   const folders = options.folders?.map((folder) => (folder.id === options.folder.id ? rootFolder : folder))
   const bundle: FolderBundle = {
@@ -109,10 +144,13 @@ export async function saveEncryptedFileToMist(options: {
   file: FileRecord
   passphrase: string
   originNode: string
+  runtimeNodeId?: string
+  signalingUrl?: string
 }): Promise<string> {
   assertMistStorageAvailable()
   if (!options.file.dataUrl) throw new Error(`${options.file.name} の本文がローカルにありません。CIDから取得してから保存してください。`)
   const mist = await loadMistModule()
+  ensureMistRuntimeInitialized(mist, { nodeId: options.runtimeNodeId ?? options.originNode, signalingUrl: options.signalingUrl })
   const bundle: FileBundle = {
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -145,9 +183,10 @@ export async function saveEncryptedFileToMist(options: {
   }
 }
 
-export async function loadEncryptedFolderFromMist(cid: string, passphrase: string): Promise<FolderBundle> {
+export async function loadEncryptedFolderFromMist(cid: string, passphrase: string, runtime: MistRuntimeSettings = {}): Promise<FolderBundle> {
   assertMistStorageAvailable()
   const mist = await loadMistModule()
+  ensureMistRuntimeInitialized(mist, runtime)
   const normalizedCid = cid.trim()
   storageLog('storage_get folder start', { cid: normalizedCid })
   try {
@@ -170,9 +209,10 @@ export async function loadEncryptedFolderFromMist(cid: string, passphrase: strin
   }
 }
 
-export async function loadEncryptedFileFromMist(cid: string, passphrase: string): Promise<FileBundle> {
+export async function loadEncryptedFileFromMist(cid: string, passphrase: string, runtime: MistRuntimeSettings = {}): Promise<FileBundle> {
   assertMistStorageAvailable()
   const mist = await loadMistModule()
+  ensureMistRuntimeInitialized(mist, runtime)
   const normalizedCid = cid.trim()
   storageLog('storage_get file start', { cid: normalizedCid })
   try {
@@ -238,6 +278,34 @@ function parseEncryptedPayload(bytes: Uint8Array, kind: StoredBundleKind, cid: s
     storageWarn(`storage_get ${kind} parse failed`, { cid, bytes: bytes.byteLength, textPrefix: text.slice(0, 32), error: message, ...storageContextDetails() })
     throw new Error(`保存データJSONを解析できませんでした (${kind}): ${message}`)
   }
+}
+
+function normalizeMistRuntimeSettings(settings: MistRuntimeSettings): Required<MistRuntimeSettings> {
+  return {
+    nodeId: settings.nodeId?.trim() || storedRuntimeNodeId() || createFallbackRuntimeNodeId(),
+    signalingUrl: settings.signalingUrl?.trim() || defaultMistSignalingUrl,
+  }
+}
+
+function storedRuntimeNodeId(): string {
+  try {
+    return globalThis.localStorage?.getItem('tc-storage-node-id-v1')?.trim() ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function createFallbackRuntimeNodeId(): string {
+  if (fallbackRuntimeNodeId) return fallbackRuntimeNodeId
+  const cryptoApi = globalThis.crypto
+  fallbackRuntimeNodeId = typeof cryptoApi?.randomUUID === 'function'
+    ? `node-${cryptoApi.randomUUID()}`
+    : `node-${Math.random().toString(36).slice(2, 10)}`
+  return fallbackRuntimeNodeId
+}
+
+function shortRuntimeValue(value: string): string {
+  return value.length > 22 ? `${value.slice(0, 12)}...${value.slice(-6)}` : value
 }
 
 async function decryptEncryptedPayload<T>(encrypted: EncryptedPayload, passphrase: string, kind: StoredBundleKind, cid: string): Promise<T> {

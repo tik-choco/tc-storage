@@ -1,4 +1,5 @@
 import type { AppSettings } from './localSettings.js'
+import { ensureMistRuntimeInitialized } from './mistStorage.js'
 import type { MistModule, MistRoomController } from './p2pTypes.js'
 
 export function configureMistRoom(
@@ -7,7 +8,7 @@ export function configureMistRoom(
   onEvent: (...events: unknown[]) => void,
 ): { position: { x: number; y: number; z: number } } {
   mist.register_event_callback(onEvent)
-  mist.init(settings.nodeId, settings.signalingUrl)
+  ensureMistRuntimeInitialized(mist, settings, { force: true, reason: 'p2p' })
   mist.join_room(settings.roomId)
   const position = positionForSharedRoom(settings.roomId, settings.nodeId)
   mist.update_position(position.x, position.y, position.z)

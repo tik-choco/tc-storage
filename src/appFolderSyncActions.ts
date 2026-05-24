@@ -136,7 +136,7 @@ export function createFolderSyncActions(options: FolderSyncOptions) {
       const foldersForSave = foldersForSync(snapshotValue, folderId)
       const filesForSync = await ensureFolderFilesStored(folder, folderFilesForSync(snapshotValue, folderId), passphrase)
       syncLog('storage_add start for shared folder', { ...folderLogDetails(folder), folderCount: foldersForSave.length, fileCount: filesForSync.length })
-      const cid = await saveEncryptedFolderToMist({ folder, folders: foldersForSave, files: filesForSync, passphrase, originNode: settingsValue.nodeId })
+      const cid = await saveEncryptedFolderToMist({ folder, folders: foldersForSave, files: filesForSync, passphrase, originNode: settingsValue.nodeId, runtimeNodeId: settingsValue.nodeId, signalingUrl: settingsValue.signalingUrl })
       syncLog('storage_add complete for shared folder', { ...folderLogDetails(folder), cid: shortLogValue(cid), folderCount: foldersForSave.length, fileCount: filesForSync.length })
       const now = new Date().toISOString()
       setSnapshot((current) => {

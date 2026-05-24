@@ -46,6 +46,10 @@ export function createShareImportActions(options: ShareImportOptions) {
     setPendingShares, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef,
   } = options
 
+  function storageRuntimeSettings() {
+    return { nodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl }
+  }
+
   async function autoImportFolderShare(share: PendingShare, passphrase: string) {
     const cid = share.cid
     if (!cid) return
@@ -53,7 +57,7 @@ export function createShareImportActions(options: ShareImportOptions) {
     autoImportInFlightRef.current.add(cid)
     try {
       syncLog('storage_get start for folder-share', shareLogDetails(share))
-      const bundle = await materializeFolderBundleFiles(await loadEncryptedFolderFromMist(cid, passphrase), passphrase)
+      const bundle = await materializeFolderBundleFiles(await loadEncryptedFolderFromMist(cid, passphrase, storageRuntimeSettings()), passphrase)
       syncLog('storage_get complete for folder-share', { ...shareLogDetails(share), folderId: bundle.folder.id, folderName: bundle.folder.name, fileCount: bundle.files.length })
       const now = new Date().toISOString()
       clearFolderSyncTimer(bundle.folder.id)
@@ -157,7 +161,7 @@ export function createShareImportActions(options: ShareImportOptions) {
   }
 
   async function importFolderShare(share: PendingShare, passphrase: string) {
-    const bundle = await materializeFolderBundleFiles(await loadEncryptedFolderFromMist(share.cid ?? '', passphrase), passphrase)
+    const bundle = await materializeFolderBundleFiles(await loadEncryptedFolderFromMist(share.cid ?? '', passphrase, storageRuntimeSettings()), passphrase)
     clearFolderSyncTimer(bundle.folder.id)
     setSnapshot((current) => {
       const previousLocalSignature = sharedFolderSignature(current, bundle.folder.id)
@@ -175,7 +179,7 @@ export function createShareImportActions(options: ShareImportOptions) {
   }
 
   async function importFileShare(share: PendingShare, passphrase: string) {
-    const bundle = await loadEncryptedFileFromMist(share.cid ?? '', passphrase)
+    const bundle = await loadEncryptedFileFromMist(share.cid ?? '', passphrase, storageRuntimeSettings())
     const dataUrl = bundle.file.dataUrl
     if (dataUrl) setFileContentCache((current) => ({ ...current, [bundle.file.id]: dataUrl }))
     setSnapshot((current) => addActivity(mergeSnapshots(current, remoteFileSnapshot(bundle, share)), { actorNodeId: settingsRef.current.nodeId, fileId: bundle.file.id, folderId: bundle.folder.id, action: 'file.import', detail: `${bundle.file.name} を復号して取り込み` }))

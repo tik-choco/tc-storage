@@ -57,6 +57,10 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     snapshotRef, startDownloadProgress, startFileLoadProgress, updateDownloadProgress,
   } = options
 
+  function storageRuntimeSettings() {
+    return { nodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl }
+  }
+
   async function ensureFolderFilesStored(folder: FolderRecord, filesForSave: FileRecord[], passphrase: string): Promise<FileRecord[]> {
     const storedFiles: FileRecord[] = []
     for (const file of filesForSave) {
@@ -71,7 +75,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       }
       const fileWithContent = await ensureFileContent(file)
       syncLog('storage_add start for file content', { folderId: folder.id, fileFolderId: file.folderId, fileId: file.id, fileName: file.name })
-      const cid = await saveEncryptedFile({ folder, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId })
+      const cid = await saveEncryptedFile({ folder, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId, runtimeNodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl })
       syncLog('storage_add complete for file content', { folderId: folder.id, fileFolderId: file.folderId, fileId: file.id, fileName: file.name, cid: shortLogValue(cid) })
       const storedFile = stampFilePatch(fileWithContent, { lastCid: cid }, new Date().toISOString(), settingsRef.current.nodeId)
       rememberStoredFile(storedFile, folder, passphrase)
@@ -98,7 +102,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
         continue
       }
       syncLog('storage_add start for legacy folder file content', { folderId: bundle.folder.id, fileId: file.id, fileName: file.name })
-      const cid = await saveEncryptedFile({ folder: bundle.folder, file, passphrase, originNode: bundle.originNode })
+      const cid = await saveEncryptedFile({ folder: bundle.folder, file, passphrase, originNode: bundle.originNode, runtimeNodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl })
       syncLog('storage_add complete for legacy folder file content', { folderId: bundle.folder.id, fileId: file.id, fileName: file.name, cid: shortLogValue(cid) })
       files.push(stampFilePatch(file, { lastCid: cid }, bundle.exportedAt, bundle.originNode))
     }
@@ -296,7 +300,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
         requestedCid: shortLogValue(request.cid),
       })
       const fileWithContent = cached ? { ...file, dataUrl: cached } : await ensureFileContent(file, { suppressRepairRequest: true })
-      const cid = await saveEncryptedFile({ folder: sharedRoot, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId })
+      const cid = await saveEncryptedFile({ folder: sharedRoot, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId, runtimeNodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl })
       const now = new Date().toISOString()
       const repairedFile = stripFileContent(stampFilePatch(fileWithContent, { lastCid: cid }, now, settingsRef.current.nodeId))
       rememberStoredFile(repairedFile, sharedRoot, passphrase)
@@ -354,7 +358,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     for (const [index, candidate] of candidates.entries()) {
       try {
         syncLog('storage_get start for file content', { fileId: file.id, fileName: file.name, cid: shortLogValue(candidate.cid), source: candidate.source, candidateIndex: index + 1, candidateCount: candidates.length })
-        const bundle = await loadEncryptedFile(candidate.cid, candidate.passphrase)
+        const bundle = await loadEncryptedFile(candidate.cid, candidate.passphrase, storageRuntimeSettings())
         if (!bundle.file.dataUrl) throw new Error(`${file.name} の本文が共有データに含まれていません`)
         syncLog('storage_get complete for file content', { fileId: file.id, fileName: file.name, cid: shortLogValue(candidate.cid), source: candidate.source, candidateIndex: index + 1, candidateCount: candidates.length, bytes: dataUrlByteLength(bundle.file.dataUrl) })
         rememberResolvedFileCandidate(file, candidate)
@@ -369,7 +373,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
 
   async function loadFileContentFromFolderBundle(file: FileRecord, folderCid: string, passphrase: string, attemptedCandidates: Set<string>): Promise<string> {
     syncLog('storage_get start for parent folder content fallback', { fileId: file.id, fileName: file.name, folderCid: shortLogValue(folderCid) })
-    const bundle = await materializeFolderBundleFiles(await loadEncryptedFolder(folderCid, passphrase), passphrase)
+    const bundle = await materializeFolderBundleFiles(await loadEncryptedFolder(folderCid, passphrase, storageRuntimeSettings()), passphrase)
     const bundledFile = bundle.files.find((item) => item.id === file.id)
     if (!bundledFile) throw new Error(`${file.name} がフォルダー共有データに見つかりません`)
     syncLog('parent folder content fallback found file entry', {
