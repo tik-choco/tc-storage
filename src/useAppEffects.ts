@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, type Dispatch, type StateUpdater } from 'preact/hooks'
+import { useEffect, useRef, type Dispatch, type StateUpdater } from 'preact/hooks'
 import type { FileContentFailure } from './appControllerTypes.js'
 import type { BrowserViewMode, FolderAccessMode, Notice, PendingShare } from './appTypes.js'
 import { activeAncestorFolderId, canPreloadPreviewContent, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
-import { ensureDidIdentity, publicDidIdentity } from './didIdentity.js'
+import { ensureDidIdentity, isEd25519DidKey, publicDidIdentity } from './didIdentity.js'
 import type { FileRecord, FolderRecord, StorageSnapshot } from './domain.js'
 import { describeError } from './errors.js'
 import { saveFolderSyncPeers, type FolderSyncPeers } from './folderPeers.js'
@@ -25,23 +25,56 @@ export const sharedFolderReannounceIntervalMs = 60_000
 export function immediateConnectionAnnounceKey(options: {
   autoConnect: boolean
   networkMode: string
+  networkNodeId?: string
+  networkRoomId?: string
   nodeId: string
   roomId: string
   stablePeerCount: number
   stablePeerKey: string
 }): string {
   if (!options.autoConnect || options.networkMode !== 'mistlib' || options.stablePeerCount === 0 || !options.stablePeerKey) return ''
+  if (!isCurrentNetworkConnection(options)) return ''
   return `${options.roomId}:${options.nodeId}:${options.stablePeerKey}`
+}
+
+function isCurrentNetworkConnection(options: {
+  networkNodeId?: string
+  networkRoomId?: string
+  nodeId: string
+  roomId: string
+}): boolean {
+  return options.networkRoomId === options.roomId && options.networkNodeId === options.nodeId
 }
 
 export function shouldRunSharedFolderReannounce(options: {
   autoConnect: boolean
   networkMode: string
+  networkNodeId?: string
+  networkRoomId?: string
+  nodeId: string
+  roomId: string
   stablePeerCount: number
 }): boolean {
-  if (!options.autoConnect) return false
+  if (!options.autoConnect || !isCurrentNetworkConnection(options)) return false
   if (options.networkMode === 'mistlib') return options.stablePeerCount > 0
   return options.networkMode === 'local-gossip'
+}
+
+export function shouldRequestFolderAccessForPendingShare(options: {
+  networkMode: string
+  networkNodeId?: string
+  networkRoomId?: string
+  nodeId: string
+  settingsRoomId: string
+  share: PendingShare
+  stablePeerCount: number
+}): boolean {
+  if (options.share.cid) return false
+  if (options.share.type !== 'folder-share' || !options.share.autoImport || !options.share.folderId) return false
+  if (options.share.roomId !== options.settingsRoomId) return false
+  if (options.networkMode !== 'mistlib' || options.stablePeerCount === 0) return false
+  if (options.networkRoomId !== options.settingsRoomId || options.networkNodeId !== options.nodeId) return false
+  return isEd25519DidKey(options.nodeId)
 }
 
 export function shouldPreloadProfileAvatar(options: {
@@ -225,7 +258,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
       if (failed.has(file.id) && canPreloadPreviewContent(file) && canResolveFileContent(file)) preloadFileContent(file)
     }
   }, [canResolveFileContent, fileContentFailuresRef, files, networkMode, preloadFileContent, stablePeerCount, stablePeerKey])
-  useShareLinkImport(useCallback(acceptLinkedShare, []))
+  useShareLinkImport(acceptLinkedShare)
   useEffect(() => {
     const sharedFolders = snapshot.folders.filter((folder) => folder.shareEnabled && folderKeys[folder.id])
     const sharedIds = new Set(sharedFolders.map((folder) => folder.id))
@@ -255,7 +288,15 @@ export function useAppEffects(options: AppEffectsOptions): void {
   useEffect(() => {
     for (const share of pendingShares) {
       if (!share.cid) {
-        if (share.type === 'folder-share' && share.autoImport && share.folderId && networkMode === 'mistlib' && stablePeerCount > 0) {
+        if (shouldRequestFolderAccessForPendingShare({
+          networkMode,
+          networkNodeId: network.state.nodeId,
+          networkRoomId: network.state.roomId,
+          nodeId: settings.nodeId,
+          settingsRoomId: settings.roomId,
+          share,
+          stablePeerCount,
+        })) {
           void requestFolderAccess(share)
         }
         continue
@@ -284,19 +325,29 @@ export function useAppEffects(options: AppEffectsOptions): void {
       syncLog('pending folder-share accepted: storage_get will start', { ...shareLogDetails(share), localCid: shortLogValue(folder.lastCid) })
       void autoImportFolderShare(share, passphrase)
     }
-  }, [folderKeys, importKeys, networkMode, pendingShares, snapshot.files, snapshot.folders, stablePeerCount])
+  }, [folderKeys, importKeys, network.state.nodeId, network.state.roomId, networkMode, pendingShares, settings.nodeId, settings.roomId, snapshot.files, snapshot.folders, stablePeerCount])
   useEffect(() => () => {
     for (const timer of Object.values(syncTimersRef.current)) window.clearTimeout(timer)
   }, [])
   useEffect(() => {
-    if (!shouldRunSharedFolderReannounce({ autoConnect: settings.autoConnect, networkMode, stablePeerCount })) return undefined
+    if (!shouldRunSharedFolderReannounce({
+      autoConnect: settings.autoConnect,
+      networkMode,
+      networkNodeId: network.state.nodeId,
+      networkRoomId: network.state.roomId,
+      nodeId: settings.nodeId,
+      roomId: settings.roomId,
+      stablePeerCount,
+    })) return undefined
     const timer = window.setInterval(announceSharedFolders, sharedFolderReannounceIntervalMs)
     return () => window.clearInterval(timer)
-  }, [networkMode, settings.autoConnect, stablePeerCount, stablePeerKey])
+  }, [network.state.nodeId, network.state.roomId, networkMode, settings.autoConnect, settings.nodeId, settings.roomId, stablePeerCount, stablePeerKey])
   useEffect(() => {
     const key = immediateConnectionAnnounceKey({
       autoConnect: settings.autoConnect,
       networkMode,
+      networkNodeId: network.state.nodeId,
+      networkRoomId: network.state.roomId,
       nodeId: settings.nodeId,
       roomId: settings.roomId,
       stablePeerCount,
@@ -310,7 +361,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
     lastConnectionAnnounceKeyRef.current = key
     syncLog('stable peer connected: announcing shared folders immediately', { roomId: settings.roomId, stablePeerCount })
     announceSharedFolders({ publishLocalChangesImmediately: true })
-  }, [networkMode, settings.autoConnect, settings.nodeId, settings.roomId, stablePeerCount, stablePeerKey])
+  }, [network.state.nodeId, network.state.roomId, networkMode, settings.autoConnect, settings.nodeId, settings.roomId, stablePeerCount, stablePeerKey])
   useEffect(() => { if (selectedFileId && !files.some((file) => file.id === selectedFileId)) { setSelectedFileId(null); setExpandedPreviewOpen(false) } }, [files, selectedFileId])
   useEffect(() => { if (detailFileId && !files.some((file) => file.id === detailFileId)) setDetailFileId(null) }, [detailFileId, files])
   useEffect(() => {

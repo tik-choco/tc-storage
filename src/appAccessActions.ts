@@ -49,6 +49,14 @@ export function createAccessActions(options: AccessOptions) {
       setNotice({ tone: 'error', text: 'フォルダーキー検証情報のない共有URLでは参加リクエストを送れません' })
       return
     }
+    if (!isEd25519DidKey(settingsRef.current.nodeId)) {
+      setNotice({ tone: 'info', text: 'DID生成後に参加リクエストを送信します' })
+      return
+    }
+    if (share.roomId !== settingsRef.current.roomId) {
+      setNotice({ tone: 'info', text: '共有ルームへ接続後に参加リクエストを送信します' })
+      return
+    }
     const key = pendingShareKey(share)
     if (accessRequestKeysRef.current[key]) return
     try {

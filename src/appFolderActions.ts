@@ -40,6 +40,7 @@ interface FolderActionOptions {
   setNotice: SetState<Notice>
   setProfileOpen: SetState<boolean>
   setSelectedFileId: SetState<string | null>
+  setSettings: SetState<AppSettings>
   setSettingsOpen: SetState<boolean>
   setSnapshot: SetState<StorageSnapshot>
   settings: AppSettings
@@ -55,16 +56,18 @@ export function createFolderActions(options: FolderActionOptions) {
     ensureFolderFilesStored, folderAccessModes, folderKeysRef, folderPanelFolder, folderPanelFolderId, folders, networkRef,
     scheduleFolderSync, setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setProfileOpen,
-    setSelectedFileId, setSettingsOpen, setSnapshot, settings, shareProfile, snapshot, snapshotRef,
+    setSelectedFileId, setSettings, setSettingsOpen, setSnapshot, settings, shareProfile, snapshot, snapshotRef,
     syncSignaturesRef,
   } = options
 
   function patchCurrentFolder(patch: Partial<FolderRecord>) {
     if (!folderPanelFolder) return
     const now = new Date().toISOString()
+    const sharePatch = patch.shareEnabled === true ? { ...patch, sharedRoomId: settings.roomId } : patch
+    if (patch.shareEnabled === true) ensureSharingConnection()
     const sharedRoot = nearestSharedAncestorFolder(snapshotRef.current, folderPanelFolder.id)
-    setSnapshot((current) => touchSnapshot({ ...current, folders: current.folders.map((folder) => (folder.id === folderPanelFolder.id ? stampFolderPatch(folder, patch, now, settings.nodeId) : folder)) }, settings.nodeId))
-    const folderForSync = sharedRoot ?? (patch.shareEnabled ? { ...folderPanelFolder, shareEnabled: true } : undefined)
+    setSnapshot((current) => touchSnapshot({ ...current, folders: current.folders.map((folder) => (folder.id === folderPanelFolder.id ? stampFolderPatch(folder, sharePatch, now, settings.nodeId) : folder)) }, settings.nodeId))
+    const folderForSync = sharedRoot ?? (patch.shareEnabled ? { ...folderPanelFolder, shareEnabled: true, sharedRoomId: settings.roomId } : undefined)
     if (folderForSync) scheduleSharedFolderSync(folderForSync, 'local folder settings changed')
   }
 
@@ -126,6 +129,7 @@ export function createFolderActions(options: FolderActionOptions) {
       setNotice({ tone: 'error', text: 'フォルダー共有には署名用DIDが必要です。DID生成後にもう一度共有してください' })
       return
     }
+    if (shareAfterSave) ensureSharingConnection()
     const sourceSnapshot = snapshotRef.current
     const targetFolder = sourceSnapshot.folders.find((item) => item.id === folder.id && !item.deletedAt)
     if (!targetFolder) return setNotice({ tone: 'error', text: '保存するフォルダーを選択してください' })
@@ -165,6 +169,10 @@ export function createFolderActions(options: FolderActionOptions) {
     } finally {
       setBusy('')
     }
+  }
+
+  function ensureSharingConnection() {
+    setSettings((current) => (current.autoConnect ? current : { ...current, autoConnect: true }))
   }
 
   function markFolderSaved(folder: FolderRecord, cid: string, now: string, shared: boolean, storedFiles: FileRecord[]) {

@@ -2,7 +2,7 @@ import { pendingShareKey, type FolderPanelMode, type Notice, type PendingShare }
 import type { SetState } from './appControllerTypes.js'
 import { copyToClipboard } from './clipboard.js'
 import type { FileRecord, FolderRecord } from './domain.js'
-import { defaultRoomId, type AppSettings } from './localSettings.js'
+import { defaultRoomId, normalizeSignalingUrl, type AppSettings } from './localSettings.js'
 import type { LinkedShare } from './shareLinks.js'
 import type { PopoverKind, PopoverPosition } from './components/FloatingPopover.js'
 import { popoverPositionFromAnchor } from './components/FloatingPopover.js'
@@ -55,7 +55,7 @@ export function createPanelActions(options: PanelOptions) {
     return {
       ...settingsDraft,
       roomId: settingsDraft.roomId.trim() || defaultRoomId(),
-      signalingUrl: settingsDraft.signalingUrl.trim(),
+      signalingUrl: normalizeSignalingUrl(settingsDraft.signalingUrl),
       nodeId: settings.nodeId,
       identity: settings.identity,
       profileName: settingsDraft.profileName.trim() || 'Local user',

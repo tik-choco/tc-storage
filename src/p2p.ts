@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
+import { isEd25519DidKey } from './didIdentity.js'
 import { describeError } from './errors.js'
 import type { AppSettings } from './localSettings.js'
 import { loadMistModule } from './mistStorage.js'
@@ -150,9 +151,9 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
       helloTimerRef.current = undefined
     }
     clearMistSession()
-    setState((current) => ({ ...current, mode: 'connecting', peers: [], stablePeers: [], lastEvent: 'mistlib 接続中' }))
-
     const settingsValue = settingsRef.current
+    setState((current) => ({ ...current, mode: 'connecting', roomId: settingsValue.roomId, nodeId: settingsValue.nodeId, peers: [], stablePeers: [], lastEvent: 'mistlib 接続中' }))
+
     const channelName = `tc-storage-${settingsValue.roomId}`
     channelRef.current?.close()
     const channel = 'BroadcastChannel' in window ? new BroadcastChannel(channelName) : null
@@ -200,6 +201,8 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
           setState((current) => ({
             ...current,
             mode: 'mistlib',
+            roomId: settingsValue.roomId,
+            nodeId: settingsValue.nodeId,
             peers,
             stablePeers: peerObservation.stablePeers,
             lastEvent: peers.length > 0 ? 'mistlib 共有ルーム接続中' : 'mistlib 共有ルーム待機中',
@@ -212,6 +215,8 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
             setState((current) => ({
               ...current,
               mode: 'mistlib',
+              roomId: settingsValue.roomId,
+              nodeId: settingsValue.nodeId,
               lastEvent: `mistlib peer確認中: ${describeError(error, 'unknown error')}`,
             }))
             return
@@ -221,6 +226,8 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
           setState((current) => ({
             ...current,
             mode: channel ? 'local-gossip' : 'offline',
+            roomId: settingsValue.roomId,
+            nodeId: settingsValue.nodeId,
             peers: [],
             stablePeers: [],
             lastEvent: `mistlib再接続待機中: ${describeError(error, 'unknown error')}`,
@@ -235,6 +242,8 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
       setState((current) => ({
         ...current,
         mode: channel ? 'local-gossip' : 'offline',
+        roomId: settingsValue.roomId,
+        nodeId: settingsValue.nodeId,
         peers: [],
         stablePeers: [],
         lastEvent: `mistlib未接続: ${describeError(error, 'unknown error')}`,
@@ -256,11 +265,15 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
     clearMistSession()
     channelRef.current?.close()
     channelRef.current = null
-    setState((current) => ({ ...current, mode: 'idle', peers: [], stablePeers: [], lastEvent: '切断しました' }))
+    setState((current) => ({ ...current, mode: 'idle', roomId: undefined, nodeId: undefined, peers: [], stablePeers: [], lastEvent: '切断しました' }))
   }, [])
 
   useEffect(() => {
-    if (settings.autoConnect) void connect()
+    if (settings.autoConnect && isEd25519DidKey(settings.nodeId)) {
+      void connect()
+    } else if (settings.autoConnect) {
+      setState((current) => ({ ...current, mode: 'idle', roomId: undefined, nodeId: undefined, peers: [], stablePeers: [], lastEvent: 'DID生成待ち' }))
+    }
     return () => disconnect()
   }, [connect, disconnect, settings.autoConnect, settings.nodeId, settings.roomId, settings.signalingUrl])
 

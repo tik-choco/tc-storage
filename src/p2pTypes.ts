@@ -39,6 +39,8 @@ export type ShareEnvelope = {
 
 export type NetworkState = {
   mode: 'idle' | 'connecting' | 'mistlib' | 'local-gossip' | 'offline'
+  roomId?: string
+  nodeId?: string
   peers: string[]
   stablePeers: string[]
   lastEvent: string

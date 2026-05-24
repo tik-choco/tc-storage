@@ -2,6 +2,7 @@ import { decryptJson, encryptJson, type EncryptedPayload } from './crypto.js'
 import { stripFileContent, type FileBundle, type FileRecord, type FolderBundle, type FolderRecord } from './domain.js'
 import { describeError } from './errors.js'
 import { debugInfo, debugWarn } from './logging.js'
+import { defaultSignalingUrl, normalizeSignalingUrl } from './localSettings.js'
 
 type MistModule = typeof import('./vendor/mistlib-wasm/mistlib_wasm.js')
 type NavigatorWithOpfs = Navigator & {
@@ -23,7 +24,6 @@ type StoredBundleKind = 'file' | 'folder'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 export const mistStorageMaxCapacityMb = 256 * 1024
-const defaultMistSignalingUrl = 'https://rtc.tik-choco.com/signaling'
 const verifyStorageAddEnabled =
   typeof import.meta.env !== 'undefined' &&
   import.meta.env.VITE_VERIFY_MIST_STORAGE === 'true'
@@ -283,7 +283,7 @@ function parseEncryptedPayload(bytes: Uint8Array, kind: StoredBundleKind, cid: s
 function normalizeMistRuntimeSettings(settings: MistRuntimeSettings): Required<MistRuntimeSettings> {
   return {
     nodeId: settings.nodeId?.trim() || storedRuntimeNodeId() || createFallbackRuntimeNodeId(),
-    signalingUrl: settings.signalingUrl?.trim() || defaultMistSignalingUrl,
+    signalingUrl: normalizeSignalingUrl(settings.signalingUrl ?? defaultSignalingUrl),
   }
 }
 

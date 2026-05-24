@@ -13,7 +13,7 @@ export type AppSettings = {
 
 const settingsKey = 'tc-storage-settings-v1'
 const roomIdKey = 'tc-storage-room-id-v1'
-const defaultSignalingUrl = 'https://rtc.tik-choco.com/signaling'
+export const defaultSignalingUrl = 'wss://rtc.tik-choco.com/signaling'
 
 export function loadSettings(): AppSettings {
   const fallback = createDefaultSettings()
@@ -22,7 +22,7 @@ export function loadSettings(): AppSettings {
     const identity = parsePublicDidIdentity(parsed.identity) ?? fallback.identity
     return {
       roomId: parsed.roomId?.trim() || fallback.roomId,
-      signalingUrl: parsed.signalingUrl?.trim() || fallback.signalingUrl,
+      signalingUrl: normalizeSignalingUrl(parsed.signalingUrl ?? fallback.signalingUrl),
       nodeId: identity?.did || parsed.nodeId?.trim() || fallback.nodeId,
       identity,
       autoConnect: parsed.autoConnect ?? fallback.autoConnect,
@@ -38,6 +38,14 @@ export function loadSettings(): AppSettings {
 export function saveSettings(settings: AppSettings): void {
   localStorage.setItem(settingsKey, JSON.stringify(settings))
   localStorage.setItem('tc-storage-node-id-v1', settings.nodeId)
+}
+
+export function normalizeSignalingUrl(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return defaultSignalingUrl
+  if (/^https:\/\//i.test(trimmed)) return `wss://${trimmed.slice(8)}`
+  if (/^http:\/\//i.test(trimmed)) return `ws://${trimmed.slice(7)}`
+  return trimmed
 }
 
 function createDefaultSettings(): AppSettings {

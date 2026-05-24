@@ -43,6 +43,82 @@ test('folder access request targets the owner pinned in the fixed invite', async
   assert.equal(Object.values(accessRequestKeysRef.current)[0]?.folderKeyHash, expectedFolderKeyHash)
 })
 
+test('folder access request waits for local DID before recording a request key', async () => {
+  const broadcasts: unknown[] = []
+  const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }
+  let notice = ''
+  const actions = createAccessActions({
+    accessRequestKeysRef,
+    folderAccessModesRef: { current: {} },
+    folderKeysRef: { current: {} },
+    networkRef: { current: networkStub(broadcasts) },
+    openFolderAccessRequests: () => {},
+    setFolderAccessRequests: () => {},
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: (update) => { notice = applyStateUpdate({ tone: 'info' as const, text: '' }, update).text },
+    setPendingShares: () => {},
+    settingsRef: { current: settingsStub('node-temporary') },
+    snapshotRef: { current: createInitialSnapshot('node-temporary') },
+  })
+
+  await actions.requestFolderAccess({
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    ownerNodeId: ownerDid,
+    folderKeyHash: expectedFolderKeyHash,
+    autoImport: true,
+  })
+
+  assert.deepEqual(broadcasts, [])
+  assert.deepEqual(accessRequestKeysRef.current, {})
+  assert.match(notice, /DID生成後/)
+})
+
+test('folder access request waits for the share room before recording a request key', async () => {
+  const broadcasts: unknown[] = []
+  const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }
+  let notice = ''
+  const actions = createAccessActions({
+    accessRequestKeysRef,
+    folderAccessModesRef: { current: {} },
+    folderKeysRef: { current: {} },
+    networkRef: { current: networkStub(broadcasts) },
+    openFolderAccessRequests: () => {},
+    setFolderAccessRequests: () => {},
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: (update) => { notice = applyStateUpdate({ tone: 'info' as const, text: '' }, update).text },
+    setPendingShares: () => {},
+    settingsRef: { current: { ...settingsStub(requesterDid), roomId: 'local-room' } },
+    snapshotRef: { current: createInitialSnapshot(requesterDid) },
+  })
+
+  await actions.requestFolderAccess({
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'shared-room',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    ownerNodeId: ownerDid,
+    folderKeyHash: expectedFolderKeyHash,
+    autoImport: true,
+  })
+
+  assert.deepEqual(broadcasts, [])
+  assert.deepEqual(accessRequestKeysRef.current, {})
+  assert.match(notice, /共有ルーム/)
+})
+
 test('shared-approval access request broadcasts to connected shared peers', async () => {
   const broadcasts: unknown[] = []
   const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }
