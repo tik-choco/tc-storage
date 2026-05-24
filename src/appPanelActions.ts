@@ -73,7 +73,7 @@ export function createPanelActions(options: PanelOptions) {
     const keyValue = pendingShareKey(share)
     setPendingShares((current) => [linkedShare, ...current.filter((item) => pendingShareKey(item) !== keyValue)].slice(0, 12))
     if (share.cid) setImportKeys((current) => ({ ...current, [share.cid ?? '']: key }))
-    setSettings((current) => current.roomId === share.roomId ? current : { ...current, roomId: share.roomId })
+    setSettings((current) => current.roomId === share.roomId && current.autoConnect ? current : { ...current, roomId: share.roomId, autoConnect: true })
     setCurrentFolderId(null)
     setSettingsOpen(false)
     setProfileOpen(false)
@@ -83,7 +83,7 @@ export function createPanelActions(options: PanelOptions) {
     setDetailFileId(null)
     setSelectedFileId(null)
     setExpandedPreviewOpen(false)
-    setNotice({ tone: 'info', text: share.type === 'folder-share' && !share.cid ? '共有URLを読み込みました。参加承認をリクエストします' : '共有URLを読み込みました。取得を開始します' })
+    setNotice({ tone: 'info', text: share.type === 'folder-share' && !share.cid ? '共有URLを読み込みました。共有ルームへ接続して参加承認をリクエストします' : '共有URLを読み込みました。共有ルームへ接続して取得を開始します' })
   }
 
   function selectFolder(folderId: string | null) {
