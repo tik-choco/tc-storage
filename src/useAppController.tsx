@@ -12,7 +12,7 @@ import { createPanelActions } from './appPanelActions.js'
 import { createPeerActions } from './appPeerActions.js'
 import { createSelectionActions } from './appSelectionActions.js'
 import { createShareImportActions } from './appShareImportActions.js'
-import { browserViewModeKey, requiresLargeDownloadConfirmation } from './appUtils.js'
+import { browserViewModeKey, folderSharedRoomId, requiresLargeDownloadConfirmation } from './appUtils.js'
 import { activeFiles, activeFolders, childFolders, filesInFolder } from './domain.js'
 import { isEd25519DidKey } from './didIdentity.js'
 import { useMistShare, type ShareEnvelope, type ShareProfile } from './p2p.js'
@@ -68,7 +68,7 @@ export function useAppController() {
   const detailFolderPeers = detailFolder ? folderPeers[detailFolder.id] ?? [] : []
   const avatarUrl = settings.avatarFileId ? fileDataUrls[settings.avatarFileId] ?? '' : ''
   const draftAvatarUrl = settingsDraft.avatarFileId ? fileDataUrls[settingsDraft.avatarFileId] ?? '' : ''
-  const folderShareRoomId = folderPanelFolder?.sharedRoomId || settings.roomId
+  const folderShareRoomId = folderPanelFolder ? folderSharedRoomId(folderPanelFolder, settings.roomId) : settings.roomId
   const folderShareUrl = folderPanelFolder?.shareEnabled && isEd25519DidKey(settings.nodeId) && folderPanelFolderKey ? makeFolderShareUrl(folderPanelFolder, folderShareRoomId, shareProfile, settings.nodeId, folderPanelFolderKey, folderPanelAccessMode) : ''
   const detailFileShareCid = detailFile?.lastShareCid ?? detailFile?.lastCid
   const fileShareUrl = detailFile && detailFileShareCid && detailFolder && fileShareKeys[detailFile.id] ? makeFileShareUrl(detailFile, detailFolder, settings.roomId, snapshot.clock, detailFileShareCid, fileShareKeys[detailFile.id], shareProfile) : ''

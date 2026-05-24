@@ -8,7 +8,7 @@ import { loadEncryptedFileFromMist, loadEncryptedFolderFromMist } from './mistSt
 import type { AppSettings } from './localSettings.js'
 import { remoteFileSnapshot, remoteFolderSnapshot } from './appHelpers.js'
 import { folderKeyHash } from './folderKeyProof.js'
-import { folderKeyUpdatesForBundle, shareLogDetails, syncLog, syncWarn, withoutRecordKey } from './appUtils.js'
+import { folderKeyUpdatesForBundle, folderSharedRoomId, shareLogDetails, syncLog, syncWarn, withoutRecordKey } from './appUtils.js'
 import { sharedFolderSignature } from './folderSync.js'
 
 interface ShareImportOptions {
@@ -108,7 +108,7 @@ export function createShareImportActions(options: ShareImportOptions) {
   function isPendingShareAlreadyImported(share: PendingShare): boolean {
     const snapshotValue = snapshotRef.current
     if (share.type === 'folder-share') {
-      const folder = share.folderId ? snapshotValue.folders.find((item) => item.id === share.folderId && !item.deletedAt) : undefined
+      const folder = share.folderId ? snapshotValue.folders.find((item) => item.id === share.folderId && !item.deletedAt && folderSharedRoomId(item, share.roomId) === share.roomId) : undefined
       if (folder && share.folderSignature && share.folderSignature === sharedFolderSignature(snapshotValue, folder.id)) return true
       if (!share.cid) return Boolean(folder)
       return folder?.lastCid === share.cid
@@ -200,6 +200,7 @@ export function createShareImportActions(options: ShareImportOptions) {
   }
 
   function pendingShareMatchesImported(pending: PendingShare, imported: PendingShare): boolean {
+    if (pending.roomId !== imported.roomId || pending.type !== imported.type) return false
     if (pending.cid && pending.cid === imported.cid) return true
     if (imported.type === 'folder-share' && pending.type === 'folder-share' && imported.folderId && pending.folderId === imported.folderId) return true
     if (imported.type === 'file-share' && pending.type === 'file-share' && imported.fileId && pending.fileId === imported.fileId) return true

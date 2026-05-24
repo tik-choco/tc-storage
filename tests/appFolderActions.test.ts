@@ -50,8 +50,9 @@ test('enabling folder sharing also enables auto-connect for the owner', () => {
   actions.patchCurrentFolder({ shareEnabled: true })
 
   assert.equal(settings.autoConnect, true)
+  assert.equal(settings.roomId, 'local-room')
   assert.equal(snapshot.folders[0]?.shareEnabled, true)
-  assert.equal(snapshot.folders[0]?.sharedRoomId, 'shared-room')
+  assert.equal(snapshot.folders[0]?.sharedRoomId, 'local-room')
 })
 
 function makeSettings(overrides: Partial<AppSettings> = {}): AppSettings {

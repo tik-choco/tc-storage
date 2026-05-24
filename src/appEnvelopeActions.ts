@@ -1,7 +1,7 @@
 import { pendingShareKey, type Notice, type PendingShare } from './appTypes.js'
 import type { MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
-import { envelopeLogDetails, folderLogDetails, shortLogValue, syncLog } from './appUtils.js'
+import { envelopeLogDetails, folderLogDetails, folderSharedRoomId, shortLogValue, syncLog } from './appUtils.js'
 import { mergeSnapshots, stampFilePatch, stampFolderPatch } from './crdt.js'
 import { addActivity, stripFileContent, type FileRecord, type StorageSnapshot } from './domain.js'
 import { canAutoImportFolderState, sharedFolderSignature, shouldDeferRemoteFolderStateImport } from './folderSync.js'
@@ -123,9 +123,10 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
       return
     }
     const snapshotValue = snapshotRef.current
-    const folder = snapshotValue.folders.find((item) => item.id === envelope.folderId)
+    const folder = snapshotValue.folders.find((item) => item.id === envelope.folderId && folderSharedRoomId(item, envelope.roomId) === envelope.roomId)
     const linkedShare = pendingSharesRef.current.find((share) => (
       share.autoImport &&
+      share.roomId === envelope.roomId &&
       (share.cid === envelope.cid || Boolean(envelope.folderId && share.folderId === envelope.folderId))
     ))
     const linkedPassphrase = linkedShare?.cid ? importKeysRef.current[linkedShare.cid]?.trim() ?? '' : ''
@@ -163,11 +164,12 @@ export function createEnvelopeActions(options: EnvelopeOptions) {
   function receiveFolderChange(envelope: ShareEnvelope) {
     syncLog('received folder-change', envelopeLogDetails(envelope))
     if (!envelope.folderId || !envelope.changeType) return syncLog('folder-change skipped: missing folderId or changeType', envelopeLogDetails(envelope))
-    const folder = snapshotRef.current.folders.find((item) => item.id === envelope.folderId)
-    const folderName = envelope.folderName || folder?.name || '共有フォルダー'
+    const folder = snapshotRef.current.folders.find((item) => item.id === envelope.folderId && folderSharedRoomId(item, envelope.roomId) === envelope.roomId)
+    if (!folder) return syncLog('folder-change skipped: local shared folder not found in envelope room', envelopeLogDetails(envelope))
+    const folderName = envelope.folderName || folder.name || '共有フォルダー'
     const changedFolderName = envelope.folder?.name || folderName
     const fileName = envelope.fileName || envelope.file?.name || 'ファイル'
-    if (folder) rememberFolderPeer(envelope)
+    rememberFolderPeer(envelope)
     if (envelope.changeType === 'file-upserted') {
       applyRemoteFileUpsert(envelope)
       setNotice({ tone: 'info', text: `${folderName}: ${fileName} が追加/更新されました。同期中...` })

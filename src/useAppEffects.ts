@@ -1,7 +1,7 @@
 import { useEffect, useRef, type Dispatch, type StateUpdater } from 'preact/hooks'
 import type { FileContentFailure } from './appControllerTypes.js'
 import type { BrowserViewMode, FolderAccessMode, Notice, PendingShare } from './appTypes.js'
-import { activeAncestorFolderId, canPreloadPreviewContent, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
+import { activeAncestorFolderId, activeSharedFolderRoomId, canPreloadPreviewContent, folderLogDetails, isSeededLegacySnapshot, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import { ensureDidIdentity, isEd25519DidKey, publicDidIdentity } from './didIdentity.js'
 import type { FileRecord, FolderRecord, StorageSnapshot } from './domain.js'
 import { describeError } from './errors.js'
@@ -227,6 +227,15 @@ export function useAppEffects(options: AppEffectsOptions): void {
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
+  useEffect(() => {
+    const roomId = activeSharedFolderRoomId(snapshot, currentFolderId)
+    if (!roomId) return
+    setSettings((current) => (
+      current.roomId === roomId && current.autoConnect
+        ? current
+        : { ...current, roomId, autoConnect: true }
+    ))
+  }, [currentFolderId, setSettings, snapshot])
   useEffect(() => {
     if (!currentFolderId || currentFolder) return
     const fallbackFolderId = activeAncestorFolderId(snapshot, currentFolderId)

@@ -188,7 +188,7 @@ export function createAccessActions(options: AccessOptions) {
       folderKeysRef.current = { ...folderKeysRef.current, [envelope.folderId]: passphrase }
       setFolderKeys((current) => ({ ...current, [envelope.folderId ?? '']: passphrase }))
       setPendingShares((current) => current.map((share) => (
-        share.type === 'folder-share' && share.folderId === envelope.folderId
+        share.type === 'folder-share' && share.folderId === envelope.folderId && share.roomId === entry.roomId
           ? { ...share, autoImport: true, cid: envelope.cid ?? share.cid, folderName: envelope.folderName ?? share.folderName }
           : share
       )))

@@ -5,6 +5,70 @@ import { createEnvelopeActions } from '../src/appEnvelopeActions.js'
 import { createInitialSnapshot } from '../src/domain.js'
 import { applyStateUpdate, fixedFolderId, folderSecret } from './accessApprovalHelpers.js'
 
+test('folder-state does not use a linked invite from another room with the same folder id', async () => {
+  const pendingShares: PendingShare[] = [{
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'room-a',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    cid: 'cid-a',
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    autoImport: true,
+  }]
+  const snapshotRef = { current: createInitialSnapshot('node-b') }
+  let imported = false
+  const actions = createEnvelopeActions({
+    announceSharedFolders: () => {},
+    autoImportCidsRef: { current: new Set<string>() },
+    autoImportFolderShare: async () => {},
+    autoImportInFlightRef: { current: new Set<string>() },
+    autoImportLinkedShare: async () => { imported = true },
+    currentFolderId: null,
+    detailFileId: null,
+    folderKeysRef: { current: {} },
+    folderPanelFolderId: null,
+    handleFileContentRepairRequest: () => {},
+    handleFolderAccessDenied: () => {},
+    handleFolderAccessGrant: async () => {},
+    handleFolderAccessRequest: () => {},
+    helloResponseAtRef: { current: {} },
+    importKeysRef: { current: { 'cid-a': folderSecret } },
+    pendingSharesRef: { current: pendingShares },
+    rememberFolderPeer: () => {},
+    scheduleFolderSync: () => {},
+    selectedFileId: null,
+    setCurrentFolderId: () => {},
+    setDetailFileId: () => {},
+    setExpandedPreviewOpen: () => {},
+    setFolderKeys: () => {},
+    setFolderPanelFolderId: () => {},
+    setFolderPanelOpen: () => {},
+    setNotice: () => {},
+    setPendingShares: () => {},
+    setSelectedFileId: () => {},
+    setSnapshot: () => {},
+    snapshotRef,
+  })
+
+  actions.handleEnvelope({
+    type: 'folder-state',
+    from: 'node-a',
+    roomId: 'room-b',
+    sentAt: '2026-05-21T00:00:02.000Z',
+    clock: 2,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    cid: 'cid-b',
+    folderSignature: 'signature-b',
+  })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(imported, false)
+})
+
 test('folder-share cid after fixed invite uses the granted folder key for immediate import', () => {
   let pendingShares: PendingShare[] = [{
     type: 'folder-share',

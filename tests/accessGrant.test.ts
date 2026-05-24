@@ -90,6 +90,78 @@ test('folder access grant is accepted only from the owner pinned in the invite',
   assert.deepEqual(accessRequestKeysRef.current, {})
 })
 
+test('folder access grant marks only the pending invite in the granted room', async () => {
+  let pendingShares: PendingShare[] = [
+    {
+      type: 'folder-share',
+      from: 'share-url',
+      roomId: 'room-a',
+      sentAt: '2026-05-21T00:00:00.000Z',
+      receivedAt: '2026-05-21T00:00:01.000Z',
+      clock: 0,
+      folderId: fixedFolderId,
+      folderName: 'Fixed invite A',
+      ownerNodeId: ownerDid,
+      folderKeyHash: expectedFolderKeyHash,
+      autoImport: true,
+    },
+    {
+      type: 'folder-share',
+      from: 'share-url',
+      roomId: 'room-b',
+      sentAt: '2026-05-21T00:00:00.000Z',
+      receivedAt: '2026-05-21T00:00:01.000Z',
+      clock: 0,
+      folderId: fixedFolderId,
+      folderName: 'Fixed invite B',
+      ownerNodeId: ownerDid,
+      folderKeyHash: expectedFolderKeyHash,
+      autoImport: true,
+    },
+  ]
+  let folderKeys: Record<string, string> = {}
+  let importKeys: Record<string, string> = {}
+  const requestKey = await createAccessRequestKey()
+  const entry = { ...requestKey, folderId: fixedFolderId, folderKeyHash: expectedFolderKeyHash, ownerNodeId: ownerDid, roomId: 'room-a', requestId: 'request-a' } satisfies RequestKeyEntry
+  const accessRequestKeysRef = { current: { 'request-a': entry, [`room-a:folder:${fixedFolderId}`]: entry } }
+  const actions = createAccessActions({
+    accessRequestKeysRef,
+    folderAccessModesRef: { current: {} },
+    folderKeysRef: { current: folderKeys },
+    networkRef: { current: networkStub() },
+    openFolderAccessRequests: () => {},
+    setFolderAccessRequests: () => {},
+    setFolderKeys: (update) => { folderKeys = applyStateUpdate(folderKeys, update) },
+    setImportKeys: (update) => { importKeys = applyStateUpdate(importKeys, update) },
+    setNotice: () => {},
+    setPendingShares: (update) => { pendingShares = applyStateUpdate(pendingShares, update) },
+    settingsRef: { current: { ...settingsStub(requesterDid), roomId: 'room-a' } },
+    snapshotRef: { current: createInitialSnapshot(requesterDid) },
+  })
+  const grant = await encryptFolderKeyForRequest(folderSecret, requestKey.publicKey)
+
+  await actions.handleFolderAccessGrant({
+    type: 'folder-access-grant',
+    from: ownerDid,
+    roomId: 'room-a',
+    sentAt: '2026-05-21T00:00:03.000Z',
+    clock: 3,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite A',
+    targetNodeId: requesterDid,
+    requestId: 'request-a',
+    cid: 'cid-room-a',
+    accessGrantPublicKey: grant.publicKey,
+    accessGrantIv: grant.iv,
+    accessGrantCipherText: grant.cipherText,
+  })
+
+  assert.equal(folderKeys[fixedFolderId], folderSecret)
+  assert.equal(importKeys['cid-room-a'], folderSecret)
+  assert.equal(pendingShares.find((share) => share.roomId === 'room-a')?.cid, 'cid-room-a')
+  assert.equal(pendingShares.find((share) => share.roomId === 'room-b')?.cid, undefined)
+})
+
 test('shared-approval access grant can come from a non-owner shared holder', async () => {
   let pendingShares: PendingShare[] = [{
     type: 'folder-share',

@@ -7,7 +7,7 @@ import { folderFilesForSync, foldersForSync, hasSharedFolderChangesSinceLastShar
 import type { AppSettings } from './localSettings.js'
 import { saveEncryptedFolderToMist } from './mistStorage.js'
 import type { ShareEnvelope } from './p2p.js'
-import { folderLogDetails, nearestSharedAncestorFolder, shortLogValue, syncLog, syncWarn } from './appUtils.js'
+import { folderLogDetails, folderSharedRoomId, nearestSharedAncestorFolder, shortLogValue, syncLog, syncWarn } from './appUtils.js'
 
 interface FolderSyncOptions {
   ensureFolderFilesStored: FileContentActions['ensureFolderFilesStored']
@@ -32,13 +32,14 @@ export function createFolderSyncActions(options: FolderSyncOptions) {
 
   function announceSharedFolders(options: { publishLocalChangesImmediately?: boolean } = {}) {
     const snapshotValue = snapshotRef.current
+    const settingsValue = settingsRef.current
     const folderKeysValue = folderKeysRef.current
-    const sharedFolders = snapshotValue.folders.filter((folder) => folder.shareEnabled && folderKeysValue[folder.id])
+    const sharedFolders = snapshotValue.folders.filter((folder) => folder.shareEnabled && folderKeysValue[folder.id] && isFolderInCurrentRoom(folder, settingsValue.roomId))
     const sharedFolderIds = new Set(sharedFolders.map((folder) => folder.id))
     for (const folderId of Object.keys(folderStateAnnouncementsRef.current)) {
       if (!sharedFolderIds.has(folderId)) delete folderStateAnnouncementsRef.current[folderId]
     }
-    syncLog('announce shared folders tick', { sharedFolderCount: sharedFolders.length, roomId: settingsRef.current.roomId })
+    syncLog('announce shared folders tick', { sharedFolderCount: sharedFolders.length, roomId: settingsValue.roomId })
     for (const folder of sharedFolders) {
       const shouldPublishContent = hasUntrustedFolderContent(folder.id)
       if (!folder.lastCid || hasSharedFolderChangesSinceLastShare(snapshotValue, folder) || shouldPublishContent) {
@@ -79,6 +80,12 @@ export function createFolderSyncActions(options: FolderSyncOptions) {
 
   function announceFolderChange(folder: FolderRecord, changeType: NonNullable<ShareEnvelope['changeType']>, file?: FileRecord, changedFolder?: FolderRecord) {
     if (!folder.shareEnabled || !folderKeysRef.current[folder.id]) return
+    const roomId = folderSharedRoomId(folder, settingsRef.current.roomId)
+    if (networkRef.current.state.roomId !== roomId) {
+      syncLog('folder-change skipped: shared room is not connected', { ...folderLogDetails(folder), roomId, connectedRoomId: networkRef.current.state.roomId })
+      scheduleFolderSync(folder.id, 'folder change while shared room is not connected')
+      return
+    }
     syncLog('sending folder-change over send_message', {
       ...folderLogDetails(folder),
       changeType,
@@ -130,6 +137,11 @@ export function createFolderSyncActions(options: FolderSyncOptions) {
       syncLog('storage_add skipped: folder not shareable or key missing', { folderId, hasFolder: Boolean(folder), shareEnabled: folder?.shareEnabled, hasPassphrase: Boolean(passphrase) })
       return
     }
+    const shareRoomId = folderSharedRoomId(folder, settingsValue.roomId)
+    if (shareRoomId !== settingsValue.roomId) {
+      syncLog('storage_add deferred: shared room is not connected', { ...folderLogDetails(folder), roomId: shareRoomId, connectedRoomId: settingsValue.roomId })
+      return
+    }
     syncInFlightRef.current.add(folderId)
     try {
       const publishedSignature = sharedFolderSignature(snapshotValue, folderId)
@@ -149,7 +161,7 @@ export function createFolderSyncActions(options: FolderSyncOptions) {
         )
         const foldersNext = current.folders.map((item) => (
           item.id === folderId
-            ? stampFolderPatch(item, { lastCid: cid, lastSavedAt: now, lastSharedAt: now, shareEnabled: true, sharedRoomId: settingsValue.roomId }, now, settingsValue.nodeId)
+            ? stampFolderPatch(item, { lastCid: cid, lastSavedAt: now, lastSharedAt: now, shareEnabled: true, sharedRoomId: shareRoomId }, now, settingsValue.nodeId)
             : item
         ))
         const filesNext = current.files.map((item) => storedFilesById.get(item.id) ?? item)
@@ -194,6 +206,10 @@ export function shouldSkipFolderStateAnnouncement(options: {
   )
 }
 
+function isFolderInCurrentRoom(folder: FolderRecord, roomId: string): boolean {
+  return folderSharedRoomId(folder, roomId) === roomId
+}
+
 function folderStateAudienceKey(state: MistShare['state']): string {
-  return `${state.mode}:${state.stablePeers.toSorted().join(',')}`
+  return `${state.mode}:${state.roomId ?? ''}:${state.nodeId ?? ''}:${state.stablePeers.toSorted().join(',')}`
 }

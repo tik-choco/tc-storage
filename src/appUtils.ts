@@ -81,6 +81,15 @@ export function requiresLargeDownloadConfirmation(bytes: number): boolean {
   return bytes >= largeDownloadConfirmThresholdBytes
 }
 
+export function folderSharedRoomId(folder: Pick<FolderRecord, 'sharedRoomId'>, fallbackRoomId: string): string {
+  return folder.sharedRoomId.trim() || fallbackRoomId
+}
+
+export function activeSharedFolderRoomId(snapshot: StorageSnapshot, folderId: string | null): string {
+  const folder = nearestSharedAncestorFolder(snapshot, folderId)
+  return folder ? folderSharedRoomId(folder, '') : ''
+}
+
 export function nearestSharedAncestorFolder(snapshot: StorageSnapshot, folderId: string | null): FolderRecord | undefined {
   if (!folderId) return undefined
   const visited = new Set<string>()

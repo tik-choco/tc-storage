@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
-import { browserViewModeKey, canPreloadPreviewContent, isMediaFile, largeDownloadConfirmThresholdBytes, loadBrowserViewMode, previewPreloadMaxBytes, requiresLargeDownloadConfirmation, shouldPreloadVisibleThumbnail } from '../src/appUtils.js'
+import { activeSharedFolderRoomId, browserViewModeKey, canPreloadPreviewContent, folderSharedRoomId, isMediaFile, largeDownloadConfirmThresholdBytes, loadBrowserViewMode, previewPreloadMaxBytes, requiresLargeDownloadConfirmation, shouldPreloadVisibleThumbnail } from '../src/appUtils.js'
 
 let originalLocalStorage: Storage | undefined
 let store: Record<string, string>
@@ -79,4 +79,16 @@ test('large download confirmation starts at 100 MiB', () => {
   assert.equal(requiresLargeDownloadConfirmation(largeDownloadConfirmThresholdBytes - 1), false)
   assert.equal(requiresLargeDownloadConfirmation(largeDownloadConfirmThresholdBytes), true)
   assert.equal(requiresLargeDownloadConfirmation(largeDownloadConfirmThresholdBytes + 1), true)
+})
+
+test('active shared folder room follows the nearest shared ancestor', () => {
+  const root = { id: 'folder-root', name: 'Root', parentId: null, color: 'teal' as const, encrypted: true, shareEnabled: true, sharedRoomId: 'room-root', createdAt: '2026-05-25T00:00:00.000Z', updatedAt: '2026-05-25T00:00:00.000Z' }
+  const child = { id: 'folder-child', name: 'Child', parentId: 'folder-root', color: 'blue' as const, encrypted: true, shareEnabled: false, sharedRoomId: 'room-child', createdAt: root.createdAt, updatedAt: root.updatedAt }
+  const other = { id: 'folder-other', name: 'Other', parentId: null, color: 'rose' as const, encrypted: true, shareEnabled: false, sharedRoomId: 'room-other', createdAt: root.createdAt, updatedAt: root.updatedAt }
+  const snapshot = { folders: [root, child, other], files: [], activity: [], clock: 1, originNode: 'node-a' }
+
+  assert.equal(folderSharedRoomId({ sharedRoomId: ' room-a ' }, 'fallback'), 'room-a')
+  assert.equal(folderSharedRoomId({ sharedRoomId: ' ' }, 'fallback'), 'fallback')
+  assert.equal(activeSharedFolderRoomId(snapshot, 'folder-child'), 'room-root')
+  assert.equal(activeSharedFolderRoomId(snapshot, 'folder-other'), '')
 })

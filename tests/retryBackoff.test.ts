@@ -212,6 +212,54 @@ test('auto folder import backs off after a storage_get failure for the same shar
   assert.deepEqual(Object.keys(failuresRef.current), [share.cid])
 })
 
+test('markPendingShareImported keeps same-folder pending shares from other rooms', () => {
+  const roomAShare: PendingShare = {
+    type: 'folder-share',
+    from: 'node-b',
+    roomId: 'room-a',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 2,
+    cid: 'cid-a',
+    folderId: 'folder-fixed',
+    folderName: 'Shared folder A',
+    autoImport: true,
+  }
+  const roomBShare: PendingShare = { ...roomAShare, roomId: 'room-b', cid: 'cid-b', folderName: 'Shared folder B' }
+  const pendingSharesRef = { current: [roomAShare, roomBShare] }
+  let importKeys: Record<string, string> = { 'cid-a': 'key-a', 'cid-b': 'key-b' }
+  const autoImportCidsRef = { current: new Set<string>() }
+  const actions = createShareImportActions({
+    autoImportCidsRef,
+    autoImportFailuresRef: { current: {} },
+    autoImportInFlightRef: { current: new Set() },
+    clearFolderSyncTimer: () => {},
+    importKeys,
+    materializeFolderBundleFiles: async (bundle) => bundle,
+    pendingSharesRef,
+    rememberFolderPeer: () => {},
+    setBusy: () => {},
+    setCurrentFolderId: () => {},
+    setDetailFileId: () => {},
+    setFileContentCache: () => {},
+    setFileShareKeys: () => {},
+    setFolderKeys: () => {},
+    setImportKeys: (update) => { importKeys = applyStateUpdate(importKeys, update) },
+    setNotice: () => {},
+    setPendingShares: (update) => { pendingSharesRef.current = applyStateUpdate(pendingSharesRef.current, update) },
+    setSnapshot: () => {},
+    settingsRef: { current: testSettings() },
+    snapshotRef: { current: createInitialSnapshot('node-a') },
+    syncSignaturesRef: { current: {} },
+  })
+
+  actions.markPendingShareImported(roomAShare)
+
+  assert.deepEqual([...autoImportCidsRef.current], ['cid-a'])
+  assert.deepEqual(pendingSharesRef.current, [roomBShare])
+  assert.deepEqual(importKeys, { 'cid-b': 'key-b' })
+})
+
 test('canceling a pending folder invite clears stored access request keys', () => {
   const share: PendingShare = {
     type: 'folder-share',
