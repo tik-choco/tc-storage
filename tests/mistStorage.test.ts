@@ -81,20 +81,18 @@ test('configureMistStorageCapacity sets mistlib storage capacity to 256 GiB', ()
   })
 })
 
-test('ensureMistRuntimeInitialized initializes mistlib storage runtime once per settings', () => {
+test('ensureMistRuntimeInitialized initializes mistlib storage runtime once per node id', () => {
   const calls: string[] = []
   const mist = {
-    init(id: string, url: string) {
-      calls.push(`${id}:${url}`)
+    init_with_config(id: string, _config: string): boolean {
+      calls.push(id)
+      return true
     },
   }
 
-  ensureMistRuntimeInitialized(mist, { nodeId: 'node-storage-test-a', signalingUrl: 'wss://rtc.example/signaling' })
-  ensureMistRuntimeInitialized(mist, { nodeId: 'node-storage-test-a', signalingUrl: 'wss://rtc.example/signaling' })
-  ensureMistRuntimeInitialized(mist, { nodeId: 'node-storage-test-b', signalingUrl: 'wss://rtc.example/signaling' })
+  ensureMistRuntimeInitialized(mist, { nodeId: 'node-storage-test-a' })
+  ensureMistRuntimeInitialized(mist, { nodeId: 'node-storage-test-a' })
+  ensureMistRuntimeInitialized(mist, { nodeId: 'node-storage-test-b' })
 
-  assert.deepEqual(calls, [
-    'node-storage-test-a:wss://rtc.example/signaling',
-    'node-storage-test-b:wss://rtc.example/signaling',
-  ])
+  assert.deepEqual(calls, ['node-storage-test-a', 'node-storage-test-b'])
 })

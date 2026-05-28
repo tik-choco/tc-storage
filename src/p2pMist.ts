@@ -4,7 +4,7 @@ import type { MistModule, MistRoomController } from './p2pTypes.js'
 
 export function configureMistRoom(
   mist: MistRoomController,
-  settings: Pick<AppSettings, 'nodeId' | 'roomId' | 'signalingUrl'>,
+  settings: Pick<AppSettings, 'nodeId' | 'roomId'>,
   onEvent: (...events: unknown[]) => void,
 ): { position: { x: number; y: number; z: number } } {
   mist.register_event_callback(onEvent)

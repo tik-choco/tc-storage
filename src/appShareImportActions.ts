@@ -47,7 +47,7 @@ export function createShareImportActions(options: ShareImportOptions) {
   } = options
 
   function storageRuntimeSettings() {
-    return { nodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl }
+    return { nodeId: settingsRef.current.nodeId }
   }
 
   async function autoImportFolderShare(share: PendingShare, passphrase: string) {

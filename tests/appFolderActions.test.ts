@@ -58,7 +58,6 @@ test('enabling folder sharing also enables auto-connect for the owner', () => {
 function makeSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
     roomId: 'local-room',
-    signalingUrl: 'wss://rtc.example.test/signaling',
     nodeId: 'node-a',
     identity: null,
     autoConnect: false,

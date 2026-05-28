@@ -153,7 +153,7 @@ export function createFolderActions(options: FolderActionOptions) {
       const folderForSave = shareAfterSave ? stampFolderPatch(targetFolder, { shareEnabled: true, sharedRoomId: shareRoomId }, now, settings.nodeId) : targetFolder
       const foldersForSave = foldersForSync(sourceSnapshot, targetFolder.id).map((item) => (item.id === targetFolder.id ? folderForSave : item))
       const filesForSave = await ensureFolderFilesStored(folderForSave, folderFilesForSync(sourceSnapshot, targetFolder.id), passphrase)
-      const cid = await saveEncryptedFolderToMist({ folder: folderForSave, folders: foldersForSave, files: filesForSave, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId, signalingUrl: settings.signalingUrl })
+      const cid = await saveEncryptedFolderToMist({ folder: folderForSave, folders: foldersForSave, files: filesForSave, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId })
       clearFolderSyncTimer(targetFolder.id)
       const filesForSaveById = new Map(
         filesForSave

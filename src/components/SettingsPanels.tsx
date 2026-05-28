@@ -32,11 +32,7 @@ export function SettingsPanel(props: {
         <span>roomId</span>
         <input value={props.draft.roomId} onInput={(event) => props.onDraft({ ...props.draft, roomId: event.currentTarget.value })} />
       </label>
-      <label>
-        <span>Signaling URL</span>
-        <input value={props.draft.signalingUrl} onInput={(event) => props.onDraft({ ...props.draft, signalingUrl: event.currentTarget.value })} />
-      </label>
-      <label class="check-line">
+<label class="check-line">
         <input
           type="checkbox"
           checked={props.draft.autoConnect}

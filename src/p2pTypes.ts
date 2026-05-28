@@ -2,7 +2,7 @@ import type { FileRecord, FolderRecord } from './domain.js'
 
 export type MistModule = typeof import('./vendor/mistlib-wasm/mistlib_wasm.js')
 
-export type MistRoomController = Pick<MistModule, 'init' | 'join_room' | 'register_event_callback' | 'update_position'>
+export type MistRoomController = Pick<MistModule, 'init_with_config' | 'join_room' | 'register_event_callback' | 'update_position'>
 
 export type ShareProfile = {
   name: string

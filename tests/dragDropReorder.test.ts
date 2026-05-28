@@ -156,7 +156,6 @@ function createDragDropHarness(snapshot: StorageSnapshot, currentFolderId: strin
     },
     settings: {
       roomId: 'tc-storage-main',
-      signalingUrl: 'https://rtc.example.test/signaling',
       nodeId: 'node-a',
       identity: null,
       autoConnect: false,

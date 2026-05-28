@@ -35,7 +35,6 @@ export function networkStub(broadcasts: unknown[] = []) {
 export function settingsStub(nodeId: string) {
   return {
     roomId: 'tc-storage-main',
-    signalingUrl: 'https://rtc.example.test/signaling',
     nodeId,
     identity: null,
     autoConnect: false,

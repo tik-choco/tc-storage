@@ -140,7 +140,6 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
       connectionSeq,
       nodeId: shortLogValue(settingsRef.current.nodeId),
       roomId: settingsRef.current.roomId,
-      signalingUrl: settingsRef.current.signalingUrl,
     })
     if (reconnectTimerRef.current !== undefined) {
       window.clearTimeout(reconnectTimerRef.current)
@@ -275,7 +274,7 @@ export function useMistShare(settings: AppSettings, onEnvelope: (envelope: Share
       setState((current) => ({ ...current, mode: 'idle', roomId: undefined, nodeId: undefined, peers: [], stablePeers: [], lastEvent: 'DID生成待ち' }))
     }
     return () => disconnect()
-  }, [connect, disconnect, settings.autoConnect, settings.nodeId, settings.roomId, settings.signalingUrl])
+  }, [connect, disconnect, settings.autoConnect, settings.nodeId, settings.roomId])
 
   useEffect(() => {
     if (!settings.autoConnect || (state.mode !== 'offline' && state.mode !== 'local-gossip')) return

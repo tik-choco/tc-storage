@@ -53,13 +53,11 @@ test('default settings use a private room and do not auto-connect', () => {
   assert.notEqual(settings.roomId, 'tc-storage-main')
   assert.equal(reloaded.roomId, settings.roomId)
   assert.equal(settings.autoConnect, false)
-  assert.equal(settings.signalingUrl, 'wss://rtc.tik-choco.com/signaling')
 })
 
 test('stored settings keep an explicit room and auto-connect preference', () => {
   localStorage.setItem('tc-storage-settings-v1', JSON.stringify({
     roomId: 'tc-storage-main',
-    signalingUrl: 'https://rtc.example.test/signaling',
     nodeId: 'node-a',
     autoConnect: true,
     profileName: 'A',
@@ -69,5 +67,4 @@ test('stored settings keep an explicit room and auto-connect preference', () => 
 
   assert.equal(settings.roomId, 'tc-storage-main')
   assert.equal(settings.autoConnect, true)
-  assert.equal(settings.signalingUrl, 'wss://rtc.example.test/signaling')
 })

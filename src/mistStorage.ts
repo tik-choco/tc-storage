@@ -2,7 +2,6 @@ import { decryptJson, encryptJson, type EncryptedPayload } from './crypto.js'
 import { stripFileContent, type FileBundle, type FileRecord, type FolderBundle, type FolderRecord } from './domain.js'
 import { describeError } from './errors.js'
 import { debugInfo, debugWarn } from './logging.js'
-import { defaultSignalingUrl, normalizeSignalingUrl } from './localSettings.js'
 
 type MistModule = typeof import('./vendor/mistlib-wasm/mistlib_wasm.js')
 type NavigatorWithOpfs = Navigator & {
@@ -14,10 +13,9 @@ type MistConfigBridge = {
   get_config: () => string
   set_config: (data: string) => boolean
 }
-type MistRuntimeController = Pick<MistModule, 'init'>
+type MistRuntimeController = Pick<MistModule, 'init_with_config'>
 export type MistRuntimeSettings = {
   nodeId?: string
-  signalingUrl?: string
 }
 type StoredBundleKind = 'file' | 'folder'
 
@@ -72,22 +70,13 @@ export function ensureMistRuntimeInitialized(
   options: { force?: boolean; reason?: string } = {},
 ): void {
   const runtime = normalizeMistRuntimeSettings(settings)
-  const initKey = `${runtime.nodeId}\0${runtime.signalingUrl}`
+  const initKey = runtime.nodeId
   if (!options.force && mistRuntimeInitKey === initKey) return
   const reason = options.reason ?? 'storage'
-  storageLog('mist runtime init start', {
-    reason,
-    force: Boolean(options.force),
-    nodeId: shortRuntimeValue(runtime.nodeId),
-    signalingUrl: runtime.signalingUrl,
-  })
-  mist.init(runtime.nodeId, runtime.signalingUrl)
+  storageLog('mist runtime init start', { reason, force: Boolean(options.force), nodeId: shortRuntimeValue(runtime.nodeId) })
+  mist.init_with_config(runtime.nodeId, JSON.stringify({ signaling: { mode: 'nostr', nostr: { relays: [] } } }))
   mistRuntimeInitKey = initKey
-  storageLog('mist runtime init complete', {
-    reason,
-    nodeId: shortRuntimeValue(runtime.nodeId),
-    signalingUrl: runtime.signalingUrl,
-  })
+  storageLog('mist runtime init complete', { reason, nodeId: shortRuntimeValue(runtime.nodeId) })
 }
 
 function parseMistConfig(raw: string): Record<string, unknown> {
@@ -102,11 +91,10 @@ export async function saveEncryptedFolderToMist(options: {
   passphrase: string
   originNode: string
   runtimeNodeId?: string
-  signalingUrl?: string
 }): Promise<string> {
   assertMistStorageAvailable()
   const mist = await loadMistModule()
-  ensureMistRuntimeInitialized(mist, { nodeId: options.runtimeNodeId ?? options.originNode, signalingUrl: options.signalingUrl })
+  ensureMistRuntimeInitialized(mist, { nodeId: options.runtimeNodeId ?? options.originNode })
   const rootFolder = { ...options.folder, parentId: null }
   const folders = options.folders?.map((folder) => (folder.id === options.folder.id ? rootFolder : folder))
   const bundle: FolderBundle = {
@@ -145,12 +133,11 @@ export async function saveEncryptedFileToMist(options: {
   passphrase: string
   originNode: string
   runtimeNodeId?: string
-  signalingUrl?: string
 }): Promise<string> {
   assertMistStorageAvailable()
   if (!options.file.dataUrl) throw new Error(`${options.file.name} の本文がローカルにありません。CIDから取得してから保存してください。`)
   const mist = await loadMistModule()
-  ensureMistRuntimeInitialized(mist, { nodeId: options.runtimeNodeId ?? options.originNode, signalingUrl: options.signalingUrl })
+  ensureMistRuntimeInitialized(mist, { nodeId: options.runtimeNodeId ?? options.originNode })
   const bundle: FileBundle = {
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -283,7 +270,6 @@ function parseEncryptedPayload(bytes: Uint8Array, kind: StoredBundleKind, cid: s
 function normalizeMistRuntimeSettings(settings: MistRuntimeSettings): Required<MistRuntimeSettings> {
   return {
     nodeId: settings.nodeId?.trim() || storedRuntimeNodeId() || createFallbackRuntimeNodeId(),
-    signalingUrl: normalizeSignalingUrl(settings.signalingUrl ?? defaultSignalingUrl),
   }
 }
 

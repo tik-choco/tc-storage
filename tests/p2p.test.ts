@@ -82,11 +82,11 @@ test('configureMistRoom joins with mistlib defaults and updates position', () =>
     nodeId: 'node-local',
     profileName: 'Local',
     roomId: 'tc-storage-main',
-    signalingUrl: 'wss://rtc.example/signaling',
   }
   const mist = {
-    init(id: string, url: string) {
-      calls.push(`init:${id}:${url}`)
+    init_with_config(id: string, _config: string): boolean {
+      calls.push(`init:${id}`)
+      return true
     },
     join_room(roomId: string) {
       calls.push(`join:${roomId}`)
@@ -101,7 +101,7 @@ test('configureMistRoom joins with mistlib defaults and updates position', () =>
 
   configureMistRoom(mist, settings, () => undefined)
 
-  assert.deepEqual(calls.slice(0, 3), ['register', 'init:node-local:wss://rtc.example/signaling', 'join:tc-storage-main'])
+  assert.deepEqual(calls.slice(0, 3), ['register', 'init:node-local', 'join:tc-storage-main'])
   assert.match(calls[3] ?? '', /^position:/)
 })
 

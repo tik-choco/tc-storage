@@ -254,7 +254,7 @@ function createContentActionsHarness(options: {
       snapshotValue = applyStateUpdate(snapshotValue, update)
       snapshotRef.current = snapshotValue
     },
-    settingsRef: { current: { roomId: 'tc-storage-main', signalingUrl: '', nodeId: 'node-a', identity: null, autoConnect: false, profileName: 'Test user', avatarUrl: '', avatarFileId: '' } },
+    settingsRef: { current: { roomId: 'tc-storage-main', nodeId: 'node-a', identity: null, autoConnect: false, profileName: 'Test user', avatarUrl: '', avatarFileId: '' } },
     snapshotRef,
     startDownloadProgress: () => 0,
     startFileLoadProgress: () => '',

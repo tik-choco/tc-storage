@@ -307,7 +307,7 @@ test('canceling a pending folder invite clears stored access request keys', () =
 })
 
 function testSettings() {
-  return { roomId: 'tc-storage-main', signalingUrl: '', nodeId: 'node-a', identity: null, autoConnect: false, profileName: 'Test user', avatarUrl: '', avatarFileId: '' }
+  return { roomId: 'tc-storage-main', nodeId: 'node-a', identity: null, autoConnect: false, profileName: 'Test user', avatarUrl: '', avatarFileId: '' }
 }
 
 function applyStateUpdate<T>(current: T, update: StateUpdate<T>): T {

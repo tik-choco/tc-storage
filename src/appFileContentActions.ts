@@ -58,7 +58,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   } = options
 
   function storageRuntimeSettings() {
-    return { nodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl }
+    return { nodeId: settingsRef.current.nodeId }
   }
 
   async function ensureFolderFilesStored(folder: FolderRecord, filesForSave: FileRecord[], passphrase: string): Promise<FileRecord[]> {
@@ -75,7 +75,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       }
       const fileWithContent = await ensureFileContent(file)
       syncLog('storage_add start for file content', { folderId: folder.id, fileFolderId: file.folderId, fileId: file.id, fileName: file.name })
-      const cid = await saveEncryptedFile({ folder, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId, runtimeNodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl })
+      const cid = await saveEncryptedFile({ folder, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId, runtimeNodeId: settingsRef.current.nodeId})
       syncLog('storage_add complete for file content', { folderId: folder.id, fileFolderId: file.folderId, fileId: file.id, fileName: file.name, cid: shortLogValue(cid) })
       const storedFile = stampFilePatch(fileWithContent, { lastCid: cid }, new Date().toISOString(), settingsRef.current.nodeId)
       rememberStoredFile(storedFile, folder, passphrase)
@@ -102,7 +102,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
         continue
       }
       syncLog('storage_add start for legacy folder file content', { folderId: bundle.folder.id, fileId: file.id, fileName: file.name })
-      const cid = await saveEncryptedFile({ folder: bundle.folder, file, passphrase, originNode: bundle.originNode, runtimeNodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl })
+      const cid = await saveEncryptedFile({ folder: bundle.folder, file, passphrase, originNode: bundle.originNode, runtimeNodeId: settingsRef.current.nodeId})
       syncLog('storage_add complete for legacy folder file content', { folderId: bundle.folder.id, fileId: file.id, fileName: file.name, cid: shortLogValue(cid) })
       files.push(stampFilePatch(file, { lastCid: cid }, bundle.exportedAt, bundle.originNode))
     }
@@ -300,7 +300,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
         requestedCid: shortLogValue(request.cid),
       })
       const fileWithContent = cached ? { ...file, dataUrl: cached } : await ensureFileContent(file, { suppressRepairRequest: true })
-      const cid = await saveEncryptedFile({ folder: sharedRoot, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId, runtimeNodeId: settingsRef.current.nodeId, signalingUrl: settingsRef.current.signalingUrl })
+      const cid = await saveEncryptedFile({ folder: sharedRoot, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId, runtimeNodeId: settingsRef.current.nodeId})
       const now = new Date().toISOString()
       const repairedFile = stripFileContent(stampFilePatch(fileWithContent, { lastCid: cid }, now, settingsRef.current.nodeId))
       rememberStoredFile(repairedFile, sharedRoot, passphrase)

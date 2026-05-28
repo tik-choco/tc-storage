@@ -93,7 +93,7 @@ export function createMoveActions(options: MoveOptions): MoveActions {
       syncLog('background storage_add start for moved file', { fileId: file.id, fileName: file.name, targetFolderId: targetFolder.id })
       const fileWithContent = await ensureFileContent(file)
       const movedFileWithContent = { ...fileWithContent, folderId: targetFolder.id }
-      const cid = await saveEncryptedFileToMist({ folder: storageFolder, file: movedFileWithContent, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId, signalingUrl: settings.signalingUrl })
+      const cid = await saveEncryptedFileToMist({ folder: storageFolder, file: movedFileWithContent, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId })
       const storedAt = new Date().toISOString()
       const storedMovedFile = stripFileContent(stampFilePatch(movedFile, { lastCid: cid }, storedAt, settings.nodeId))
       if (fileWithContent.dataUrl) setFileContentCache((current) => ({ ...current, [file.id]: fileWithContent.dataUrl ?? '' }))

@@ -105,7 +105,7 @@ export function createFileActions(options: FileActionOptions) {
     setNotice({ tone: 'info', text: '共有URLを作成中...' })
     try {
       const fileWithContent = await ensureFileContent(file)
-      const cid = await saveEncryptedFileToMist({ folder, file: fileWithContent, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId, signalingUrl: settings.signalingUrl })
+      const cid = await saveEncryptedFileToMist({ folder, file: fileWithContent, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId })
       markFileShared(file, cid, now)
       networkRef.current.broadcastShare({ type: 'file-share', clock: snapshot.clock + 1, folderId: folder.id, folderName: folder.name, fileId: file.id, fileName: file.name, cid })
       const copied = await writeReservedClipboard(makeFileShareUrl(fileWithContent, folder, settings.roomId, snapshot.clock + 1, cid, passphrase, shareProfile), clipboard)
@@ -183,7 +183,7 @@ export function createFileActions(options: FileActionOptions) {
     for (const file of files) {
       try {
         syncLog('background storage_add start for uploaded file', { fileId: file.id, fileName: file.name, folderId: storageFolder.id })
-        const cid = await saveEncryptedFileToMist({ folder: storageFolder, file, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId, signalingUrl: settings.signalingUrl })
+        const cid = await saveEncryptedFileToMist({ folder: storageFolder, file, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId })
         const storedAt = new Date().toISOString()
         const storedFile = stripFileContent(stampFilePatch(file, { lastCid: cid }, storedAt, settings.nodeId))
         setSnapshot((current) => touchSnapshot({

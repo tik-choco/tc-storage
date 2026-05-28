@@ -61,7 +61,6 @@ test('acceptLinkedShare switches to the share room and starts auto-connect', () 
 function makeSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
     roomId: 'local-room',
-    signalingUrl: 'https://rtc.example.test/signaling',
     nodeId: 'node-a',
     identity: null,
     autoConnect: false,
