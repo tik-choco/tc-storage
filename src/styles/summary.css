@@ -1,0 +1,140 @@
+.status-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 32;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 28px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-network,
+.status-notice,
+.status-download,
+.status-storage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+}
+
+.status-network {
+  flex: 0 0 auto;
+}
+
+.status-network a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.status-network a:hover strong {
+  text-decoration: underline;
+}
+
+.status-network span,
+.status-notice span,
+.status-download span,
+.status-storage span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-network span {
+  color: var(--text-subtle);
+  font-weight: 600;
+}
+
+.status-notice {
+  flex: 1 1 auto;
+  color: var(--text);
+}
+
+.status-network svg,
+.status-notice svg,
+.status-storage svg {
+  color: var(--accent);
+}
+
+.status-notice.error {
+  color: var(--danger);
+}
+
+.status-notice.error svg {
+  color: var(--danger);
+}
+
+.status-notice:empty {
+  display: none;
+}
+
+.status-download {
+  flex: 0 1 260px;
+  color: var(--text);
+}
+
+.status-download span {
+  max-width: 136px;
+  font-weight: 600;
+}
+
+.status-download strong {
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-download-bar {
+  flex: 1 1 72px;
+  height: 3px;
+  min-width: 56px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--border-soft);
+}
+
+.status-download-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+
+.status-download.indeterminate .status-download-bar i {
+  width: 42%;
+  animation: progress-slide 1.1s ease-in-out infinite;
+}
+
+.status-storage {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 10px;
+  color: var(--text);
+}
+
+.status-storage span {
+  max-width: 140px;
+  font-weight: 600;
+}
+
+.status-storage strong {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-storage i {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+}

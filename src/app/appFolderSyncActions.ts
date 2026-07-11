@@ -1,0 +1,219 @@
+import type { Notice } from './appTypes.js'
+import type { FileContentActions, FolderStateAnnouncement, MistShare, MutableRef, SetState } from './appControllerTypes.js'
+import { stampFolderPatch } from '../storage/crdt.js'
+import { addActivity, stripFileContent, touchSnapshot, type FileRecord, type FolderRecord, type StorageSnapshot } from '../storage/domain.js'
+import { describeError } from '../util/errors.js'
+import { folderFilesForSync, foldersForSync, hasSharedFolderChangesSinceLastShare, sharedFolderSignature } from '../folder/folderSync.js'
+import type { AppSettings } from '../storage/localSettings.js'
+import { saveEncryptedFolderToMist } from '../storage/mistStorage.js'
+import type { ShareEnvelope } from '../p2p/p2p.js'
+import { folderLogDetails, nearestSharedAncestorFolder, shortLogValue, syncLog, syncWarn } from './appUtils.js'
+
+interface FolderSyncOptions {
+  ensureFolderFilesStored: FileContentActions['ensureFolderFilesStored']
+  hasUntrustedFolderContent: FileContentActions['hasUntrustedFolderContent']
+  folderKeysRef: MutableRef<Record<string, string>>
+  folderStateAnnouncementsRef: MutableRef<Record<string, FolderStateAnnouncement>>
+  networkRef: MutableRef<MistShare>
+  setNotice: SetState<Notice>
+  setSnapshot: SetState<StorageSnapshot>
+  settingsRef: MutableRef<AppSettings>
+  snapshotRef: MutableRef<StorageSnapshot>
+  syncInFlightRef: MutableRef<Set<string>>
+  syncSignaturesRef: MutableRef<Record<string, string>>
+  syncTimersRef: MutableRef<Record<string, number>>
+}
+
+export function createFolderSyncActions(options: FolderSyncOptions) {
+  const {
+    ensureFolderFilesStored, folderKeysRef, folderStateAnnouncementsRef, hasUntrustedFolderContent, networkRef, setNotice, setSnapshot, settingsRef,
+    snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef,
+  } = options
+
+  function announceSharedFolders(options: { publishLocalChangesImmediately?: boolean } = {}) {
+    const snapshotValue = snapshotRef.current
+    const folderKeysValue = folderKeysRef.current
+    // The app is now joined to every room in `roomIds` simultaneously (see p2p.ts), so every
+    // shared folder can be announced every tick -- not just the ones matching a single "currently
+    // connected" room. Each folder is announced to its own room: its own room for folders the
+    // user shared; the original sharer's room for folders imported from someone else.
+    // `folder.sharedRoomId ?? settingsRef.current.roomId` is a legacy fallback: folders persisted
+    // before the `sharedRoomId` field existed load as undefined despite the field's string type.
+    const sharedFolders = snapshotValue.folders.filter((folder) => folder.shareEnabled && folderKeysValue[folder.id])
+    const sharedFolderIds = new Set(sharedFolders.map((folder) => folder.id))
+    for (const folderId of Object.keys(folderStateAnnouncementsRef.current)) {
+      if (!sharedFolderIds.has(folderId)) delete folderStateAnnouncementsRef.current[folderId]
+    }
+    syncLog('announce shared folders tick', { sharedFolderCount: sharedFolders.length, rooms: networkRef.current.state.rooms })
+    for (const folder of sharedFolders) {
+      const targetRoom = folder.sharedRoomId ?? settingsRef.current.roomId
+      const shouldPublishContent = hasUntrustedFolderContent(folder.id)
+      if (!folder.lastCid || hasSharedFolderChangesSinceLastShare(snapshotValue, folder) || shouldPublishContent) {
+        if (options.publishLocalChangesImmediately) {
+          syncLog('announce found publishable folder content: publishing storage_add immediately', { ...folderLogDetails(folder), shouldPublishContent })
+          void publishSharedFolder(folder.id)
+        } else {
+          syncLog('announce found publishable folder content: scheduling storage_add', { ...folderLogDetails(folder), shouldPublishContent })
+          scheduleFolderSync(folder.id, shouldPublishContent ? 'announce found untrusted local content' : 'announce found local changes')
+        }
+        continue
+      }
+      const signature = sharedFolderSignature(snapshotValue, folder.id)
+      const sentAt = Date.now()
+      const audienceKey = folderStateAudienceKey(networkRef.current.state)
+      if (shouldSkipFolderStateAnnouncement({
+        audienceKey,
+        cid: folder.lastCid,
+        now: sentAt,
+        previous: folderStateAnnouncementsRef.current[folder.id],
+        signature,
+      })) {
+        syncLog('folder-state announce skipped: unchanged recently', { ...folderLogDetails(folder), signatureLength: signature.length })
+        continue
+      }
+      folderStateAnnouncementsRef.current[folder.id] = { audienceKey, cid: folder.lastCid, sentAt, signature }
+      syncLog('sending folder-state cid over send_message', { ...folderLogDetails(folder), signatureLength: signature.length, targetRoom })
+      networkRef.current.broadcastShare({
+        type: 'folder-state',
+        clock: snapshotValue.clock,
+        folderId: folder.id,
+        folderName: folder.name,
+        cid: folder.lastCid,
+        folderSignature: signature,
+      }, targetRoom)
+    }
+  }
+
+  function announceFolderChange(folder: FolderRecord, changeType: NonNullable<ShareEnvelope['changeType']>, file?: FileRecord, changedFolder?: FolderRecord) {
+    if (!folder.shareEnabled || !folderKeysRef.current[folder.id]) return
+    // Legacy fallback (see announceSharedFolders above): folders persisted before `sharedRoomId`
+    // existed load as undefined.
+    const roomId = folder.sharedRoomId ?? settingsRef.current.roomId
+    syncLog('sending folder-change over send_message', {
+      ...folderLogDetails(folder),
+      changeType,
+      changedFolderId: changedFolder?.id,
+      changedFolderName: changedFolder?.name,
+      fileId: file?.id,
+      fileName: file?.name,
+      fileCid: shortLogValue(file?.lastCid),
+      roomId,
+    })
+    networkRef.current.broadcastShare({
+      type: 'folder-change',
+      clock: snapshotRef.current.clock + 1,
+      changeType,
+      folderId: folder.id,
+      folderName: folder.name,
+      folder: changedFolder,
+      fileId: file?.id,
+      fileName: file?.name,
+      file: file ? stripFileContent(file) : undefined,
+      cid: file?.lastCid,
+    }, roomId)
+  }
+
+  function clearFolderSyncTimer(folderId: string) {
+    const timer = syncTimersRef.current[folderId]
+    if (timer !== undefined) window.clearTimeout(timer)
+    delete syncTimersRef.current[folderId]
+  }
+
+  function scheduleFolderSync(folderId: string, reason: string) {
+    clearFolderSyncTimer(folderId)
+    syncLog('scheduled folder storage_add', { folderId, reason, delayMs: 900 })
+    syncTimersRef.current[folderId] = window.setTimeout(() => {
+      delete syncTimersRef.current[folderId]
+      void publishSharedFolder(folderId)
+    }, 900)
+  }
+
+  async function publishSharedFolder(folderId: string) {
+    if (syncInFlightRef.current.has(folderId)) {
+      syncLog('storage_add skipped: publish already in flight', { folderId })
+      return
+    }
+    const snapshotValue = snapshotRef.current
+    const settingsValue = settingsRef.current
+    const folder = snapshotValue.folders.find((item) => item.id === folderId)
+    const passphrase = folderKeysRef.current[folderId]
+    if (!folder?.shareEnabled || !passphrase) {
+      syncLog('storage_add skipped: folder not shareable or key missing', { folderId, hasFolder: Boolean(folder), shareEnabled: folder?.shareEnabled, hasPassphrase: Boolean(passphrase) })
+      return
+    }
+    // Preserve whichever room this folder already belongs to -- home room for folders the user
+    // shared themselves, or the original sharer's room for folders imported from someone else.
+    // storage_add itself is content-addressed and room-independent, so republishing never needs
+    // to force the folder back onto the home room. Legacy fallback (see announceSharedFolders
+    // above): folders persisted before `sharedRoomId` existed load as undefined.
+    const shareRoomId = folder.sharedRoomId ?? settingsRef.current.roomId
+    syncInFlightRef.current.add(folderId)
+    try {
+      const publishedSignature = sharedFolderSignature(snapshotValue, folderId)
+      const foldersForSave = foldersForSync(snapshotValue, folderId)
+      const filesForSync = await ensureFolderFilesStored(folder, folderFilesForSync(snapshotValue, folderId), passphrase)
+      syncLog('storage_add start for shared folder', { ...folderLogDetails(folder), folderCount: foldersForSave.length, fileCount: filesForSync.length })
+      const cid = await saveEncryptedFolderToMist({ folder, folders: foldersForSave, files: filesForSync, passphrase, originNode: settingsValue.nodeId, runtimeNodeId: settingsValue.nodeId })
+      syncLog('storage_add complete for shared folder', { ...folderLogDetails(folder), cid: shortLogValue(cid), folderCount: foldersForSave.length, fileCount: filesForSync.length })
+      const now = new Date().toISOString()
+      setSnapshot((current) => {
+        const currentFolder = current.folders.find((item) => item.id === folderId)
+        if (!currentFolder) return current
+        const storedFilesById = new Map(
+          filesForSync
+            .filter((file) => shouldPersistStoredFileForFolder(current, file, folderId))
+            .map((file) => [file.id, stripFileContent(file)]),
+        )
+        const foldersNext = current.folders.map((item) => (
+          item.id === folderId
+            ? stampFolderPatch(item, { lastCid: cid, lastSavedAt: now, lastSharedAt: now, shareEnabled: true, sharedRoomId: shareRoomId }, now, settingsValue.nodeId)
+            : item
+        ))
+        const filesNext = current.files.map((item) => storedFilesById.get(item.id) ?? item)
+        const next = touchSnapshot(addActivity({ ...current, folders: foldersNext, files: filesNext }, { actorNodeId: settingsValue.nodeId, folderId, action: 'folder.sync', detail: `${currentFolder.name} を自動同期` }, now), settingsValue.nodeId)
+        syncSignaturesRef.current[folderId] = sharedFolderSignature(next, folderId)
+        return next
+      })
+      syncLog('broadcasting new folder-share cid over send_message', { ...folderLogDetails(folder), cid: shortLogValue(cid), clock: snapshotValue.clock + 1, signatureLength: publishedSignature.length, shareRoomId })
+      networkRef.current.broadcastShare({ type: 'folder-share', clock: snapshotValue.clock + 1, folderId, folderName: folder.name, cid, folderSignature: publishedSignature }, shareRoomId)
+      setNotice({ tone: 'success', text: `${folder.name} を自動同期しました` })
+    } catch (error) {
+      syncWarn('storage_add failed for shared folder', { folderId, error: describeError(error, 'unknown error') })
+      setNotice({ tone: 'error', text: describeError(error, `${folder.name} の自動同期に失敗しました`) })
+    } finally {
+      syncInFlightRef.current.delete(folderId)
+    }
+  }
+
+  return { announceFolderChange, announceSharedFolders, clearFolderSyncTimer, publishSharedFolder, scheduleFolderSync }
+}
+
+function shouldPersistStoredFileForFolder(snapshot: StorageSnapshot, file: FileRecord, folderId: string): boolean {
+  const sharedRoot = nearestSharedAncestorFolder(snapshot, file.folderId)
+  return !sharedRoot || sharedRoot.id === folderId
+}
+
+export const folderStateAnnouncementDedupMs = 15_000
+
+export function shouldSkipFolderStateAnnouncement(options: {
+  audienceKey: string
+  cid: string
+  now: number
+  previous: FolderStateAnnouncement | undefined
+  signature: string
+}): boolean {
+  return Boolean(
+    options.previous &&
+    options.previous.audienceKey === options.audienceKey &&
+    options.previous.cid === options.cid &&
+    options.previous.signature === options.signature &&
+    options.now - options.previous.sentAt < folderStateAnnouncementDedupMs,
+  )
+}
+
+// Under the multi-room model the app can be joined to several rooms at once (see p2p.ts), so the
+// audience key is keyed off the full joined-room set (`state.rooms`) rather than a single "active"
+// room, plus the union of stable peers across all of them.
+function folderStateAudienceKey(state: MistShare['state']): string {
+  return `${state.mode}:${state.rooms.join(',')}:${state.nodeId ?? ''}:${state.stablePeers.toSorted().join(',')}`
+}

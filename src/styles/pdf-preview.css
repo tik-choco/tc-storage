@@ -1,0 +1,193 @@
+/* PDF preview (PdfPreview.tsx) */
+.pdf-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface-3);
+}
+
+.pdf-preview-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+a.pdf-toolbar-btn {
+  text-decoration: none;
+}
+
+.pdf-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.pdf-toolbar-btn:hover:not(:disabled) {
+  background: var(--border-soft);
+}
+
+.pdf-toolbar-btn.active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg-strong);
+  color: var(--accent);
+}
+
+.pdf-toolbar-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.pdf-zoom-display {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.pdf-zoom-display:hover:not(:disabled) {
+  background: var(--border-soft);
+}
+
+.pdf-zoom-display:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.pdf-page-indicator {
+  margin-left: auto;
+  padding: 0 4px;
+  color: var(--text-subtle);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pdf-preview-scroll {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scroll-behavior: auto;
+}
+
+.pdf-preview-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 220px;
+  color: var(--text-subtle);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pdf-preview-error {
+  color: var(--danger);
+}
+
+.pdf-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 16px 40px;
+}
+
+.pdf-page-wrapper {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  background: #ffffff;
+  box-shadow: var(--shadow-2);
+}
+
+.pdf-page-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.pdf-page-placeholder {
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.03),
+    rgba(15, 23, 42, 0.03) 10px,
+    rgba(15, 23, 42, 0.06) 10px,
+    rgba(15, 23, 42, 0.06) 20px
+  );
+}
+
+/* Expanded (fullscreen preview modal) — dark chrome to match .preview-modal-actions */
+.pdf-preview.expanded {
+  background: #0b1120;
+}
+
+.pdf-preview.expanded .pdf-preview-toolbar {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(6px);
+}
+
+.pdf-preview.expanded .pdf-toolbar-btn,
+.pdf-preview.expanded .pdf-zoom-display {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.6);
+  color: #f8fafc;
+}
+
+.pdf-preview.expanded .pdf-toolbar-btn:hover:not(:disabled),
+.pdf-preview.expanded .pdf-zoom-display:hover:not(:disabled) {
+  border-color: rgba(148, 163, 184, 0.55);
+  background: rgba(30, 41, 59, 0.9);
+}
+
+.pdf-preview.expanded .pdf-toolbar-btn.active {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-hover);
+}
+
+.pdf-preview.expanded .pdf-page-indicator {
+  color: #cbd5e1;
+}
+
+.pdf-preview.expanded .pdf-preview-state {
+  color: #cbd5e1;
+}
+
+.pdf-preview.expanded .pdf-preview-error {
+  color: #fca5a5;
+}

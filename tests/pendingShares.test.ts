@@ -1,0 +1,145 @@
+import assert from 'node:assert/strict'
+import { afterEach, beforeEach, test } from 'node:test'
+import type { PendingShare } from '../src/app/appTypes.js'
+import { loadFileShareKeys, saveFileShareKeys } from '../src/crypto/fileShareKeys.js'
+import { loadFolderAccessModes, saveFolderAccessModes } from '../src/folder/folderAccess.js'
+import { loadFolderKeys, saveFolderKeys } from '../src/crypto/folderKeys.js'
+import { loadImportKeys, loadPendingShares, saveImportKeys, savePendingShares } from '../src/share/pendingShares.js'
+
+class MemoryStorage implements Storage {
+  private values = new Map<string, string>()
+
+  get length(): number {
+    return this.values.size
+  }
+
+  clear(): void {
+    this.values.clear()
+  }
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null
+  }
+
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key)
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value)
+  }
+}
+
+let originalLocalStorage: Storage | undefined
+
+beforeEach(() => {
+  originalLocalStorage = globalThis.localStorage
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: new MemoryStorage(),
+    configurable: true,
+  })
+})
+
+afterEach(() => {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: originalLocalStorage,
+    configurable: true,
+  })
+})
+
+test('pending shares and import keys survive a reload', () => {
+  const share: PendingShare = {
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-20T00:00:00.000Z',
+    receivedAt: '2026-05-20T00:00:01.000Z',
+    clock: 2,
+    cid: 'cid-folder',
+    folderId: 'folder-a',
+    folderName: 'Shared docs',
+    autoImport: true,
+    senderProfile: { name: 'Sender' },
+  }
+
+  savePendingShares([share])
+  saveImportKeys({ 'cid-folder': 'secret-key' })
+
+  assert.deepEqual(loadPendingShares(), [share])
+  assert.deepEqual(loadImportKeys(), { 'cid-folder': 'secret-key' })
+})
+
+test('stored key records ignore malformed non-string values', () => {
+  localStorage.setItem('tc-storage-folder-keys-v1', JSON.stringify({ 'folder-a': 'secret-a', 'folder-b': 123, 'folder-c': null }))
+  localStorage.setItem('tc-storage-file-share-keys-v1', JSON.stringify({ 'file-a': 'secret-file', 'file-b': false }))
+
+  assert.deepEqual(loadFolderKeys(), { 'folder-a': 'secret-a' })
+  assert.deepEqual(loadFileShareKeys(), { 'file-a': 'secret-file' })
+
+  saveFolderKeys({ 'folder-a': 'secret-a', 'folder-b': 123 as unknown as string })
+  saveFileShareKeys({ 'file-a': 'secret-file', 'file-b': false as unknown as string })
+
+  assert.equal(localStorage.getItem('tc-storage-folder-keys-v1'), JSON.stringify({ 'folder-a': 'secret-a' }))
+  assert.equal(localStorage.getItem('tc-storage-file-share-keys-v1'), JSON.stringify({ 'file-a': 'secret-file' }))
+})
+
+test('fixed folder invite pending shares survive without a cid', () => {
+  const share: PendingShare = {
+    type: 'folder-share',
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    folderId: 'folder-fixed',
+    folderName: 'Fixed invite',
+    ownerNodeId: 'node-owner',
+    accessGrantMode: 'shared',
+    folderKeyHash: 'a'.repeat(64),
+    autoImport: true,
+    senderProfile: { name: 'Owner' },
+  }
+
+  savePendingShares([share])
+
+  assert.deepEqual(loadPendingShares(), [share])
+})
+
+test('pending share storage ignores malformed records', () => {
+  localStorage.setItem('tc-storage-pending-shares-v1', JSON.stringify([
+    { type: 'hello', cid: 'cid-hello' },
+    {
+      type: 'file-share',
+      from: 'node-a',
+      roomId: 'tc-storage-main',
+      sentAt: '2026-05-20T00:00:00.000Z',
+      receivedAt: '2026-05-20T00:00:01.000Z',
+      clock: 3,
+      cid: 'cid-file',
+      fileName: 'memo.txt',
+      autoImport: true,
+    },
+  ]))
+
+  assert.deepEqual(loadPendingShares().map((share) => share.cid), ['cid-file'])
+})
+
+test('folder access modes survive a reload and normalize unsafe or invalid modes', () => {
+  saveFolderAccessModes({ 'folder-approval': 'approval', 'folder-shared': 'shared-approval' })
+  localStorage.setItem('tc-storage-folder-access-modes-v1', JSON.stringify({
+    ...loadFolderAccessModes(),
+    'folder-open': 'open',
+    'folder-invalid': 'anything',
+  }))
+
+  assert.deepEqual(loadFolderAccessModes(), {
+    'folder-approval': 'approval',
+    'folder-shared': 'shared-approval',
+    'folder-open': 'approval',
+    'folder-invalid': 'approval',
+  })
+})

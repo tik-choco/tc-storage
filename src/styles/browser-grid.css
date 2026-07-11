@@ -1,0 +1,311 @@
+.table-grid {
+  display: grid;
+  align-content: start;
+  align-items: start;
+  grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 190px));
+  gap: 12px;
+  padding: 14px;
+}
+
+.tile-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.tile-card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.table-grid .tile-card.selected-item,
+.table-grid .tile-card.selected-item:hover {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    0 0 0 2px var(--accent-tint);
+}
+
+.table-grid .media-only-tile.selected-item,
+.table-grid .media-only-tile.selected-item:hover {
+  border: 2px solid var(--accent);
+  background: var(--accent-bg);
+  box-shadow: 0 0 0 2px var(--accent-tint);
+}
+
+.pending-folder-tile {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.pending-folder-tile:hover {
+  border-color: var(--info);
+  background: var(--info-bg);
+}
+
+.tile-open {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-h);
+  text-align: left;
+}
+
+.pending-folder-open {
+  cursor: default;
+}
+
+.tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.tile-preview {
+  width: 100%;
+}
+
+.media-tile-preview {
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.media-tile-preview img,
+.media-tile-preview video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+}
+
+.thumbnail-loading {
+  position: relative;
+}
+
+.thumbnail-skeleton {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: linear-gradient(90deg, var(--surface-3) 0%, var(--surface-2) 45%, var(--border) 100%);
+  background-size: 220% 100%;
+  animation: thumbnail-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes thumbnail-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.media-only-tile {
+  position: relative;
+  display: block;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.media-only-tile:hover {
+  background: transparent;
+}
+
+.media-only-button {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.media-only-preview {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+}
+
+.media-only-overlay {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  padding: 34px 10px 10px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0), rgba(15, 23, 42, 0.86));
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 140ms ease, visibility 140ms ease;
+}
+
+.media-only-tile:hover .media-only-overlay,
+.media-only-tile:focus-within .media-only-overlay {
+  opacity: 1;
+  visibility: visible;
+}
+
+.media-only-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.72);
+  white-space: nowrap;
+}
+
+.media-only-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-start;
+  pointer-events: auto;
+}
+
+.media-only-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.64);
+  color: #fff;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.media-only-actions button:hover,
+.media-only-actions button:focus-visible {
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+}
+
+.file-tile-icon {
+  color: var(--info);
+}
+
+.tile-open strong,
+.tile-date,
+.tile-meta,
+.tile-meta-row span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-open strong {
+  width: 100%;
+  color: var(--text-h);
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.tile-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-width: 0;
+  color: var(--text-subtle);
+  font-size: 12px;
+}
+
+.tile-date,
+.tile-meta {
+  color: var(--text-subtle);
+  font-size: 12px;
+}
+
+.table-grid .tile-date {
+  display: none;
+}
+
+.tile-actions {
+  justify-content: flex-start;
+  margin-top: auto;
+}
+
+.tile-actions button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.draft-folder-tile input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-h);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+
+.draft-folder-tile input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.tile-empty {
+  grid-column: 1 / -1;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}

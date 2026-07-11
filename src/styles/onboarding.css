@@ -1,0 +1,450 @@
+/* First-run onboarding wizard — a modal overlay above the app shell.
+   Ported from tc-town/src/styles/onboarding.css; colors, radii, shadows and
+   transitions now use tc-storage's design tokens (src/styles/tokens.css) so
+   dark mode flows through automatically. */
+
+.ob-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+  z-index: 500;
+  animation: tc-ob-overlay-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ob-card {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(90vh, 720px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+  animation: tc-ob-card-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tc-ob-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tc-ob-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ob-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-subtle);
+  padding: 8px;
+  border-radius: 50%;
+  line-height: 0;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.ob-close:hover {
+  color: var(--text-h);
+  background: var(--border-soft);
+}
+
+.ob-body {
+  padding: 28px 28px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ob-hero {
+  display: flex;
+  justify-content: center;
+  color: var(--accent);
+  padding: 16px 0 0;
+}
+
+.ob-hero > svg {
+  box-sizing: content-box;
+  padding: 16px;
+  background: var(--accent-bg-strong);
+  border-radius: 50%;
+}
+
+.ob-step-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--accent);
+}
+
+.ob-step-head > svg {
+  flex: none;
+  box-sizing: content-box;
+  padding: 8px;
+  background: var(--accent-bg-strong);
+  border-radius: 50%;
+}
+
+.ob-step-head .ob-title {
+  margin: 0;
+}
+
+.ob-title {
+  margin: 0;
+  text-align: center;
+  font-size: 1.3rem;
+  color: var(--text-h);
+}
+
+.ob-step-head .ob-title {
+  text-align: left;
+  font-size: 1.15rem;
+}
+
+.ob-text {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.ob-text-subtle {
+  color: var(--text-subtle);
+  font-size: 0.9rem;
+}
+
+.ob-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ob-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.ob-input {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  min-width: 0;
+  width: 100%;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+
+.ob-input:hover:not(:focus) {
+  background: var(--surface-2);
+}
+
+.ob-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.ob-model-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ob-model-row .ob-input {
+  flex: 1 1 auto;
+}
+
+.ob-icon-btn {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-h);
+  border-radius: 50%;
+  padding: 8px;
+  line-height: 0;
+  flex: none;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.ob-icon-btn:hover:not(:disabled) {
+  background: var(--border-soft);
+}
+
+.ob-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ob-model-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.ob-model-status {
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+  min-width: 0;
+}
+
+.ob-link-btn {
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--accent);
+  padding: 0;
+  flex: none;
+}
+
+.ob-link-btn:hover {
+  text-decoration: underline;
+}
+
+.ob-test-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ob-test-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--success);
+  font-size: 0.9rem;
+}
+
+.ob-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
+.ob-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.ob-callout svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.ob-callout-warn {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.ob-callout-warn svg {
+  color: var(--warn-text);
+}
+
+.ob-btn {
+  appearance: none;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-h);
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  align-self: flex-start;
+  /* Never let the label wrap character-by-character when its flex row runs
+     out of room — the row should wrap instead (see .ob-footer-actions /
+     .ob-test-row), not the text inside the button. */
+  white-space: nowrap;
+  flex: none;
+}
+
+.ob-btn:hover:not(:disabled) {
+  background: var(--border-soft);
+  border-color: var(--text-faint);
+}
+
+.ob-btn:active:not(:disabled) {
+  background: var(--border);
+}
+
+.ob-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ob-btn-ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+.ob-btn-ghost:hover:not(:disabled) {
+  background: var(--border-soft);
+  border-color: transparent;
+}
+
+.ob-btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-1);
+}
+
+.ob-btn-accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: var(--shadow-2);
+}
+
+.ob-btn-accent:active:not(:disabled) {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+}
+
+.ob-feature-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ob-feature-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  line-height: 1.6;
+}
+
+.ob-feature-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  background: var(--accent-bg-strong);
+  box-sizing: content-box;
+  padding: 6px;
+  border-radius: 50%;
+}
+
+.ob-feature-list li > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ob-feature-list li strong {
+  color: var(--text-h);
+  font-size: 0.92rem;
+}
+
+.ob-feature-list li span {
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+}
+
+.ob-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 28px 20px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.ob-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.ob-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  transition: background 120ms ease, width 220ms ease;
+}
+
+.ob-dot.is-active {
+  width: 22px;
+  background: var(--accent);
+}
+
+.ob-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .ob-body {
+    padding: 20px 18px 16px;
+    gap: 12px;
+  }
+
+  .ob-footer {
+    flex-wrap: wrap;
+    padding: 12px 18px 16px;
+  }
+
+  .ob-footer-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .ob-footer-actions .ob-btn {
+    flex: 1 1 auto;
+  }
+
+  .ob-title {
+    font-size: 1.15rem;
+  }
+}

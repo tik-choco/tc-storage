@@ -1,0 +1,412 @@
+import { useCallback, useEffect, useMemo, useRef } from 'preact/hooks'
+import { descendantFolderIds, filterByName, sortBrowserFiles, sortBrowserFolders } from './appHelpers.js'
+import { createAccessActions } from './appAccessActions.js'
+import { createDragDropActions } from './appDragDropActions.js'
+import { createDriveInboxActions, driveInboxTopic } from './appDriveInbox.js'
+import { createEnvelopeActions } from './appEnvelopeActions.js'
+import { createFileActions } from './appFileActions.js'
+import { createFileContentActions } from './appFileContentActions.js'
+import { createFileEditActions } from './appFileEditActions.js'
+import { createFileHandoffActions } from './appFileHandoffActions.js'
+import { createFolderActions } from './appFolderActions.js'
+import { createFolderSyncActions } from './appFolderSyncActions.js'
+import { createMoveActions } from './appMoveActions.js'
+import { createNoteDocInboxActions, noteDocIndexTopic } from './appNoteDocInbox.js'
+import { createPanelActions } from './appPanelActions.js'
+import { createPeerActions } from './appPeerActions.js'
+import { createSelectionActions } from './appSelectionActions.js'
+import { createShareImportActions } from './appShareImportActions.js'
+import { createTownBackupInboxActions, townBackupTopic } from './appTownBackupInbox.js'
+import { createTranslationsInboxActions, translationsInboxTopic } from './appTranslationsInbox.js'
+import { browserSortModeKey, browserViewModeKey, requiresLargeDownloadConfirmation } from './appUtils.js'
+import { readShared, subscribeShared } from '../storage/sharedBus.js'
+import { activeFiles, activeFolders, childFolders, filesInFolder } from '../storage/domain.js'
+import { markOnboardingDone, subscribeOnboardingRequests } from '../storage/onboarding.js'
+import { applyThemePreference, saveThemePreference } from '../storage/theme.js'
+import { isEd25519DidKey } from '../crypto/didIdentity.js'
+import { useMistShare, type ShareEnvelope, type ShareProfile } from '../p2p/p2p.js'
+import { roomIdsToMaintain } from '../storage/joinedRooms.js'
+import { makeFileShareUrl, makeFolderShareUrl } from '../share/shareLinks.js'
+import { useAppControllerRefs } from './useAppControllerRefs.js'
+import { useAppControllerState } from './useAppControllerState.js'
+import { useAppEffects } from './useAppEffects.js'
+import { useProfileAvatarPicker } from '../hooks/useProfileAvatarPicker.js'
+import { useTransferProgress } from '../hooks/useTransferProgress.js'
+
+export function useAppController() {
+  const {
+    settings, setSettings, settingsDraft, setSettingsDraft, snapshot, setSnapshot, folderKeys, setFolderKeys, fileShareKeys, setFileShareKeys,
+    folderPeers, setFolderPeers, currentFolderId, setCurrentFolderId, query, setQuery, folderNameDraft, setFolderNameDraft, importKeys, setImportKeys,
+    browserSortMode, setBrowserSortMode, browserViewMode, setBrowserViewMode, pendingShares, setPendingShares, folderAccessModes, setFolderAccessModes, folderAccessRequests, setFolderAccessRequests,
+    joinedRooms, setJoinedRooms, onboardingOpen, setOnboardingOpen,
+    fileContentCache, setFileContentCache, settingsOpen, setSettingsOpen, profileOpen, setProfileOpen, themePreference, setThemePreference, folderPanelOpen, setFolderPanelOpen,
+    folderPanelMode, setFolderPanelMode, folderPanelFolderId, setFolderPanelFolderId, selectedFileId, setSelectedFileId, detailFileId, setDetailFileId,
+    expandedPreviewOpen, setExpandedPreviewOpen, dragActive, setDragActive, dragItem, setDragItem, selectedItems, setSelectedItems,
+    dropTargetFolderId, setDropTargetFolderId, reorderTarget, setReorderTarget, notice, setNotice, busy, setBusy, deleteRequest, setDeleteRequest,
+    downloadConfirmRequest, setDownloadConfirmRequest,
+    popoverPositions, setPopoverPositions,
+  } = useAppControllerState()
+  const transfer = useTransferProgress()
+
+  const folders = useMemo(() => activeFolders(snapshot), [snapshot])
+  const files = useMemo(() => activeFiles(snapshot), [snapshot])
+  const currentFolder = folders.find((folder) => folder.id === currentFolderId) ?? null
+  const folderPanelFolder = (folderPanelFolderId ? folders.find((folder) => folder.id === folderPanelFolderId) : currentFolder) ?? null
+  const selectedFile = files.find((file) => file.id === selectedFileId) ?? null
+  const detailFile = files.find((file) => file.id === detailFileId) ?? null
+  const detailFolder = detailFile ? folders.find((folder) => folder.id === detailFile.folderId) ?? null : null
+  const fileDataUrls = useMemo(() => Object.fromEntries(files.flatMap((file) => {
+    const dataUrl = file.dataUrl ?? fileContentCache[file.id]
+    return dataUrl ? [[file.id, dataUrl]] : []
+  })), [fileContentCache, files])
+  const selectedPreviewFile = selectedFile ? { ...selectedFile, dataUrl: fileDataUrls[selectedFile.id] } : null
+  const detailFileWithContent = detailFile ? { ...detailFile, dataUrl: fileDataUrls[detailFile.id] } : null
+  const profileImageFiles = useMemo(() => files.filter((file) => file.mimeType.startsWith('image/')), [files])
+  const queryText = query.trim()
+  const folderRows = useMemo(() => sortBrowserFolders(filterByName(currentFolderId ? currentFolder ? childFolders(snapshot, currentFolder.id) : [] : childFolders(snapshot, null), queryText), browserSortMode), [browserSortMode, currentFolder, currentFolderId, queryText, snapshot])
+  const fileRows = useMemo(() => sortBrowserFiles(filterByName(currentFolder ? filesInFolder(snapshot, currentFolder.id) : [], queryText), browserSortMode), [browserSortMode, currentFolder, queryText, snapshot])
+  const pendingFolderShares = useMemo(() => {
+    if (currentFolderId !== null) return []
+    const folderShares = pendingShares.filter((share) => share.autoImport && share.type === 'folder-share')
+    return queryText ? filterByName(folderShares.map((share) => ({ ...share, name: share.folderName ?? 'Shared folder' })), queryText) : folderShares
+  }, [currentFolderId, pendingShares, queryText])
+  const shareProfile: ShareProfile = useMemo(() => ({ name: settings.profileName }), [settings.profileName])
+  const currentFolderKey = currentFolder ? folderKeys[currentFolder.id] ?? '' : ''
+  const folderPanelPeers = folderPanelFolder ? folderPeers[folderPanelFolder.id] ?? [] : []
+  const folderPanelAccessMode = folderPanelFolder ? folderAccessModes[folderPanelFolder.id] ?? 'approval' : 'approval'
+  const folderPanelFolderKey = folderPanelFolder ? folderKeys[folderPanelFolder.id] ?? '' : ''
+  const folderPanelAccessRequests = folderPanelFolder ? folderAccessRequests.filter((request) => request.folderId === folderPanelFolder.id) : []
+  const detailFolderPeers = detailFolder ? folderPeers[detailFolder.id] ?? [] : []
+  const avatarUrl = settings.avatarFileId ? fileDataUrls[settings.avatarFileId] ?? '' : ''
+  const draftAvatarUrl = settingsDraft.avatarFileId ? fileDataUrls[settingsDraft.avatarFileId] ?? '' : ''
+  const folderShareUrl = folderPanelFolder?.shareEnabled && isEd25519DidKey(settings.nodeId) && folderPanelFolderKey ? makeFolderShareUrl(folderPanelFolder, settings.roomId, shareProfile, settings.nodeId, folderPanelFolderKey, folderPanelAccessMode) : ''
+  const detailFileShareCid = detailFile?.lastShareCid ?? detailFile?.lastCid
+  const fileShareUrl = detailFile && detailFileShareCid && detailFolder && fileShareKeys[detailFile.id] ? makeFileShareUrl(detailFile, detailFolder, settings.roomId, snapshot.clock, detailFileShareCid, fileShareKeys[detailFile.id], shareProfile) : ''
+  const previewFiles = useMemo(() => (selectedFile ? filesInFolder(snapshot, selectedFile.folderId) : fileRows), [fileRows, selectedFile, snapshot])
+  const previewFilesWithContent = useMemo(() => previewFiles.map((file) => ({ ...file, dataUrl: fileDataUrls[file.id] })), [fileDataUrls, previewFiles])
+  const selectedFileIndex = selectedFile ? previewFiles.findIndex((file) => file.id === selectedFile.id) : -1
+  const selectedPreviewProgress = selectedPreviewFile && !selectedPreviewFile.dataUrl ? transfer.fileLoadProgress[selectedPreviewFile.id] : undefined
+  const storageUsed = files.reduce((total, file) => total + file.size, 0)
+  const currentFolderStorageUsed = currentFolderId ? files.filter((file) => descendantFolderIds(folders, currentFolderId).has(file.folderId)).reduce((total, file) => total + file.size, 0) : storageUsed
+
+  const envelopeHandlerRef = useRef<(envelope: ShareEnvelope) => void>(() => {})
+  const roomIds = useMemo(() => roomIdsToMaintain(settings.roomId, joinedRooms), [settings.roomId, joinedRooms])
+  const network = useMistShare(settings, roomIds, useCallback((envelope: ShareEnvelope) => envelopeHandlerRef.current(envelope), []))
+  const {
+    accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
+    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
+    folderStateAnnouncementsRef,
+    helloResponseAtRef, importKeysRef, networkRef, pendingSharesRef, settingsRef, snapshotRef,
+    syncInFlightRef, syncSignaturesRef, syncTimersRef,
+  } = useAppControllerRefs({ fileContentCache, fileShareKeys, folderAccessModes, folderKeys, importKeys, network, pendingShares, settings, snapshot })
+
+  const peerActions = createPeerActions({ setFolderPeers, settingsRef })
+  const fileContent = createFileContentActions({ ...transfer, fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderKeysRef, networkRef, setFileContentCache, setNotice, setSnapshot, settingsRef, snapshotRef })
+  const folderSync = createFolderSyncActions({ ensureFolderFilesStored: fileContent.ensureFolderFilesStored, folderKeysRef, folderStateAnnouncementsRef, hasUntrustedFolderContent: fileContent.hasUntrustedFolderContent, networkRef, setNotice, setSnapshot, settingsRef, snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef })
+  const access = createAccessActions({
+    accessRequestKeysRef,
+    folderAccessModesRef,
+    folderKeysRef,
+    networkRef,
+    openFolderAccessRequests: (folderId) => {
+      setFolderPanelFolderId(folderId)
+      setFolderPanelMode('access')
+      setFolderPanelOpen(true)
+      setSettingsOpen(false)
+      setProfileOpen(false)
+      setDetailFileId(null)
+    },
+    setFolderAccessRequests,
+    setFolderKeys,
+    setImportKeys,
+    setNotice,
+    setPendingShares,
+    settingsRef,
+    snapshotRef,
+  })
+  const shareImport = createShareImportActions({ accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, clearFolderSyncTimer: folderSync.clearFolderSyncTimer, importKeys, materializeFolderBundleFiles: fileContent.materializeFolderBundleFiles, pendingSharesRef, rememberFolderPeer: peerActions.rememberFolderPeer, setBusy, setCurrentFolderId, setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setImportKeys, setNotice, setPendingShares, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef })
+  const panel = createPanelActions({ previewFiles, profileImageFiles, selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelMode, setFolderPanelOpen, setImportKeys, setJoinedRooms, setNotice, setPendingShares, setPopoverPositions, setProfileOpen, setSelectedFileId, setSettings, setSettingsOpen, settings, settingsDraft })
+  const envelope = createEnvelopeActions({ announceSharedFolders: folderSync.announceSharedFolders, autoImportCidsRef, autoImportFolderShare: shareImport.autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare: shareImport.autoImportLinkedShare, currentFolderId, detailFileId, folderKeysRef, folderPanelFolderId, handleFileContentRepairRequest: fileContent.handleFileContentRepairRequest, handleFolderAccessDenied: access.handleFolderAccessDenied, handleFolderAccessGrant: access.handleFolderAccessGrant, handleFolderAccessRequest: access.handleFolderAccessRequest, helloResponseAtRef, importKeysRef, pendingSharesRef, rememberFolderPeer: peerActions.rememberFolderPeer, scheduleFolderSync: folderSync.scheduleFolderSync, selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setPendingShares, setSelectedFileId, setSnapshot, snapshotRef })
+  envelopeHandlerRef.current = envelope.handleEnvelope
+  const folderActions = createFolderActions({ announceFolderChange: folderSync.announceFolderChange, clearFolderSyncTimer: folderSync.clearFolderSyncTimer, currentFolder, currentFolderId, currentFolderKey, ensureFolderFilesStored: fileContent.ensureFolderFilesStored, folderAccessModes, folderKeysRef, folderPanelFolder, folderPanelFolderId, folders, networkRef, scheduleFolderSync: folderSync.scheduleFolderSync, setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setExpandedPreviewOpen, setFolderKeys, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setProfileOpen, setSelectedFileId, setSettings, setSettingsOpen, setSnapshot, settings, shareProfile, snapshot, snapshotRef, syncSignaturesRef })
+  const moveActions = createMoveActions({ announceFolderChange: folderSync.announceFolderChange, ensureFileContent: fileContent.ensureFileContent, folderKeysRef, scheduleFolderSync: folderSync.scheduleFolderSync, setBusy, setFileContentCache, setFolderKeys, setNotice, setSnapshot, settings, snapshotRef })
+  const fileHandoffActions = createFileHandoffActions({ ensureFileContent: fileContent.ensureFileContent, setNotice, settingsRef })
+  const fileEditActions = createFileEditActions({ announceFolderChange: folderSync.announceFolderChange, folderKeysRef, scheduleFolderSync: folderSync.scheduleFolderSync, setFileContentCache, setFolderKeys, setNotice, setSnapshot, settingsRef, snapshotRef })
+  const fileActions = createFileActions({ announceFolderChange: folderSync.announceFolderChange, currentFolderId, deleteFolder: folderActions.deleteFolder, deleteRequest, ensureFileContent: fileContent.ensureFileContent, fileShareKeys, folderKeysRef, folders, networkRef, scheduleFolderSync: folderSync.scheduleFolderSync, setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setFolderPanelOpen, setNotice, setProfileOpen, setSelectedItems, setSettingsOpen, setSnapshot, settings, shareProfile, snapshot, snapshotRef })
+  // Auto-import translations that tc-translate publishes on the shared bus,
+  // materializing each as a Markdown file (reuses fileActions.uploadFiles).
+  const uploadFilesRef = useRef(fileActions.uploadFiles)
+  uploadFilesRef.current = fileActions.uploadFiles
+  const translationsInbox = useMemo(() => createTranslationsInboxActions({ snapshotRef, setSnapshot, settingsRef, uploadFilesRef }), [])
+  useEffect(() => {
+    const existing = readShared(translationsInboxTopic)
+    if (existing) translationsInbox.importFromInbox(existing)
+    return subscribeShared(translationsInboxTopic, (record) => translationsInbox.importFromInbox(record))
+  }, [])
+  // Auto-import files that tc-note publishes on the shared bus after a file
+  // drop in its editor (reuses fileActions.uploadFiles, same as above).
+  const driveInbox = useMemo(() => createDriveInboxActions({ snapshotRef, setSnapshot, settingsRef, uploadFilesRef }), [])
+  useEffect(() => {
+    const existing = readShared(driveInboxTopic)
+    if (existing) driveInbox.importFromInbox(existing)
+    return subscribeShared(driveInboxTopic, (record) => driveInbox.importFromInbox(record))
+  }, [])
+  // Auto-import notes that tc-note publishes on its note-doc-index, one
+  // Markdown file per note (kept in sync in place as notes are edited).
+  const noteDocInbox = useMemo(() => createNoteDocInboxActions({ snapshotRef, setSnapshot, settingsRef, folderKeysRef, setFolderKeys, setFileContentCache }), [])
+  useEffect(() => {
+    const existing = readShared(noteDocIndexTopic)
+    if (existing) noteDocInbox.importFromIndex(existing)
+    return subscribeShared(noteDocIndexTopic, (record) => noteDocInbox.importFromIndex(record))
+  }, [])
+  // Auto-import tc-town's full data bundle backup, kept as a single
+  // auto-updating file in a dedicated "TC Town" folder.
+  const townBackupInbox = useMemo(() => createTownBackupInboxActions({ snapshotRef, setSnapshot, settingsRef, folderKeysRef, setFolderKeys, setFileContentCache }), [])
+  useEffect(() => {
+    const existing = readShared(townBackupTopic)
+    if (existing) townBackupInbox.importFromBackup(existing)
+    return subscribeShared(townBackupTopic, (record) => townBackupInbox.importFromBackup(record))
+  }, [])
+  useEffect(() => subscribeOnboardingRequests(() => setOnboardingOpen(true)), [])
+  const selection = createSelectionActions({ fileRows, files, folderRows, folders, moveActions, selectedItems, setDeleteRequest, setNotice, setSelectedItems })
+  const dragDrop = createDragDropActions({ announceFolderChange: folderSync.announceFolderChange, browserViewMode, currentFolderId, dragItemRef, dragItemsRef, moveActions, scheduleFolderSync: folderSync.scheduleFolderSync, selectedItems, setDragActive, setDragItem, setDropTargetFolderId, setNotice, setReorderTarget, setSelectedItems, setSnapshot, settings, snapshotRef, uploadFiles: fileActions.uploadFiles })
+  const avatarPicker = useProfileAvatarPicker({ canResolveFileContent: fileContent.canResolveFileContent, ensureFileContent: fileContent.ensureFileContent, fileContentCacheRef, fileDataUrls, preloadFileContent: fileContent.preloadFileContent, profileImageFiles, selectedAvatarFileId: settingsDraft.avatarFileId, setNotice, setSettingsDraft })
+
+  useAppEffects({
+    acceptLinkedShare: panel.acceptLinkedShare,
+    announceSharedFolders: folderSync.announceSharedFolders,
+    autoImportCidsRef,
+    autoImportFolderShare: shareImport.autoImportFolderShare,
+    autoImportInFlightRef,
+    autoImportLinkedShare: shareImport.autoImportLinkedShare,
+    browserViewMode,
+    browserViewModeKey,
+    browserSortMode,
+    browserSortModeKey,
+    canResolveFileContent: fileContent.canResolveFileContent,
+    clearFolderSyncTimer: folderSync.clearFolderSyncTimer,
+    currentFolder,
+    currentFolderId,
+    detailFileId,
+    ensureFileContent: fileContent.ensureFileContent,
+    expandedPreviewOpen,
+    fileContentCache,
+    fileContentCacheRef,
+    fileContentFailuresRef,
+    fileDataUrls,
+    fileShareKeys,
+    fileShareKeysRef,
+    files,
+    folderAccessModes,
+    folderAccessModesRef,
+    folderKeys,
+    folderKeysRef,
+    folderPeers,
+    folders,
+    handlePreviewKey: panel.handlePreviewKey,
+    importKeys,
+    importKeysRef,
+    isPendingShareAlreadyImported: shareImport.isPendingShareAlreadyImported,
+    joinedRooms,
+    markPendingShareImported: shareImport.markPendingShareImported,
+    network,
+    networkMode: network.state.mode,
+    networkRef,
+    stablePeerCount: network.state.stablePeers.length,
+    stablePeerKey: network.state.stablePeers.toSorted().join(','),
+    pendingShares,
+    pendingSharesRef,
+    preloadFileContent: fileContent.preloadFileContent,
+    previewFiles,
+    profileOpen,
+    scheduleFolderSync: folderSync.scheduleFolderSync,
+    requestFolderAccess: access.requestFolderAccess,
+    selectedFile,
+    selectedFileId,
+    selectedPreviewFile,
+    selectFolder: panel.selectFolder,
+    setCurrentFolderId,
+    setDetailFileId,
+    setExpandedPreviewOpen,
+    setFolderKeys,
+    setFolderNameDraft,
+    setNotice,
+    setSelectedFileId,
+    setSettings,
+    setSettingsDraft,
+    setSnapshot,
+    settings,
+    settingsOpen,
+    settingsRef,
+    snapshot,
+    snapshotRef,
+    syncSignaturesRef,
+    syncTimersRef,
+  })
+
+  useEffect(() => setSelectedItems([]), [currentFolderId])
+
+  function requestDownloadFile(file: typeof files[number]): void {
+    if (requiresLargeDownloadConfirmation(file.size)) {
+      setDownloadConfirmRequest({ type: 'file', file, size: file.size })
+      return
+    }
+    void fileContent.downloadStoredFile(file)
+  }
+
+  function requestDownloadFolder(folder: typeof folders[number]): void {
+    const folderSize = folderDownloadSize(snapshot, folder.id)
+    if (requiresLargeDownloadConfirmation(folderSize)) {
+      setDownloadConfirmRequest({ type: 'folder', folder, size: folderSize })
+      return
+    }
+    void fileContent.downloadFolderAsZip(folder)
+  }
+
+  function confirmDownload(): void {
+    const request = downloadConfirmRequest
+    if (!request) return
+    setDownloadConfirmRequest(null)
+    if (request.type === 'file') void fileContent.downloadStoredFile(request.file)
+    else void fileContent.downloadFolderAsZip(request.folder)
+  }
+
+  function closeOnboarding(): void {
+    markOnboardingDone()
+    setOnboardingOpen(false)
+  }
+
+  function saveOnboardingProfileName(name: string): void {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setSettings((current) => ({ ...current, profileName: trimmed }))
+    setSettingsDraft((current) => ({ ...current, profileName: trimmed }))
+  }
+
+  function toggleTheme(): void {
+    const next = themePreference === 'dark' ? 'light' : 'dark'
+    saveThemePreference(next)
+    applyThemePreference(next)
+    setThemePreference(next)
+  }
+
+  return {
+    avatarUrl,
+    beginCreateFolder: folderActions.beginCreateFolder,
+    beginItemDrag: dragDrop.beginItemDrag,
+    browserSortMode,
+    browserViewMode,
+    busy,
+    cancelCreateFolder: folderActions.cancelCreateFolder,
+    cancelPendingShare: shareImport.cancelPendingShare,
+    closeOnboarding,
+    confirmCreateFolder: () => folderActions.confirmCreateFolder(folderNameDraft),
+    confirmDelete: fileActions.confirmDelete,
+    copyText: panel.copyText,
+    currentFolder,
+    currentFolderId,
+    currentFolderStorageUsed,
+    deleteCurrentFolder: folderActions.deleteCurrentFolder,
+    deleteRequest,
+    detailFileWithContent,
+    detailFolderPeers,
+    downloadConfirmRequest,
+    downloadProgress: transfer.downloadProgress,
+    confirmDownload,
+    requestDownloadFile,
+    requestDownloadFolder,
+    draftAvatarUrl,
+    dragActive,
+    dragItem,
+    dropTargetFolderId,
+    endItemDrag: dragDrop.endItemDrag,
+    expandedPreviewOpen,
+    fileLoadProgress: transfer.fileLoadProgress,
+    fileDataUrls,
+    fileRows,
+    fileShareKeys,
+    fileShareUrl,
+    files,
+    folderNameDraft,
+    folderPanelFolder,
+    folderPanelMode,
+    folderPanelOpen,
+    folderPanelAccessMode,
+    folderPanelAccessRequests,
+    folderPanelPeers,
+    folderRows,
+    folderShareUrl,
+    handleBrowserItemDragLeave: dragDrop.handleBrowserItemDragLeave,
+    handleBrowserItemDragOver: dragDrop.handleBrowserItemDragOver,
+    handleBrowserItemDrop: dragDrop.handleBrowserItemDrop,
+    handleDrag: dragDrop.handleDrag,
+    handleDrop: dragDrop.handleDrop,
+    handleMoveTargetDragLeave: dragDrop.handleMoveTargetDragLeave,
+    handleMoveTargetDragOver: dragDrop.handleMoveTargetDragOver,
+    handleMoveTargetDrop: dragDrop.handleMoveTargetDrop,
+    importKeys,
+    importShare: shareImport.importShare,
+    joinedRooms,
+    leaveJoinedRoom: panel.leaveJoinedRoom,
+    movePopover: panel.movePopover,
+    movePreview: panel.movePreview,
+    networkState: network.state,
+    notice,
+    onboardingOpen,
+    openFile: panel.openFile,
+    openFolderPanel: panel.openFolderPanel,
+    openFolderSharePanel: panel.openFolderSharePanel,
+    openProfile: panel.openProfile,
+    openProfileAvatarImages: avatarPicker.openProfileAvatarImages,
+    openSettings: panel.openSettings,
+    patchCurrentFolder: folderActions.patchCurrentFolder,
+    pendingFolderShares,
+    pendingShares,
+    popoverPositions,
+    preloadFileContent: fileContent.preloadFileContent,
+    previewFiles,
+    previewFilesWithContent,
+    profileAvatarImages: avatarPicker.profileAvatarImages,
+    profileOpen,
+    query,
+    renameFile: fileActions.renameFile,
+    reorderTarget,
+    requestDeleteFile: fileActions.requestDeleteFile,
+    requestDeleteFolder: folderActions.requestDeleteFolder,
+    saveFolderToMist: folderActions.saveFolderToMist,
+    saveOnboardingProfileName,
+    saveProfileDraft: panel.saveProfileDraft,
+    saveTextFileContent: fileEditActions.saveTextFileContent,
+    sendFileToApp: fileHandoffActions.sendFileToApp,
+    saveSettingsDraft: panel.saveSettingsDraft,
+    selectFolder: panel.selectFolder,
+    selectProfileAvatarImage: avatarPicker.selectProfileAvatarImage,
+    selectedFileIndex,
+    selectedPreviewFile,
+    selectedPreviewProgress,
+    selection,
+    setBrowserSortMode, setBrowserViewMode, setDeleteRequest, setDetailFileId, setDownloadConfirmRequest, setExpandedPreviewOpen, setFolderNameDraft,
+    setFolderAccessModes, setFolderPanelOpen, setImportKeys, setProfileOpen, setQuery, setSettingsDraft, setSettingsOpen,
+    settingsDraft,
+    settingsOpen,
+    shareFile: fileActions.shareFile,
+    shareFolder: folderActions.shareFolder,
+    approveFolderAccess: access.approveFolderAccess,
+    rejectFolderAccess: access.rejectFolderAccess,
+    showFileDetails: panel.showFileDetails,
+    showFolderDetails: panel.showFolderDetails,
+    showFolderShare: panel.showFolderShare,
+    snapshot,
+    storageUsed,
+    themePreference,
+    toggleTheme,
+    uploadFiles: fileActions.uploadFiles,
+  }
+}
+
+export type AppController = ReturnType<typeof useAppController>
+
+function folderDownloadSize(snapshot: import('../storage/domain.js').StorageSnapshot, folderId: string): number {
+  const folderIds = descendantFolderIds(activeFolders(snapshot), folderId)
+  return activeFiles(snapshot).filter((file) => folderIds.has(file.folderId)).reduce((total, file) => total + file.size, 0)
+}
