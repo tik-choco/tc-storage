@@ -1,0 +1,33 @@
+@media (max-width: 420px) {
+  .tile-card {
+    gap: 6px;
+    padding: 10px;
+  }
+
+  .tile-open {
+    gap: 8px;
+  }
+
+  .folder-tile .tile-date,
+  .folder-tile .tile-meta-row > span:last-child,
+  .pending-folder-tile .tile-date,
+  .pending-folder-tile .tile-meta-row > span:last-child {
+    display: none;
+  }
+
+  .tile-actions {
+    gap: 3px;
+  }
+
+  .tile-actions button,
+  .media-only-actions button {
+    width: 28px;
+    height: 28px;
+    min-height: 28px;
+  }
+
+  .media-only-overlay {
+    gap: 6px;
+    padding: 28px 8px 8px;
+  }
+}

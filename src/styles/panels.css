@@ -1,0 +1,220 @@
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.panel-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.panel-title span,
+.section-label {
+  color: var(--text-subtle);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.panel-title strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-h);
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-panel,
+.folder-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-panel label,
+.folder-settings label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.check-line {
+  display: flex !important;
+  grid-template-columns: none !important;
+  flex-direction: row;
+  align-items: center;
+}
+
+.check-line input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.wide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  border-radius: var(--radius-sm);
+}
+
+.danger {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.folder-settings {
+  display: grid;
+  gap: 12px;
+}
+
+.key-display {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 36px);
+  gap: 6px;
+}
+
+.key-display.two-actions {
+  grid-template-columns: minmax(0, 1fr) repeat(2, 36px);
+}
+
+.key-display.one-action {
+  grid-template-columns: minmax(0, 1fr) 36px;
+}
+
+.key-display button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.key-display button:hover {
+  background: var(--border-soft);
+}
+
+.key-display button.copied {
+  border-color: var(--accent-border);
+  background: var(--accent-bg-strong);
+  color: var(--accent);
+}
+
+.key-display button.copied:hover {
+  background: var(--accent-border);
+}
+
+.security-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius-sm);
+  background: var(--info-bg);
+  color: var(--info-strong);
+}
+
+.security-box div {
+  min-width: 0;
+}
+
+.security-box strong,
+.security-box span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-box span {
+  color: var(--info-strong);
+  font-size: 12px;
+}
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-detail {
+  padding: 18px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-subtle);
+  text-align: center;
+}
+
+.empty-detail.compact {
+  padding: 12px;
+}
+
+.joined-rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.joined-rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.joined-room-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.joined-room-item div {
+  min-width: 0;
+}
+
+.joined-room-item strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-h);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.joined-room-item button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.joined-room-item button:hover {
+  background: var(--border-soft);
+}

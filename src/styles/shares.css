@@ -1,0 +1,289 @@
+.shares-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.share-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 0.8fr) 38px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.share-item.auto-import {
+  grid-template-columns: minmax(0, 1fr) minmax(118px, 0.55fr) auto;
+}
+
+.share-waiting-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--info-border);
+  border-radius: var(--radius-sm);
+  background: var(--info-bg);
+  color: var(--info-strong);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.share-item strong,
+.share-item span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-item span {
+  color: var(--text-subtle);
+  font-size: 12px;
+}
+
+.share-sender {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 7px;
+}
+
+.share-sender span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-item button {
+  border-color: var(--info);
+  background: var(--info-bg);
+  color: var(--info-strong);
+}
+
+.share-item button[type="button"] {
+  padding: 0;
+  border-color: var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.share-link-block {
+  display: grid;
+  gap: 10px;
+}
+
+.share-qr-toggle,
+.share-qr-hide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.share-qr-toggle {
+  width: 100%;
+}
+
+.share-qr-toggle:hover,
+.share-qr-hide:hover {
+  background: var(--border-soft);
+}
+
+.share-qr-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.share-qr-card svg {
+  display: block;
+  width: min(100%, 210px);
+  aspect-ratio: 1;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.share-qr-card.unavailable {
+  color: var(--warn-text);
+  background: var(--warn-bg);
+}
+
+.share-qr-card strong {
+  color: inherit;
+  font-size: 13px;
+}
+
+.share-qr-hide {
+  min-width: 118px;
+}
+
+.sync-peer {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.access-request {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.access-request > div:nth-child(2),
+.sync-peer div:last-child {
+  min-width: 0;
+}
+
+.sync-peer strong,
+.sync-peer span,
+.access-request strong,
+.access-request span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-peer strong,
+.access-request strong {
+  color: var(--text-h);
+  font-size: 13px;
+}
+
+.sync-peer span,
+.access-request span {
+  margin-top: 2px;
+  color: var(--text-subtle);
+  font-size: 12px;
+}
+
+.access-request-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.access-request-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.access-request-actions .approve {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.access-request-actions .reject {
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.folder-stroke.teal {
+  color: var(--accent);
+}
+
+.folder-stroke.blue {
+  color: var(--info);
+}
+
+.folder-stroke.shared {
+  color: var(--info-strong);
+}
+
+.folder-stroke.amber {
+  color: var(--warn-text);
+}
+
+.folder-stroke.rose {
+  color: var(--danger);
+}
+
+.folder-stroke.slate {
+  color: var(--text);
+}
+
+.tile-card.shared-folder:not(.selected-item) {
+  border-color: var(--info-border);
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.tile-card.shared-folder:not(.selected-item):hover {
+  border-color: var(--info-border);
+  background: var(--surface-2);
+}
+
+.shared-folder .tile-icon {
+  background: var(--info-bg);
+}
+
+.folder-status {
+  width: max-content;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.folder-status svg {
+  color: var(--text-subtle);
+}
+
+.folder-status.shared-status {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info-strong);
+}
+
+.folder-status.shared-status svg {
+  color: var(--info);
+}

@@ -1,0 +1,59 @@
+set shell := ["bash", "-uc"]
+
+bin := "tc-storage"
+lib_dir := "internal/mist/lib"
+# Path to your mistlib-dev checkout (enhance/peer-connection). Used by vendor-lib.
+# Override per-invocation: just MISTLIB_DIR=/path/to/mistlib-dev vendor-lib
+mistlib_dir := env_var_or_default("MISTLIB_DIR", "")
+
+default:
+    @just --list
+
+# Default (local store) build — no native mistlib, builds & runs anywhere.
+build:
+    go build -o {{bin}} ./cmd/tc-storage
+
+# Native build — links libmistlib for real P2P. Requires the vendored archive.
+build-native:
+    test -f {{lib_dir}}/libmistlib.a || { echo "missing {{lib_dir}}/libmistlib.a — run: just vendor-lib (with MISTLIB_DIR set)"; exit 1; }
+    go build -tags mistlib_native -o {{bin}} ./cmd/tc-storage
+
+# Build libmistlib from a mistlib-dev checkout and vendor it into internal/mist/lib.
+vendor-lib:
+    test -n "{{mistlib_dir}}" || { echo "set MISTLIB_DIR to your mistlib-dev checkout, e.g. just MISTLIB_DIR=~/src/mistlib-dev vendor-lib"; exit 1; }
+    ( cd "{{mistlib_dir}}" && cargo build --release -p mistlib-native )
+    cp "{{mistlib_dir}}/target/release/libmistlib.a" {{lib_dir}}/
+    @echo "vendored {{lib_dir}}/libmistlib.a"
+
+test:
+    go test ./...
+
+# Native unit + integration build check (links libmistlib).
+test-native:
+    test -f {{lib_dir}}/libmistlib.a || { echo "missing {{lib_dir}}/libmistlib.a — run: just vendor-lib"; exit 1; }
+    go test -tags mistlib_native ./...
+
+vet:
+    go vet ./...
+    test -f {{lib_dir}}/libmistlib.a && go vet -tags mistlib_native ./... || true
+
+# Launch the native TUI in a room. Example: just run tc-storage-...
+run room: build-native
+    ./{{bin}} --room {{room}}
+
+# Connectivity check (init + join + position + peer wait) with verbose logs.
+# Example: just connect tc-storage-...
+connect room: build-native
+    ./{{bin}} --room {{room}} -v connect
+
+# Download a shared folder. Args are positional (quote the URL because of '#'):
+#   just folder-get tc-storage-... 'https://...#tc-share=...'
+folder-get room url: build-native
+    ./{{bin}} --room {{room}} -v folder-get '{{url}}'
+
+# Live CLI<->CLI connectivity E2E (real signaling relay).
+e2e: build-native
+    TC_STORAGE_E2E=1 TC_STORAGE_BIN="$PWD/{{bin}}" go test -count=1 -tags mistlib_native -run TestCLIToCLIConnects ./cmd/tc-storage
+
+clean:
+    rm -f {{bin}}

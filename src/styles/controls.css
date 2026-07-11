@@ -1,0 +1,90 @@
+.side-nav button,
+.browser-actions button,
+.row-actions button,
+.panel-title button,
+.share-item button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.side-nav button:hover,
+.browser-actions button:hover,
+.row-actions button:hover,
+.panel-title button:hover {
+  background: var(--border-soft);
+}
+
+.brand span,
+.side-nav span,
+.share-button span,
+.share-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 160px;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-subtle);
+}
+
+.search-box input,
+.settings-panel input,
+.folder-settings input,
+.folder-settings select,
+.file-detail-panel input,
+.share-item input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-h);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+
+.search-box input {
+  border: 0;
+}
+
+.search-box input:focus,
+.settings-panel input:focus,
+.folder-settings input:focus,
+.folder-settings select:focus,
+.file-detail-panel input:focus,
+.share-item input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.browser-actions button,
+.share-item button,
+.wide {
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+}
+
+.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
