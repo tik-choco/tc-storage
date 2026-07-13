@@ -1,7 +1,20 @@
-import { ChevronDown, ChevronRight, Folder, Home, Moon, Settings, Sun, UserRound } from 'lucide-preact'
+import { ChevronDown, ChevronRight, Folder, Home, Monitor, Moon, Settings, Sun, UserRound } from 'lucide-preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import type { BrowserDragItem } from '../app/appTypes.js'
 import { childFolders, type FolderRecord, type StorageSnapshot } from '../storage/domain.js'
+import type { ThemePreference } from '../storage/theme.js'
+
+const themeToggleIcon: Record<ThemePreference, typeof Sun> = {
+  light: Moon,
+  dark: Monitor,
+  auto: Sun,
+}
+
+const themeToggleLabel: Record<ThemePreference, string> = {
+  light: 'Switch to dark mode',
+  dark: 'Switch to auto (OS) mode',
+  auto: 'Switch to light mode',
+}
 
 export function Sidebar(props: {
   avatarUrl: string
@@ -9,7 +22,7 @@ export function Sidebar(props: {
   dragItem: BrowserDragItem | null
   dropTargetFolderId: string | null | undefined
   snapshot: StorageSnapshot
-  themePreference: 'light' | 'dark'
+  themePreference: ThemePreference
   onItemDragEnd: () => void
   onItemDragStart: (item: BrowserDragItem, event: DragEvent) => void
   onMoveTargetDragLeave: (folderId: string | null, event: DragEvent) => void
@@ -58,8 +71,11 @@ export function Sidebar(props: {
         <button class="side-icon-button" onClick={(event) => props.onOpenSettings(event.currentTarget)} title="Settings">
           <Settings size={17} />
         </button>
-        <button class="side-icon-button" onClick={props.onToggleTheme} title={props.themePreference === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-          {props.themePreference === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+        <button class="side-icon-button" onClick={props.onToggleTheme} title={themeToggleLabel[props.themePreference]}>
+          {(() => {
+            const ThemeIcon = themeToggleIcon[props.themePreference]
+            return <ThemeIcon size={17} />
+          })()}
         </button>
         <button class="side-profile-button" onClick={(event) => props.onOpenProfile(event.currentTarget)} title="Edit profile">
           <span class="avatar-frame small">
