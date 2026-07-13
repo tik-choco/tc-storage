@@ -8,6 +8,7 @@ import { reconcileSharedDidIdentity } from '../crypto/sharedDidIdentity.js'
 import { createMistDidIdentityBackend } from '../storage/mistStorage.js'
 import type { FileRecord, FolderRecord, StorageSnapshot } from '../storage/domain.js'
 import { describeError } from '../util/errors.js'
+import { debugWarn } from '../util/logging.js'
 import { saveFolderSyncPeers, type FolderSyncPeers } from '../folder/folderPeers.js'
 import { saveJoinedRooms, type JoinedRoom } from '../storage/joinedRooms.js'
 import { readFolderRoute, replaceFolderRoute } from '../folder/folderRoute.js'
@@ -113,6 +114,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
   } = options
   const lastFailedThumbnailRetryPeerKeyRef = useRef('')
   const persistFailureNoticeShownRef = useRef(false)
+  const settingsPersistFailureNoticeShownRef = useRef(false)
 
   useEffect(() => { snapshotRef.current = snapshot }, [snapshot])
   useEffect(() => { folderAccessModesRef.current = folderAccessModes }, [folderAccessModes])
@@ -156,8 +158,31 @@ export function useAppEffects(options: AppEffectsOptions): void {
     persistFailureNoticeShownRef.current = true
     setNotice({ tone: 'error', text: 'ローカル保存に失敗しました(ブラウザの保存容量が上限に達しています)。古いサイトデータの削除やファイルのバックアップを検討してください。' })
   }, [snapshot])
-  useDriveIndexPublishEffect({ folderKeys, snapshot })
-  useEffect(() => { saveSettings(settings); saveFolderAccessModes(folderAccessModes); saveFolderKeys(folderKeys); saveFileShareKeys(fileShareKeys); saveFolderSyncPeers(folderPeers); saveJoinedRooms(joinedRooms) }, [settings, folderAccessModes, folderKeys, fileShareKeys, folderPeers, joinedRooms])
+  useDriveIndexPublishEffect({ folderKeys, settingsRef, snapshot })
+  useEffect(() => {
+    // Each save is independent: one throwing (e.g. QuotaExceededError) must not
+    // prevent the rest from persisting. folderKeys/fileShareKeys additionally
+    // report success/failure themselves (they never throw).
+    let anyFailed = false
+    const persist = (label: string, save: () => void) => {
+      try {
+        save()
+      } catch (error) {
+        anyFailed = true
+        debugWarn('app-effects', `failed to persist ${label}`, { error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    persist('settings', () => saveSettings(settings))
+    persist('folder access modes', () => saveFolderAccessModes(folderAccessModes))
+    if (!saveFolderKeys(folderKeys, snapshotRef.current.folders.map((folder) => folder.id))) anyFailed = true
+    if (!saveFileShareKeys(fileShareKeys, snapshotRef.current.files.map((file) => file.id))) anyFailed = true
+    persist('folder sync peers', () => saveFolderSyncPeers(folderPeers))
+    persist('joined rooms', () => saveJoinedRooms(joinedRooms))
+    if (anyFailed && !settingsPersistFailureNoticeShownRef.current) {
+      settingsPersistFailureNoticeShownRef.current = true
+      setNotice({ tone: 'error', text: 'ローカル保存に失敗しました(ブラウザの保存容量が上限に達しています)。古いサイトデータの削除やファイルのバックアップを検討してください。' })
+    }
+  }, [settings, folderAccessModes, folderKeys, fileShareKeys, folderPeers, joinedRooms])
   useEffect(() => { savePendingShares(pendingShares); saveImportKeys(importKeys) }, [importKeys, pendingShares])
   useEffect(() => localStorage.setItem(browserSortModeKey, browserSortMode), [browserSortMode, browserSortModeKey])
   useEffect(() => localStorage.setItem(browserViewModeKey, browserViewMode), [browserViewMode, browserViewModeKey])

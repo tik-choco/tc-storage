@@ -87,6 +87,22 @@ test('stored key records ignore malformed non-string values', () => {
   assert.equal(localStorage.getItem('tc-storage-file-share-keys-v1'), JSON.stringify({ 'file-a': 'secret-file' }))
 })
 
+test('saving folder/file keys without existing ids keeps every entry (no pruning)', () => {
+  saveFolderKeys({ 'folder-a': 'secret-a', 'folder-b': 'secret-b' })
+  saveFileShareKeys({ 'file-a': 'secret-a', 'file-b': 'secret-b' })
+
+  assert.deepEqual(loadFolderKeys(), { 'folder-a': 'secret-a', 'folder-b': 'secret-b' })
+  assert.deepEqual(loadFileShareKeys(), { 'file-a': 'secret-a', 'file-b': 'secret-b' })
+})
+
+test('saving folder/file keys with existing ids drops entries no longer in the snapshot', () => {
+  saveFolderKeys({ 'folder-a': 'secret-a', 'folder-b': 'secret-b', 'folder-gone': 'secret-gone' }, ['folder-a', 'folder-b'])
+  saveFileShareKeys({ 'file-a': 'secret-a', 'file-gone': 'secret-gone' }, ['file-a'])
+
+  assert.deepEqual(loadFolderKeys(), { 'folder-a': 'secret-a', 'folder-b': 'secret-b' })
+  assert.deepEqual(loadFileShareKeys(), { 'file-a': 'secret-a' })
+})
+
 test('fixed folder invite pending shares survive without a cid', () => {
   const share: PendingShare = {
     type: 'folder-share',
