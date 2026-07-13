@@ -14,6 +14,7 @@ import type { MutableRef, SetState } from './appControllerTypes.js'
 import { addActivity, makeFolder, touchSnapshot, type StorageSnapshot } from '../storage/domain.js'
 import type { AppSettings } from '../storage/localSettings.js'
 import type { SharedRecord } from '../storage/sharedBus.js'
+import { ensureMistRuntimeInitialized, loadMistModule } from '../storage/mistStorage.js'
 import { describeError } from '../util/errors.js'
 import { debugInfo, debugWarn } from '../util/logging.js'
 
@@ -21,13 +22,18 @@ const translationsInboxTopic = 'translations-inbox'
 const inboxFolderName = 'TC Translate'
 const importedIdsKey = 'tc-storage-translate-imported-v1'
 const maxImportedIds = 1000
+const textDecoder = new TextDecoder()
 
-/** One translation to materialize as a file. Mirrors tc-translate. */
+/** One translation to materialize as a file. Mirrors tc-translate.
+ * `text` is the legacy inline body; new publishes carry `cid` (a plain,
+ * unencrypted `storage_add` pointer to the Markdown body) instead. Dual-read:
+ * prefer inline `text`, else fetch `cid`. */
 interface TranslationInboxItem {
   id: string
   fileName: string
   mimeType: string
-  text: string
+  text?: string
+  cid?: string
 }
 
 interface TranslationsInboxOptions {
@@ -45,12 +51,31 @@ function parseInboxItems(meta: Record<string, unknown>): TranslationInboxItem[] 
     if (raw === null || typeof raw !== 'object') continue
     const item = raw as Record<string, unknown>
     if (typeof item.id !== 'string' || !item.id) continue
-    if (typeof item.text !== 'string') continue
+    const text = typeof item.text === 'string' ? item.text : undefined
+    const cid = typeof item.cid === 'string' && item.cid ? item.cid : undefined
+    if (text === undefined && !cid) continue
     const fileName = typeof item.fileName === 'string' && item.fileName ? item.fileName : `${item.id}.md`
     const mimeType = typeof item.mimeType === 'string' && item.mimeType ? item.mimeType : 'text/markdown'
-    items.push({ id: item.id, fileName, mimeType, text: item.text })
+    items.push({ id: item.id, fileName, mimeType, text, cid })
   }
   return items
+}
+
+/** Resolves an inbox item's body: inline `text` if present (legacy publishes),
+ * else `storage_get(cid)` (new publishes; the body is stored unencrypted, as
+ * plain Markdown bytes). Returns undefined if neither is available. */
+async function resolveItemText(item: TranslationInboxItem, nodeId: string): Promise<string | undefined> {
+  if (item.text !== undefined) return item.text
+  if (!item.cid) return undefined
+  try {
+    const mist = await loadMistModule()
+    ensureMistRuntimeInitialized(mist, { nodeId })
+    const bytes = await mist.storage_get(item.cid)
+    return textDecoder.decode(bytes)
+  } catch (error) {
+    debugWarn('translations-inbox', 'storage_get failed for inbox item', { id: item.id, cid: item.cid, error: describeError(error, 'unknown error') })
+    return undefined
+  }
 }
 
 function loadImportedIds(): Set<string> {
@@ -118,13 +143,22 @@ export function createTranslationsInboxActions(options: TranslationsInboxOptions
     const imported = loadImportedIds()
     const fresh = items.filter((item) => !imported.has(item.id))
     if (!fresh.length) return
+    const nodeId = settingsRef.current.nodeId
+    const resolved: { item: TranslationInboxItem; text: string }[] = []
+    for (const item of fresh) {
+      const text = await resolveItemText(item, nodeId)
+      // Leave unresolved items out of `imported` so a later republish (or a
+      // retry once mistlib/OPFS is available) can still pick them up.
+      if (text !== undefined) resolved.push({ item, text })
+    }
+    if (!resolved.length) return
     const folderId = ensureFolderId()
-    const files = fresh.map((item) => new File([item.text], item.fileName, { type: item.mimeType }))
+    const files = resolved.map(({ item, text }) => new File([text], item.fileName, { type: item.mimeType }))
     try {
       await uploadFilesRef.current(toFileList(files), folderId)
-      for (const item of fresh) imported.add(item.id)
+      for (const { item } of resolved) imported.add(item.id)
       saveImportedIds(imported)
-      debugInfo('translations-inbox', 'imported translations', { count: fresh.length, folderId })
+      debugInfo('translations-inbox', 'imported translations', { count: resolved.length, folderId })
     } catch (error) {
       debugWarn('translations-inbox', 'import failed', { error: describeError(error, 'unknown error') })
     }

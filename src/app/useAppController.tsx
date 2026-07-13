@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'preact/hooks'
 import { descendantFolderIds, filterByName, sortBrowserFiles, sortBrowserFolders } from './appHelpers.js'
 import { createAccessActions } from './appAccessActions.js'
+import { createBooksBackupInboxActions, booksBackupTopic } from './appBooksBackupInbox.js'
 import { createDragDropActions } from './appDragDropActions.js'
 import { createDriveInboxActions, driveInboxTopic } from './appDriveInbox.js'
 import { createEnvelopeActions } from './appEnvelopeActions.js'
@@ -166,6 +167,14 @@ export function useAppController() {
     const existing = readShared(townBackupTopic)
     if (existing) townBackupInbox.importFromBackup(existing)
     return subscribeShared(townBackupTopic, (record) => townBackupInbox.importFromBackup(record))
+  }, [])
+  // Auto-import tc-books's full data bundle backup, kept as a single
+  // auto-updating file in a dedicated "TC Books" folder.
+  const booksBackupInbox = useMemo(() => createBooksBackupInboxActions({ snapshotRef, setSnapshot, settingsRef, folderKeysRef, setFolderKeys, setFileContentCache }), [])
+  useEffect(() => {
+    const existing = readShared(booksBackupTopic)
+    if (existing) booksBackupInbox.importFromBackup(existing)
+    return subscribeShared(booksBackupTopic, (record) => booksBackupInbox.importFromBackup(record))
   }, [])
   useEffect(() => subscribeOnboardingRequests(() => setOnboardingOpen(true)), [])
   const selection = createSelectionActions({ fileRows, files, folderRows, folders, moveActions, selectedItems, setDeleteRequest, setNotice, setSelectedItems })
