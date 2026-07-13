@@ -2,8 +2,10 @@
   /* ---------------------------------------------------------------
      Design tokens — tik-choco app family (teal accent, cool neutral
      surfaces, layered elevation). Light is the default theme; the
-     dark block below mirrors every themed value. Toggled by setting
-     data-theme="dark" on <html> (see src/storage/theme.ts).
+     dark block below mirrors every themed value. Toggled explicitly via
+     data-theme="light"/"dark" on <html>, or left unset for "auto" so the
+     prefers-color-scheme block at the end of this file follows the OS
+     (see src/storage/theme.ts).
   --------------------------------------------------------------- */
   color-scheme: light;
 
@@ -66,10 +68,15 @@
   --dur-fast: 140ms;
   --dur-med: 240ms;
   --dur-slow: 360ms;
+
+  /* Typography — CJK fallbacks included since the UI ships Japanese copy. */
+  --sans: 'Inter', system-ui, 'Segoe UI', Roboto, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic UI', Meiryo, sans-serif;
 }
 
-/* Explicit dark theme — applied only when the user toggles it
-   (data-theme="dark"); the app deliberately defaults to light. */
+/* Explicit dark theme — applied when the user explicitly toggles to dark
+   (data-theme="dark"). Light is still the unconditional default; "auto"
+   preference (see src/storage/theme.ts) clears data-theme entirely so the
+   prefers-color-scheme block below governs instead. */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
@@ -114,4 +121,57 @@
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px 1px rgba(0, 0, 0, 0.25);
   --shadow-2: 0 1px 2px rgba(0, 0, 0, 0.35), 0 3px 10px 2px rgba(0, 0, 0, 0.35);
   --shadow-3: 0 2px 3px rgba(0, 0, 0, 0.4), 0 8px 20px 5px rgba(0, 0, 0, 0.45);
+}
+
+/* OS-following "auto" mode: applies the same dark values as
+   [data-theme="dark"] above, but only when no explicit data-theme is set
+   (preference "auto" — see src/storage/theme.ts) and the OS reports a dark
+   color scheme. CSS has no mixins, so this block must be kept byte-for-byte
+   in sync with the :root[data-theme="dark"] block above (tc-travel model). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --text-h: #e8eaed;
+    --text: #a7adb8;
+    --text-subtle: #8a909c;
+    --text-faint: #646a75;
+
+    --bg: #0f1116;
+    --surface: #171a21;
+    --surface-2: #1d2129;
+    --surface-3: #262b34;
+    --surface-hover: #262b34;
+    --border-soft: #232830;
+    --border: #2a303a;
+    --border-strong: #3a414d;
+
+    --accent: #2dd4bf;
+    --accent-hover: #3fdccb;
+    --accent-active: #22b8a5;
+    --on-accent: #04201d;
+    --accent-bg: rgba(45, 212, 191, 0.10);
+    --accent-bg-strong: rgba(45, 212, 191, 0.16);
+    --accent-border: rgba(45, 212, 191, 0.38);
+    --accent-tint: rgba(45, 212, 191, 0.16);
+    --accent-tint-strong: rgba(45, 212, 191, 0.28);
+    --ring: rgba(45, 212, 191, 0.5);
+
+    --danger: #f87171;
+    --danger-bg: rgba(248, 113, 113, 0.10);
+    --danger-border: rgba(248, 113, 113, 0.35);
+    --success: #34d399;
+    --info: #60a5fa;
+    --info-strong: #93c5fd;
+    --info-bg: rgba(96, 165, 250, 0.12);
+    --info-border: rgba(96, 165, 250, 0.35);
+    --warn-text: #fbbf24;
+    --warn-bg: rgba(251, 191, 36, 0.10);
+    --warn-border: rgba(251, 191, 36, 0.4);
+
+    --overlay: rgba(0, 0, 0, 0.6);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px 1px rgba(0, 0, 0, 0.25);
+    --shadow-2: 0 1px 2px rgba(0, 0, 0, 0.35), 0 3px 10px 2px rgba(0, 0, 0, 0.35);
+    --shadow-3: 0 2px 3px rgba(0, 0, 0, 0.4), 0 8px 20px 5px rgba(0, 0, 0, 0.45);
+  }
 }

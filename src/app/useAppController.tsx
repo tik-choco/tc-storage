@@ -284,7 +284,7 @@ export function useAppController() {
   }
 
   function toggleTheme(): void {
-    const next = themePreference === 'dark' ? 'light' : 'dark'
+    const next = themePreference === 'light' ? 'dark' : themePreference === 'dark' ? 'auto' : 'light'
     saveThemePreference(next)
     applyThemePreference(next)
     setThemePreference(next)
