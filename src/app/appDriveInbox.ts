@@ -170,27 +170,33 @@ export function createDriveInboxActions(options: DriveInboxOptions) {
   let inFlight: Promise<void> = Promise.resolve()
 
   function ensureFolderId(): string {
-    const snapshot = snapshotRef.current
-    const existing = snapshot.folders.find(
-      (folder) => !folder.deletedAt && folder.parentId === null && folder.name === inboxFolderName,
-    )
-    if (existing) return existing.id
     const now = new Date().toISOString()
     const settings = settingsRef.current
-    const folder = makeFolder({ name: inboxFolderName, parentId: null, color: 'teal', roomId: settings.roomId, now, nodeId: settings.nodeId })
-    const next = touchSnapshot(
-      addActivity(
-        { ...snapshot, folders: [...snapshot.folders, folder] },
-        { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.create', detail: `${folder.name} を作成` },
-        now,
-      ),
-      settings.nodeId,
-    )
-    // Update the ref synchronously so the upcoming uploadFiles call finds the
-    // folder before React has committed the setSnapshot below.
-    snapshotRef.current = next
-    setSnapshot(next)
-    return folder.id
+    let folderId = ''
+    setSnapshot((current) => {
+      const existing = current.folders.find(
+        (folder) => !folder.deletedAt && folder.parentId === null && folder.name === inboxFolderName,
+      )
+      if (existing) {
+        folderId = existing.id
+        return current
+      }
+      const folder = makeFolder({ name: inboxFolderName, parentId: null, color: 'teal', roomId: settings.roomId, now, nodeId: settings.nodeId })
+      folderId = folder.id
+      const next = touchSnapshot(
+        addActivity(
+          { ...current, folders: [...current.folders, folder] },
+          { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.create', detail: `${folder.name} を作成` },
+          now,
+        ),
+        settings.nodeId,
+      )
+      // Update the ref synchronously so the upcoming uploadFiles call finds the
+      // folder before React has committed the setSnapshot below.
+      snapshotRef.current = next
+      return next
+    })
+    return folderId
   }
 
   async function runImport(record: SharedRecord): Promise<void> {

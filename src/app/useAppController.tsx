@@ -45,7 +45,7 @@ export function useAppController() {
     expandedPreviewOpen, setExpandedPreviewOpen, dragActive, setDragActive, dragItem, setDragItem, selectedItems, setSelectedItems,
     dropTargetFolderId, setDropTargetFolderId, reorderTarget, setReorderTarget, notice, setNotice, busy, setBusy, deleteRequest, setDeleteRequest,
     downloadConfirmRequest, setDownloadConfirmRequest,
-    popoverPositions, setPopoverPositions,
+    popoverPositions, setPopoverPositions, snapshotLoadedFromStorage,
   } = useAppControllerState()
   const transfer = useTransferProgress()
 
@@ -138,7 +138,7 @@ export function useAppController() {
   // materializing each as a Markdown file (reuses fileActions.uploadFiles).
   const uploadFilesRef = useRef(fileActions.uploadFiles)
   uploadFilesRef.current = fileActions.uploadFiles
-  const translationsInbox = useMemo(() => createTranslationsInboxActions({ snapshotRef, setSnapshot, settingsRef, uploadFilesRef }), [])
+  const translationsInbox = useMemo(() => createTranslationsInboxActions({ snapshotRef, setSnapshot, settingsRef, uploadFilesRef, setNotice }), [])
   useEffect(() => {
     const existing = readShared(translationsInboxTopic)
     if (existing) translationsInbox.importFromInbox(existing)
@@ -248,6 +248,7 @@ export function useAppController() {
     settingsOpen,
     settingsRef,
     snapshot,
+    snapshotLoadedFromStorage,
     snapshotRef,
     syncSignaturesRef,
     syncTimersRef,

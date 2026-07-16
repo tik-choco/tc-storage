@@ -11,6 +11,7 @@
 // protocol/docs/data-contracts/docs/SHARED_BUS.md.
 
 import type { MutableRef, SetState } from './appControllerTypes.js'
+import type { Notice } from './appTypes.js'
 import { addActivity, makeFolder, touchSnapshot, type StorageSnapshot } from '../storage/domain.js'
 import type { AppSettings } from '../storage/localSettings.js'
 import type { SharedRecord } from '../storage/sharedBus.js'
@@ -41,6 +42,9 @@ interface TranslationsInboxOptions {
   setSnapshot: SetState<StorageSnapshot>
   settingsRef: MutableRef<AppSettings>
   uploadFilesRef: MutableRef<(fileList: FileList | null, targetFolderId?: string | null) => Promise<void>>
+  setNotice: SetState<Notice>
+  /** Overridable for tests; defaults to the real mistlib-backed resolver. */
+  resolveText?: (item: TranslationInboxItem, nodeId: string) => Promise<string | undefined>
 }
 
 function parseInboxItems(meta: Record<string, unknown>): TranslationInboxItem[] {
@@ -108,33 +112,45 @@ function toFileList(files: File[]): FileList {
 }
 
 export function createTranslationsInboxActions(options: TranslationsInboxOptions) {
-  const { snapshotRef, setSnapshot, settingsRef, uploadFilesRef } = options
+  const { snapshotRef, setSnapshot, settingsRef, uploadFilesRef, setNotice, resolveText = resolveItemText } = options
   // Serialize imports: several bus channels can fire for one update, and
   // uploadFiles is async, so we must not process the same items concurrently.
   let inFlight: Promise<void> = Promise.resolve()
+  // Ids we've already surfaced a failure notice for, so a stable ongoing
+  // failure (e.g. a CID that stays evicted across several retries) doesn't
+  // re-notify on every mount/bus event. Cleared once an id resolves
+  // successfully, so a later failure (e.g. after another eviction) notifies
+  // again rather than going permanently silent.
+  const noticedFailureIds = new Set<string>()
 
   function ensureFolderId(): string {
-    const snapshot = snapshotRef.current
-    const existing = snapshot.folders.find(
-      (folder) => !folder.deletedAt && folder.parentId === null && folder.name === inboxFolderName,
-    )
-    if (existing) return existing.id
     const now = new Date().toISOString()
     const settings = settingsRef.current
-    const folder = makeFolder({ name: inboxFolderName, parentId: null, color: 'teal', roomId: settings.roomId, now, nodeId: settings.nodeId })
-    const next = touchSnapshot(
-      addActivity(
-        { ...snapshot, folders: [...snapshot.folders, folder] },
-        { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.create', detail: `${folder.name} を作成` },
-        now,
-      ),
-      settings.nodeId,
-    )
-    // Update the ref synchronously so the upcoming uploadFiles call finds the
-    // folder before React has committed the setSnapshot below.
-    snapshotRef.current = next
-    setSnapshot(next)
-    return folder.id
+    let folderId = ''
+    setSnapshot((current) => {
+      const existing = current.folders.find(
+        (folder) => !folder.deletedAt && folder.parentId === null && folder.name === inboxFolderName,
+      )
+      if (existing) {
+        folderId = existing.id
+        return current
+      }
+      const folder = makeFolder({ name: inboxFolderName, parentId: null, color: 'teal', roomId: settings.roomId, now, nodeId: settings.nodeId })
+      folderId = folder.id
+      const next = touchSnapshot(
+        addActivity(
+          { ...current, folders: [...current.folders, folder] },
+          { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.create', detail: `${folder.name} を作成` },
+          now,
+        ),
+        settings.nodeId,
+      )
+      // Update the ref synchronously so the upcoming uploadFiles call finds the
+      // folder before React has committed the setSnapshot below.
+      snapshotRef.current = next
+      return next
+    })
+    return folderId
   }
 
   async function runImport(record: SharedRecord): Promise<void> {
@@ -145,11 +161,24 @@ export function createTranslationsInboxActions(options: TranslationsInboxOptions
     if (!fresh.length) return
     const nodeId = settingsRef.current.nodeId
     const resolved: { item: TranslationInboxItem; text: string }[] = []
+    const failedIds: string[] = []
     for (const item of fresh) {
-      const text = await resolveItemText(item, nodeId)
+      const text = await resolveText(item, nodeId)
       // Leave unresolved items out of `imported` so a later republish (or a
       // retry once mistlib/OPFS is available) can still pick them up.
-      if (text !== undefined) resolved.push({ item, text })
+      if (text !== undefined) {
+        resolved.push({ item, text })
+        noticedFailureIds.delete(item.id)
+      } else {
+        failedIds.push(item.id)
+      }
+    }
+    // Surface a notice only when there's a failure we haven't already told
+    // the user about, so a stable ongoing failure doesn't re-notify on every
+    // retry (this function runs on every mount and shared-bus event).
+    if (failedIds.some((id) => !noticedFailureIds.has(id))) {
+      for (const id of failedIds) noticedFailureIds.add(id)
+      setNotice({ tone: 'error', text: `翻訳の取り込みに失敗しました（${failedIds.length}件）。ストレージ同期後に自動で再試行します` })
     }
     if (!resolved.length) return
     const folderId = ensureFolderId()

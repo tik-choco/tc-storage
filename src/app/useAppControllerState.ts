@@ -18,7 +18,8 @@ import { loadThemePreference, type ThemePreference } from '../storage/theme.js'
 export function useAppControllerState() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(settings)
-  const [snapshot, setSnapshot] = useState<StorageSnapshot>(() => loadStoredSnapshot(settings.nodeId))
+  const [initialSnapshotLoad] = useState(() => loadStoredSnapshot(settings.nodeId))
+  const [snapshot, setSnapshot] = useState<StorageSnapshot>(initialSnapshotLoad.snapshot)
   const [folderKeys, setFolderKeys] = useState<Record<string, string>>(() => loadFolderKeys())
   const [fileShareKeys, setFileShareKeys] = useState<Record<string, string>>(() => loadFileShareKeys())
   const [folderPeers, setFolderPeers] = useState<FolderSyncPeers>(() => loadFolderSyncPeers())
@@ -70,6 +71,7 @@ export function useAppControllerState() {
     setFolderAccessRequests, setFolderKeys, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelMode,
     setFolderPanelOpen, setFolderPeers, setImportKeys, setJoinedRooms, setNotice, setOnboardingOpen, setPendingShares, setPopoverPositions,
     setProfileOpen, setQuery, setReorderTarget, setSelectedFileId, setSelectedItems, setSettings, setSettingsDraft,
-    setSettingsOpen, setSnapshot, setThemePreference, settings, settingsDraft, settingsOpen, snapshot, themePreference,
+    setSettingsOpen, setSnapshot, setThemePreference, settings, settingsDraft, settingsOpen, snapshot,
+    snapshotLoadedFromStorage: initialSnapshotLoad.loadedFromStorage, themePreference,
   }
 }

@@ -9,6 +9,7 @@ import { debugWarn } from '../util/logging.js'
 
 const publishDebounceMs = 1000
 const encoder = new TextEncoder()
+let lastPinnedDriveIndexCid = ''
 
 interface DriveIndexPublishEffectOptions {
   folderKeys: Record<string, string>
@@ -44,8 +45,17 @@ async function publishDriveIndex(snapshot: StorageSnapshot, folderKeys: Record<s
     const mist = await loadMistModule()
     ensureMistRuntimeInitialized(mist, { nodeId })
     const bytes = encoder.encode(JSON.stringify(index))
-    const cid = await mist.storage_add('drive-index.json', bytes)
+    const cid = await mist.storage_add_pinned('drive-index.json', bytes)
     publishShared(driveIndexTopic, cid, { count: index.files.length, updatedAt: index.updatedAt })
+    const previousPinnedCid = lastPinnedDriveIndexCid
+    if (previousPinnedCid && previousPinnedCid !== cid) {
+      try {
+        await mist.storage_unpin(previousPinnedCid)
+      } catch (error) {
+        debugWarn('drive-index-publish', 'storage_unpin failed for superseded drive-index cid', { cid: previousPinnedCid, error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    lastPinnedDriveIndexCid = cid
   } catch (error) {
     // Best-effort: skip this publish rather than falling back to inlining the
     // (potentially large) index in localStorage `meta`. The previous

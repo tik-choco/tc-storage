@@ -83,7 +83,7 @@ async function mistStorageAddBytes(name: string, bytes: Uint8Array, nodeId: stri
   assertMistStorageAvailable()
   const mist = await loadMistModule()
   ensureMistRuntimeInitialized(mist, { nodeId })
-  return mist.storage_add(name, bytes)
+  return mist.storage_add_pinned(name, bytes)
 }
 
 /**

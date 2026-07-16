@@ -90,6 +90,7 @@ interface AppEffectsOptions {
   settingsOpen: boolean
   settingsRef: MutableRef<AppSettings>
   snapshot: StorageSnapshot
+  snapshotLoadedFromStorage: boolean
   snapshotRef: MutableRef<StorageSnapshot>
   syncSignaturesRef: MutableRef<Record<string, string>>
   syncTimersRef: MutableRef<Record<string, number>>
@@ -110,7 +111,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
     previewFiles, profileOpen, requestFolderAccess, scheduleFolderSync, selectedFile, selectedFileId, selectedPreviewFile,
     selectFolder, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setNotice, setSelectedFileId, setSettings, setSettingsDraft, settings, settingsOpen,
-    setSnapshot, settingsRef, snapshot, snapshotRef, stablePeerCount, stablePeerKey, syncSignaturesRef, syncTimersRef,
+    setSnapshot, settingsRef, snapshot, snapshotLoadedFromStorage, snapshotRef, stablePeerCount, stablePeerKey, syncSignaturesRef, syncTimersRef,
   } = options
   const lastFailedThumbnailRetryPeerKeyRef = useRef('')
   const persistFailureNoticeShownRef = useRef(false)
@@ -174,15 +175,19 @@ export function useAppEffects(options: AppEffectsOptions): void {
     }
     persist('settings', () => saveSettings(settings))
     persist('folder access modes', () => saveFolderAccessModes(folderAccessModes))
-    if (!saveFolderKeys(folderKeys, snapshotRef.current.folders.map((folder) => folder.id))) anyFailed = true
-    if (!saveFileShareKeys(fileShareKeys, snapshotRef.current.files.map((file) => file.id))) anyFailed = true
+    // If the initial load fell back to an empty snapshot (corrupt/missing storage), the
+    // in-memory folders/files list does not reflect what may still exist elsewhere (other
+    // storage, or a peer to sync from later). Pruning against it would permanently delete
+    // decryption keys for content that isn't actually gone, so skip pruning in that case.
+    if (!saveFolderKeys(folderKeys, snapshotLoadedFromStorage ? snapshotRef.current.folders.map((folder) => folder.id) : undefined)) anyFailed = true
+    if (!saveFileShareKeys(fileShareKeys, snapshotLoadedFromStorage ? snapshotRef.current.files.map((file) => file.id) : undefined)) anyFailed = true
     persist('folder sync peers', () => saveFolderSyncPeers(folderPeers))
     persist('joined rooms', () => saveJoinedRooms(joinedRooms))
     if (anyFailed && !settingsPersistFailureNoticeShownRef.current) {
       settingsPersistFailureNoticeShownRef.current = true
       setNotice({ tone: 'error', text: 'ローカル保存に失敗しました(ブラウザの保存容量が上限に達しています)。古いサイトデータの削除やファイルのバックアップを検討してください。' })
     }
-  }, [settings, folderAccessModes, folderKeys, fileShareKeys, folderPeers, joinedRooms])
+  }, [settings, folderAccessModes, folderKeys, fileShareKeys, folderPeers, joinedRooms, snapshotLoadedFromStorage])
   useEffect(() => { savePendingShares(pendingShares); saveImportKeys(importKeys) }, [importKeys, pendingShares])
   useEffect(() => localStorage.setItem(browserSortModeKey, browserSortMode), [browserSortMode, browserSortModeKey])
   useEffect(() => localStorage.setItem(browserViewModeKey, browserViewMode), [browserViewMode, browserViewModeKey])
