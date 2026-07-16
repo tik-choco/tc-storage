@@ -8,7 +8,12 @@ const snapshotKey = 'tc-storage-snapshot-v1'
 const trimmedActivityCount = 10
 let lastPersistSummary = ''
 
-export function loadStoredSnapshot(nodeId: string, storage: JsonStorage = localStorage, now: number = Date.now()): StorageSnapshot {
+export interface StoredSnapshotLoadResult {
+  snapshot: StorageSnapshot
+  loadedFromStorage: boolean
+}
+
+export function loadStoredSnapshot(nodeId: string, storage: JsonStorage = localStorage, now: number = Date.now()): StoredSnapshotLoadResult {
   try {
     const parsed = JSON.parse(storage.getItem(snapshotKey) ?? '') as StorageSnapshot
     if (Array.isArray(parsed.folders) && Array.isArray(parsed.files)) {
@@ -16,7 +21,7 @@ export function loadStoredSnapshot(nodeId: string, storage: JsonStorage = localS
       const droppedCount = parsed.folders.length - compacted.folders.length + (parsed.files.length - compacted.files.length)
       debugInfo('local-snapshot', 'snapshot loaded', snapshotSummary(compacted))
       if (droppedCount > 0) debugInfo('local-snapshot', 'stale tombstones compacted from stored snapshot', { droppedCount })
-      return compacted
+      return { snapshot: compacted, loadedFromStorage: true }
     }
   } catch (error) {
     debugWarn('local-snapshot', 'snapshot load failed; using initial snapshot', { error: error instanceof Error ? error.message : String(error) })
@@ -24,7 +29,7 @@ export function loadStoredSnapshot(nodeId: string, storage: JsonStorage = localS
   }
   const initial = createInitialSnapshot(nodeId)
   debugInfo('local-snapshot', 'initial snapshot created', snapshotSummary(initial))
-  return initial
+  return { snapshot: initial, loadedFromStorage: false }
 }
 
 // Never throws. Returns false if the snapshot could not be persisted (e.g. storage quota

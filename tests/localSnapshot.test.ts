@@ -126,5 +126,35 @@ test('loadStoredSnapshot compacts stale tombstones out of the persisted snapshot
 
   const loaded = loadStoredSnapshot('node-test', storage, nowMs)
 
-  assert.deepEqual(loaded.folders.map((folder) => folder.id), ['folder-live'])
+  assert.deepEqual(loaded.snapshot.folders.map((folder) => folder.id), ['folder-live'])
+  assert.equal(loaded.loadedFromStorage, true)
+})
+
+test('loadStoredSnapshot reports loadedFromStorage as false when stored JSON is corrupt', () => {
+  const storage = makeQuotaLimitedStorage(1_000_000)
+  storage.setItem('tc-storage-snapshot-v1', 'not valid json {')
+
+  const loaded = loadStoredSnapshot('node-test', storage)
+
+  assert.equal(loaded.loadedFromStorage, false)
+  assert.deepEqual(loaded.snapshot.folders, [])
+  assert.deepEqual(loaded.snapshot.files, [])
+})
+
+test('loadStoredSnapshot reports loadedFromStorage as false when the stored shape is malformed', () => {
+  const storage = makeQuotaLimitedStorage(1_000_000)
+  storage.setItem('tc-storage-snapshot-v1', JSON.stringify({ ...createInitialSnapshot('node-test'), folders: 'not-an-array' }))
+
+  const loaded = loadStoredSnapshot('node-test', storage)
+
+  assert.equal(loaded.loadedFromStorage, false)
+})
+
+test('loadStoredSnapshot reports loadedFromStorage as false when there is no stored snapshot', () => {
+  const storage = makeQuotaLimitedStorage(1_000_000)
+
+  const loaded = loadStoredSnapshot('node-test', storage)
+
+  assert.equal(loaded.loadedFromStorage, false)
+  assert.deepEqual(loaded.snapshot.folders, [])
 })

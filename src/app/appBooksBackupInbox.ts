@@ -199,27 +199,33 @@ export function createBooksBackupInboxActions(options: BooksBackupInboxOptions) 
   let inFlight: Promise<void> = Promise.resolve()
 
   function ensureFolderId(): string {
-    const snapshot = snapshotRef.current
-    const existing = snapshot.folders.find(
-      (folder) => !folder.deletedAt && folder.parentId === null && folder.name === inboxFolderName,
-    )
-    if (existing) return existing.id
     const now = new Date().toISOString()
     const settings = settingsRef.current
-    const folder = makeFolder({ name: inboxFolderName, parentId: null, color: 'teal', roomId: settings.roomId, now, nodeId: settings.nodeId })
-    const next = touchSnapshot(
-      addActivity(
-        { ...snapshot, folders: [...snapshot.folders, folder] },
-        { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.create', detail: `${folder.name} を作成` },
-        now,
-      ),
-      settings.nodeId,
-    )
-    // Update the ref synchronously so subsequent lookups in this same import
-    // pass see the folder before React has committed setSnapshot.
-    snapshotRef.current = next
-    setSnapshot(next)
-    return folder.id
+    let folderId = ''
+    setSnapshot((current) => {
+      const existing = current.folders.find(
+        (folder) => !folder.deletedAt && folder.parentId === null && folder.name === inboxFolderName,
+      )
+      if (existing) {
+        folderId = existing.id
+        return current
+      }
+      const folder = makeFolder({ name: inboxFolderName, parentId: null, color: 'teal', roomId: settings.roomId, now, nodeId: settings.nodeId })
+      folderId = folder.id
+      const next = touchSnapshot(
+        addActivity(
+          { ...current, folders: [...current.folders, folder] },
+          { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.create', detail: `${folder.name} を作成` },
+          now,
+        ),
+        settings.nodeId,
+      )
+      // Update the ref synchronously so subsequent lookups in this same import
+      // pass see the folder before React has committed setSnapshot.
+      snapshotRef.current = next
+      return next
+    })
+    return folderId
   }
 
   function folderPassphrase(folderId: string): string {
@@ -233,30 +239,35 @@ export function createBooksBackupInboxActions(options: BooksBackupInboxOptions) 
 
   function addFileToSnapshot(file: FileRecord, folderId: string): void {
     const settings = settingsRef.current
-    const next = touchSnapshot(
-      addActivity(
-        { ...snapshotRef.current, files: [...snapshotRef.current.files, file] },
-        { actorNodeId: settings.nodeId, fileId: file.id, folderId, action: 'file.upload', detail: `${file.name} を取り込み` },
-        file.updatedAt,
-      ),
-      settings.nodeId,
-    )
-    snapshotRef.current = next
-    setSnapshot(next)
+    setSnapshot((current) => {
+      const next = touchSnapshot(
+        addActivity(
+          { ...current, files: [...current.files, file] },
+          { actorNodeId: settings.nodeId, fileId: file.id, folderId, action: 'file.upload', detail: `${file.name} を取り込み` },
+          file.updatedAt,
+        ),
+        settings.nodeId,
+      )
+      snapshotRef.current = next
+      return next
+    })
   }
 
   function patchFileInSnapshot(fileId: string, patch: Partial<FileRecord>, now: string): FileRecord | undefined {
     const settings = settingsRef.current
     let patched: FileRecord | undefined
-    const files = snapshotRef.current.files.map((file) => {
-      if (file.id !== fileId) return file
-      patched = stampFilePatch(file, patch, now, settings.nodeId)
-      return patched
+    setSnapshot((current) => {
+      patched = undefined
+      const files = current.files.map((file) => {
+        if (file.id !== fileId) return file
+        patched = stampFilePatch(file, patch, now, settings.nodeId)
+        return patched
+      })
+      if (!patched) return current
+      const next = touchSnapshot({ ...current, files }, settings.nodeId)
+      snapshotRef.current = next
+      return next
     })
-    if (!patched) return undefined
-    const next = touchSnapshot({ ...snapshotRef.current, files }, settings.nodeId)
-    snapshotRef.current = next
-    setSnapshot(next)
     return patched
   }
 

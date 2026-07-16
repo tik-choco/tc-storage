@@ -101,7 +101,7 @@ async function storeEncryptedBundle(options: {
   const details = { name: options.name, ...options.details, bytes: bytes.byteLength }
   storageLog(`storage_add ${options.kind} start`, details)
   try {
-    const cid = await mist.storage_add(options.name, bytes)
+    const cid = await mist.storage_add_pinned(options.name, bytes)
     storageLog(`storage_add ${options.kind} complete`, { ...details, cid })
     await verifyStorageAdd(mist, options.kind, cid, details)
     return cid
@@ -243,7 +243,7 @@ export function createMistDidIdentityBackend(nodeId: string): SharedStorageBacke
     async store(bytes: Uint8Array) {
       const mist = await loadMistModule()
       ensureMistRuntimeInitialized(mist, { nodeId })
-      return mist.storage_add('did-identity.json', bytes)
+      return mist.storage_add_pinned('did-identity.json', bytes)
     },
   }
 }
