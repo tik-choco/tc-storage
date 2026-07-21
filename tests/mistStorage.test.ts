@@ -96,3 +96,22 @@ test('ensureMistRuntimeInitialized initializes mistlib storage runtime once per 
 
   assert.deepEqual(calls, ['node-storage-test-a', 'node-storage-test-b'])
 })
+
+test('ensureMistRuntimeInitialized surfaces a failed init instead of marking the runtime as initialized', () => {
+  const calls: string[] = []
+  let initResult = false
+  const mist = {
+    init_with_config(id: string, _config: string): boolean {
+      calls.push(id)
+      return initResult
+    },
+  }
+
+  // init_with_config reports failure via its boolean result; ignoring it would leave storage_get
+  // failing forever on a runtime that was never actually initialized for this node id.
+  assert.throws(() => ensureMistRuntimeInitialized(mist, { nodeId: 'node-init-failure' }))
+
+  initResult = true
+  ensureMistRuntimeInitialized(mist, { nodeId: 'node-init-failure' })
+  assert.deepEqual(calls, ['node-init-failure', 'node-init-failure'])
+})

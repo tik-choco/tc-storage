@@ -45,7 +45,7 @@ export function makeFileShareUrl(file: FileRecord, folder: FolderRecord, roomId:
   return makeShareUrl({ v: 1, type: 'file-share', roomId, clock, cid, key, folderId: folder.id, folderName: folder.name, fileId: file.id, fileName: file.name, senderProfile })
 }
 
-export function useShareLinkImport(onShare: (linked: LinkedShare) => void): void {
+export function useShareLinkImport(onShare: (linked: LinkedShare) => boolean | void): void {
   const callbackRef = useRef(onShare)
   useEffect(() => {
     callbackRef.current = onShare
@@ -54,7 +54,9 @@ export function useShareLinkImport(onShare: (linked: LinkedShare) => void): void
     const read = () => {
       const linked = readShareLink(location.hash)
       if (!linked) return
-      callbackRef.current(linked)
+      // A callback returning false means the share could not be persisted; keep the hash in the
+      // URL -- it is then the only remaining copy of the share, and a reload retries the import.
+      if (callbackRef.current(linked) === false) return
       history.replaceState(null, document.title, `${location.pathname}${location.search}`)
     }
     read()

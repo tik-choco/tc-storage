@@ -75,7 +75,14 @@ export function ensureMistRuntimeInitialized(
   if (!options.force && mistRuntimeInitKey === initKey) return
   const reason = options.reason ?? 'storage'
   storageLog('mist runtime init start', { reason, force: Boolean(options.force), nodeId: shortRuntimeValue(runtime.nodeId) })
-  mist.init_with_config(runtime.nodeId, JSON.stringify({ signaling: { mode: 'nostr', nostr: { relays: [] } } }))
+  const initialized = mist.init_with_config(runtime.nodeId, JSON.stringify({ signaling: { mode: 'nostr', nostr: { relays: [] } } }))
+  if (!initialized) {
+    // Marking a failed init as done would make every later storage_get fail with no path to
+    // recovery (the init is skipped for the same node id); reset instead so the next call retries.
+    mistRuntimeInitKey = ''
+    storageWarn('mist runtime init failed', { reason, nodeId: shortRuntimeValue(runtime.nodeId) })
+    throw new Error('mistlibランタイムを初期化できませんでした')
+  }
   mistRuntimeInitKey = initKey
   storageLog('mist runtime init complete', { reason, nodeId: shortRuntimeValue(runtime.nodeId) })
 }

@@ -121,6 +121,59 @@ test('folder access request no longer waits for a single active room, since the 
   assert.equal(Object.values(accessRequestKeysRef.current)[0]?.roomId, 'shared-room')
 })
 
+test('folder access request is resent after the cooldown so a lost first send can recover', async () => {
+  const broadcasts: unknown[] = []
+  const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }
+  const actions = createAccessActions({
+    accessRequestKeysRef,
+    folderAccessModesRef: { current: {} },
+    folderKeysRef: { current: {} },
+    networkRef: { current: networkStub(broadcasts) },
+    openFolderAccessRequests: () => {},
+    setFolderAccessRequests: () => {},
+    setFolderKeys: () => {},
+    setImportKeys: () => {},
+    setNotice: () => {},
+    setPendingShares: () => {},
+    settingsRef: { current: settingsStub(requesterDid) },
+    snapshotRef: { current: createInitialSnapshot(requesterDid) },
+  })
+  const share = {
+    type: 'folder-share' as const,
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-21T00:00:00.000Z',
+    receivedAt: '2026-05-21T00:00:01.000Z',
+    clock: 0,
+    folderId: fixedFolderId,
+    folderName: 'Fixed invite',
+    ownerNodeId: ownerDid,
+    folderKeyHash: expectedFolderKeyHash,
+    autoImport: true,
+  }
+
+  await actions.requestFolderAccess(share)
+  assert.equal(broadcasts.length, 1)
+
+  // Within the cooldown a repeat call must not spam the room.
+  await actions.requestFolderAccess(share)
+  assert.equal(broadcasts.length, 1)
+
+  // The mist send can fail silently (p2p.ts swallows per-peer failures), so once the cooldown
+  // elapses without a grant the same request must go out again -- with the same requestId, which
+  // the owner side dedupes.
+  for (const entry of Object.values(accessRequestKeysRef.current)) {
+    (entry as { sentAt?: number }).sentAt = 0
+  }
+  await actions.requestFolderAccess(share)
+  assert.equal(broadcasts.length, 2)
+  assert.equal(
+    (broadcasts[1] as { requestId?: string }).requestId,
+    (broadcasts[0] as { requestId?: string }).requestId,
+  )
+  assert.equal((broadcasts[1] as { targetNodeId?: string }).targetNodeId, ownerDid)
+})
+
 test('shared-approval access request broadcasts to connected shared peers', async () => {
   const broadcasts: unknown[] = []
   const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }

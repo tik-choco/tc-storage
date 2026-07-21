@@ -4,6 +4,7 @@ import { copyToClipboard } from '../util/clipboard.js'
 import type { FileRecord, FolderRecord } from '../storage/domain.js'
 import { defaultRoomId, type AppSettings } from '../storage/localSettings.js'
 import { removeJoinedRoom, upsertJoinedRoom, type JoinedRoom } from '../storage/joinedRooms.js'
+import { loadImportKeys, loadPendingShares, saveImportKeys, savePendingShares } from '../share/pendingShares.js'
 import type { LinkedShare } from '../share/shareLinks.js'
 import type { PopoverKind, PopoverPosition } from '../components/FloatingPopover.js'
 import { popoverPositionFromAnchor } from '../components/FloatingPopover.js'
@@ -69,9 +70,14 @@ export function createPanelActions(options: PanelOptions) {
     void copyToClipboard(value).then((ok) => setNotice({ tone: ok ? 'success' : 'error', text: ok ? `${label} をコピーしました` : `${label} をコピーできませんでした` }))
   }
 
-  function acceptLinkedShare({ share, key }: LinkedShare) {
+  function acceptLinkedShare({ share, key }: LinkedShare): boolean {
     const linkedShare = { ...share, autoImport: true }
     const keyValue = pendingShareKey(share)
+    // Persist synchronously, before any state update: useShareLinkImport strips the #tc-share
+    // hash from the URL as soon as this returns, and the state-driven persistence effect only
+    // runs on the next render -- without this the hash (the only copy of the share) is gone
+    // while nothing has been saved yet.
+    const persisted = persistLinkedShare(linkedShare, keyValue, key)
     setPendingShares((current) => [linkedShare, ...current.filter((item) => pendingShareKey(item) !== keyValue)].slice(0, 12))
     if (share.cid) setImportKeys((current) => ({ ...current, [share.cid ?? '']: key }))
     // Never overwrite the user's own home room here: it stamps every folder the user shares
@@ -99,7 +105,17 @@ export function createPanelActions(options: PanelOptions) {
     setDetailFileId(null)
     setSelectedFileId(null)
     setExpandedPreviewOpen(false)
-    setNotice({ tone: 'info', text: share.type === 'folder-share' && !share.cid ? '共有URLを読み込みました。共有ルームへ接続して参加承認をリクエストします' : '共有URLを読み込みました。共有ルームへ接続して取得を開始します' })
+    setNotice(persisted
+      ? { tone: 'info', text: share.type === 'folder-share' && !share.cid ? '共有URLを読み込みました。共有ルームへ接続して参加承認をリクエストします' : '共有URLを読み込みました。共有ルームへ接続して取得を開始します' }
+      : { tone: 'error', text: '共有情報のローカル保存に失敗しました(ブラウザの保存容量またはプライベートモードの可能性)。共有URLは保持されるため、再読み込みで再試行できます' })
+    return persisted
+  }
+
+  function persistLinkedShare(linkedShare: PendingShare, keyValue: string, importKey: string): boolean {
+    const storedShares = [linkedShare, ...loadPendingShares().filter((item) => pendingShareKey(item) !== keyValue)].slice(0, 12)
+    const sharesSaved = savePendingShares(storedShares)
+    const keysSaved = !linkedShare.cid || saveImportKeys({ ...loadImportKeys(), [linkedShare.cid]: importKey })
+    return sharesSaved && keysSaved
   }
 
   function leaveJoinedRoom(roomId: string) {
