@@ -144,6 +144,35 @@ test('pending share storage ignores malformed records', () => {
   assert.deepEqual(loadPendingShares().map((share) => share.cid), ['cid-file'])
 })
 
+test('savePendingShares and saveImportKeys report failure instead of throwing when the storage write fails', () => {
+  const throwingStorage = new MemoryStorage()
+  throwingStorage.setItem = () => {
+    throw new Error('QuotaExceededError')
+  }
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: throwingStorage,
+    configurable: true,
+  })
+
+  const share: PendingShare = {
+    type: 'file-share',
+    from: 'share-url',
+    roomId: 'tc-storage-main',
+    sentAt: '2026-05-20T00:00:00.000Z',
+    receivedAt: '2026-05-20T00:00:01.000Z',
+    clock: 1,
+    cid: 'cid-quota',
+    autoImport: true,
+  }
+
+  // The share-link flow strips the hash from the URL right after handing the share over, so a
+  // quota error here must surface as a failed save (not an uncaught exception in an effect).
+  assert.doesNotThrow(() => savePendingShares([share]))
+  assert.doesNotThrow(() => saveImportKeys({ 'cid-quota': 'secret' }))
+  assert.equal(savePendingShares([share]) as unknown, false)
+  assert.equal(saveImportKeys({ 'cid-quota': 'secret' }) as unknown, false)
+})
+
 test('folder access modes survive a reload and normalize unsafe or invalid modes', () => {
   saveFolderAccessModes({ 'folder-approval': 'approval', 'folder-shared': 'shared-approval' })
   localStorage.setItem('tc-storage-folder-access-modes-v1', JSON.stringify({

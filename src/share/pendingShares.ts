@@ -19,8 +19,17 @@ export function loadPendingShares(): PendingShare[] {
   }
 }
 
-export function savePendingShares(shares: PendingShare[]): void {
-  localStorage.setItem(pendingSharesStorageKey, JSON.stringify(shares.slice(0, maxStoredPendingShares)))
+// Both save functions report success instead of throwing: the share-link flow removes the
+// #tc-share hash from the URL once the share is handed over, so a storage failure (quota,
+// private browsing) must be observable by the caller -- an uncaught exception here would lose
+// the share with no way to recover it.
+export function savePendingShares(shares: PendingShare[]): boolean {
+  try {
+    localStorage.setItem(pendingSharesStorageKey, JSON.stringify(shares.slice(0, maxStoredPendingShares)))
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function loadImportKeys(): Record<string, string> {
@@ -31,8 +40,13 @@ export function loadImportKeys(): Record<string, string> {
   }
 }
 
-export function saveImportKeys(keys: Record<string, string>): void {
-  localStorage.setItem(importKeysStorageKey, JSON.stringify(normalizeStringRecord(keys)))
+export function saveImportKeys(keys: Record<string, string>): boolean {
+  try {
+    localStorage.setItem(importKeysStorageKey, JSON.stringify(normalizeStringRecord(keys)))
+    return true
+  } catch {
+    return false
+  }
 }
 
 function normalizePendingShare(value: unknown): PendingShare | undefined {

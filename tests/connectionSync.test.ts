@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { failedThumbnailRetryPeerKey, immediateConnectionAnnounceKey, pendingShareRetryIntervalMs, retryablePendingShares, sharedFolderReannounceIntervalMs, shouldPreloadProfileAvatar, shouldRequestFolderAccessForPendingShare, shouldRetryFileContentFailureAfterPeerConnection, shouldRunSharedFolderReannounce } from '../src/app/appEffectUtils.js'
+import { failedThumbnailRetryPeerKey, immediateConnectionAnnounceKey, pendingAccessRequestShares, pendingShareRetryIntervalMs, retryablePendingShares, sharedFolderReannounceIntervalMs, shouldPreloadProfileAvatar, shouldRequestFolderAccessForPendingShare, shouldRetryFileContentFailureAfterPeerConnection, shouldRunSharedFolderReannounce } from '../src/app/appEffectUtils.js'
 import { ownerDid, requesterDid } from './accessApprovalHelpers.js'
 
 test('immediateConnectionAnnounceKey waits for stable mist peers and keys off the whole joined-room set', () => {
@@ -125,6 +125,26 @@ test('approved pending shares remain eligible for periodic import retries', () =
   assert.deepEqual(retryablePendingShares([{ ...approved, cid: undefined }], {}), [])
   assert.deepEqual(retryablePendingShares([{ ...approved, autoImport: false }], { 'cid-folder': 'folder-secret' }), [])
   assert.deepEqual(retryablePendingShares([approved], { 'cid-folder': ' ' }), [])
+})
+
+test('folder shares still waiting for an access grant are picked up by the retry interval', () => {
+  const waiting = {
+    type: 'folder-share' as const,
+    from: 'share-url',
+    roomId: 'shared-room',
+    sentAt: '2026-05-25T00:00:00.000Z',
+    receivedAt: '2026-05-25T00:00:01.000Z',
+    clock: 0,
+    folderId: 'folder-a',
+    autoImport: true,
+  }
+
+  assert.deepEqual(pendingAccessRequestShares([waiting]), [waiting])
+  // Once a grant arrives the share carries a cid and moves to the cid-based import retry path.
+  assert.deepEqual(pendingAccessRequestShares([{ ...waiting, cid: 'cid-folder' }]), [])
+  assert.deepEqual(pendingAccessRequestShares([{ ...waiting, autoImport: false }]), [])
+  assert.deepEqual(pendingAccessRequestShares([{ ...waiting, folderId: undefined }]), [])
+  assert.deepEqual(pendingAccessRequestShares([{ ...waiting, type: 'file-share' as const }]), [])
 })
 
 test('profile avatar preload is gated behind the profile panel', () => {

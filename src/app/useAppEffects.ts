@@ -188,7 +188,13 @@ export function useAppEffects(options: AppEffectsOptions): void {
       setNotice({ tone: 'error', text: 'ローカル保存に失敗しました(ブラウザの保存容量が上限に達しています)。古いサイトデータの削除やファイルのバックアップを検討してください。' })
     }
   }, [settings, folderAccessModes, folderKeys, fileShareKeys, folderPeers, joinedRooms, snapshotLoadedFromStorage])
-  useEffect(() => { savePendingShares(pendingShares); saveImportKeys(importKeys) }, [importKeys, pendingShares])
+  useEffect(() => {
+    const sharesSaved = savePendingShares(pendingShares)
+    const keysSaved = saveImportKeys(importKeys)
+    if ((sharesSaved && keysSaved) || settingsPersistFailureNoticeShownRef.current) return
+    settingsPersistFailureNoticeShownRef.current = true
+    setNotice({ tone: 'error', text: 'ローカル保存に失敗しました(ブラウザの保存容量が上限に達しています)。古いサイトデータの削除やファイルのバックアップを検討してください。' })
+  }, [importKeys, pendingShares])
   useEffect(() => localStorage.setItem(browserSortModeKey, browserSortMode), [browserSortMode, browserSortModeKey])
   useEffect(() => localStorage.setItem(browserViewModeKey, browserViewMode), [browserViewMode, browserViewModeKey])
   useEffect(() => setSettingsDraft(settings), [profileOpen, settings, settingsOpen])

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'preact/hooks'
 import type { PendingShare } from './appTypes.js'
 import { folderLogDetails, shareLogDetails, shortLogValue, syncLog } from './appUtils.js'
 import type { StorageSnapshot } from '../storage/domain.js'
-import { immediateConnectionAnnounceKey, pendingShareRetryIntervalMs, retryablePendingShares, sharedFolderReannounceIntervalMs, shouldRequestFolderAccessForPendingShare, shouldRunSharedFolderReannounce } from './appEffectUtils.js'
+import { immediateConnectionAnnounceKey, pendingAccessRequestShares, pendingShareRetryIntervalMs, retryablePendingShares, sharedFolderReannounceIntervalMs, shouldRequestFolderAccessForPendingShare, shouldRunSharedFolderReannounce } from './appEffectUtils.js'
 import { canAutoImportFolderShare, hasSharedFolderChangesSinceLastShare, sharedFolderSignature } from '../folder/folderSync.js'
 import type { AppSettings } from '../storage/localSettings.js'
 import type { useMistShare } from '../p2p/p2p.js'
@@ -115,8 +115,13 @@ export function useAppShareEffects(options: AppShareEffectsOptions): void {
   }, [folderKeys, importKeys, joinedRoomsKey, network.state.nodeId, network.state.stablePeersByRoom, networkMode, pendingShares, settings.nodeId, settings.roomId, snapshot.files, snapshot.folders, stablePeerCount])
   useEffect(() => {
     const retryableShares = retryablePendingShares(pendingShares, importKeys)
-    if (retryableShares.length === 0) return undefined
+    const accessRequestShares = pendingAccessRequestShares(pendingShares)
+    if (retryableShares.length === 0 && accessRequestShares.length === 0) return undefined
     const timer = window.setInterval(() => {
+      // The first access request can be lost in the mist layer without an error (see p2p.ts), so
+      // keep re-requesting while the share is pending; requestFolderAccess dedupes via its
+      // resend cooldown and reuses the original requestId.
+      for (const share of accessRequestShares) void requestFolderAccess(share)
       for (const share of retryableShares) {
         const cid = share.cid
         if (!cid || autoImportCidsRef.current.has(cid) || autoImportInFlightRef.current.has(cid)) continue
@@ -125,7 +130,7 @@ export function useAppShareEffects(options: AppShareEffectsOptions): void {
       }
     }, pendingShareRetryIntervalMs)
     return () => window.clearInterval(timer)
-  }, [autoImportCidsRef, autoImportInFlightRef, autoImportLinkedShare, importKeys, pendingShares])
+  }, [autoImportCidsRef, autoImportInFlightRef, autoImportLinkedShare, importKeys, pendingShares, requestFolderAccess])
   useEffect(() => () => {
     for (const timer of Object.values(syncTimersRef.current)) window.clearTimeout(timer)
   }, [])

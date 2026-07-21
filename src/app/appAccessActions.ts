@@ -15,7 +15,17 @@ export type RequestKeyEntry = AccessRequestKey & {
   ownerNodeId?: string
   roomId: string
   requestId: string
+  // When the request was last broadcast (epoch ms). Missing (older entries) counts as "long
+  // ago", so the next requestFolderAccess call is allowed to resend immediately.
+  sentAt?: number
 }
+
+// A send can be lost without any error surfacing here (p2p.ts swallows per-peer mist failures
+// and only drops the failed peers), so a pending request is re-broadcast -- with the same
+// requestId, which the receiving side dedupes -- once this cooldown has elapsed without a
+// grant/denial. Kept just under the 30s pending-share retry interval so each retry tick can
+// actually resend.
+export const accessRequestResendCooldownMs = 25_000
 
 interface AccessOptions {
   accessRequestKeysRef: MutableRef<Record<string, RequestKeyEntry>>
@@ -57,13 +67,16 @@ export function createAccessActions(options: AccessOptions) {
     // share.roomId is guaranteed as long as it's part of the joined-room set -- no need to wait
     // for a single "active" room to rotate onto it before sending.
     const key = pendingShareKey(share)
-    // One-shot guard: with guaranteed multi-room presence the request is delivered on first send,
-    // so there's no need to retry if we've already sent it once for this share.
-    if (accessRequestKeysRef.current[key]) return
+    const existing = accessRequestKeysRef.current[key]
+    if (existing) {
+      if (Date.now() - (existing.sentAt ?? 0) < accessRequestResendCooldownMs) return
+      resendFolderAccessRequest(key, existing, share)
+      return
+    }
     try {
       const accessKey = await createAccessRequestKey()
       const requestId = `access-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-      const entry = { ...accessKey, accessGrantMode, folderId: share.folderId, folderKeyHash: share.folderKeyHash, ownerNodeId: share.ownerNodeId, requestId, roomId: share.roomId }
+      const entry = { ...accessKey, accessGrantMode, folderId: share.folderId, folderKeyHash: share.folderKeyHash, ownerNodeId: share.ownerNodeId, requestId, roomId: share.roomId, sentAt: Date.now() }
       accessRequestKeysRef.current = {
         ...accessRequestKeysRef.current,
         [key]: entry,
@@ -84,6 +97,25 @@ export function createAccessActions(options: AccessOptions) {
     } catch (error) {
       setNotice({ tone: 'error', text: describeError(error, '参加リクエストを作成できませんでした') })
     }
+  }
+
+  // Re-broadcasts a still-pending request with its original requestId and keys; no notice, since
+  // the first send already announced the request and resends may repeat on every retry tick.
+  function resendFolderAccessRequest(key: string, entry: RequestKeyEntry, share: PendingShare): void {
+    const accessGrantMode: NonNullable<ShareEnvelope['accessGrantMode']> = entry.accessGrantMode === 'shared' ? 'shared' : 'owner'
+    const refreshed = { ...entry, sentAt: Date.now() }
+    accessRequestKeysRef.current = { ...accessRequestKeysRef.current, [key]: refreshed, [entry.requestId]: refreshed }
+    networkRef.current.broadcastShare({
+      type: 'folder-access-request',
+      clock: 0,
+      folderId: entry.folderId,
+      folderName: share.folderName,
+      accessGrantMode,
+      folderKeyHash: entry.folderKeyHash,
+      targetNodeId: accessGrantMode === 'shared' ? undefined : entry.ownerNodeId,
+      requestId: entry.requestId,
+      accessPublicKey: entry.publicKey,
+    }, entry.roomId)
   }
 
   function handleFolderAccessRequest(envelope: ShareEnvelope): void {

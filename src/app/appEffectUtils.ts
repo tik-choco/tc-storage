@@ -68,6 +68,13 @@ export function retryablePendingShares(pendingShares: PendingShare[], importKeys
   return pendingShares.filter((share) => share.autoImport && share.cid && importKeys[share.cid]?.trim())
 }
 
+// Folder shares still waiting for an access grant (no cid yet). These are retried on the same
+// interval as cid-based imports: requestFolderAccess itself rate-limits via its resend cooldown
+// and re-validates the local DID, so calling it periodically is safe even while disconnected.
+export function pendingAccessRequestShares(pendingShares: PendingShare[]): PendingShare[] {
+  return pendingShares.filter((share) => share.type === 'folder-share' && !share.cid && share.autoImport && Boolean(share.folderId))
+}
+
 export function shouldPreloadProfileAvatar(options: {
   avatarFileId: string
   hasDataUrl: boolean
