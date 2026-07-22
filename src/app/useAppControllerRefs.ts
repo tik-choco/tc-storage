@@ -27,7 +27,7 @@ export function useAppControllerRefs<TNetwork>(options: AppControllerRefsOptions
   const importKeysRef = useRef(options.importKeys)
   const pendingSharesRef = useRef(options.pendingShares)
   const fileContentLoadsRef = useRef<Partial<Record<string, Promise<string>>>>({})
-  const fileContentPreloadQueueRef = useRef<FileContentPreloadQueue>({ items: new Map(), running: false })
+  const fileContentPreloadQueueRef = useRef<FileContentPreloadQueue>({ items: new Map(), activeCount: 0 })
   const fileContentStorageRef = useRef<Record<string, string>>({})
   const folderStateAnnouncementsRef = useRef<Record<string, FolderStateAnnouncement>>({})
   const settingsRef = useRef(options.settings)

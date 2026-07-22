@@ -218,9 +218,10 @@ function createContentActionsForSnapshot(
   return createContentActionsHarness({ snapshot, folderKeys, initialCache, saveEncryptedFile }).actions
 }
 
-function createContentActionsHarness(options: {
+export function createContentActionsHarness(options: {
   snapshot: StorageSnapshot
   folderKeys: Record<string, string>
+  fileContentPreloadQueueRef?: Parameters<typeof createFileContentActions>[0]['fileContentPreloadQueueRef']
   initialCache?: Record<string, string>
   loadEncryptedFile?: Parameters<typeof createFileContentActions>[0]['loadEncryptedFile']
   loadEncryptedFolder?: Parameters<typeof createFileContentActions>[0]['loadEncryptedFolder']
@@ -236,6 +237,7 @@ function createContentActionsHarness(options: {
     failFileLoadProgress: () => {},
     fileContentCacheRef,
     fileContentLoadsRef: { current: {} },
+    fileContentPreloadQueueRef: options.fileContentPreloadQueueRef,
     fileContentStorageRef: { current: {} },
     fileShareKeysRef: { current: {} },
     finishDownloadProgress: () => {},

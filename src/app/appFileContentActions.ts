@@ -21,6 +21,11 @@ type SaveEncryptedFile = typeof saveEncryptedFileToMist
 type StoredFileProof = { cid: string; signature: string }
 
 const failedContentRetryMs = 30_000
+// Was 1 (fully serial): with each file's storage_get+decrypt taking real time,
+// a folder with many visible thumbnails took file-count x that latency just to
+// finish populating. A handful in flight at once lets the wait scale with the
+// slowest file instead of the sum of all of them, without unbounded fan-out.
+const previewPreloadConcurrency = 4
 
 interface FileContentOptions {
   failDownloadProgress: (requestId: number) => void
@@ -173,19 +178,21 @@ export function createFileContentActions(options: FileContentOptions): FileConte
 
   function drainPreviewPreloadQueue(): void {
     const queue = fileContentPreloadQueueRef?.current
-    if (!queue || queue.running) return
-    const next = queue.items.entries().next()
-    if (next.done) return
-    const [fileId, queuedFile] = next.value
-    queue.items.delete(fileId)
-    queue.running = true
-    schedulePreloadTask(() => {
-      const currentFile = snapshotRef.current.files.find((item) => item.id === queuedFile.id && !item.deletedAt) ?? queuedFile
-      void startPreviewPreload(currentFile).finally(() => {
-        queue.running = false
-        drainPreviewPreloadQueue()
+    if (!queue) return
+    while (queue.activeCount < previewPreloadConcurrency) {
+      const next = queue.items.entries().next()
+      if (next.done) return
+      const [fileId, queuedFile] = next.value
+      queue.items.delete(fileId)
+      queue.activeCount += 1
+      schedulePreloadTask(() => {
+        const currentFile = snapshotRef.current.files.find((item) => item.id === queuedFile.id && !item.deletedAt) ?? queuedFile
+        void startPreviewPreload(currentFile).finally(() => {
+          queue.activeCount -= 1
+          drainPreviewPreloadQueue()
+        })
       })
-    })
+    }
   }
 
   function startPreviewPreload(file: FileRecord): Promise<void> {
