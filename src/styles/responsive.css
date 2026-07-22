@@ -10,7 +10,7 @@
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
     align-content: start;
-    min-height: 100dvh;
+    height: 100dvh;
   }
 
   .sidebar {
@@ -87,7 +87,6 @@
   }
 
   .main-column {
-    min-height: calc(100dvh - 49px);
     padding: 8px 8px 50px;
   }
 
