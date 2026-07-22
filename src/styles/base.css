@@ -12,12 +12,21 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  overflow: hidden;
   background: var(--bg);
   transition: background-color var(--dur-med) var(--ease), color var(--dur-med) var(--ease);
+}
+
+#app {
+  height: 100%;
 }
 
 button,
