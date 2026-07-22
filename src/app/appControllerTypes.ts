@@ -9,7 +9,7 @@ export type MistShare = ReturnType<typeof useMistShare>
 
 export interface FileContentPreloadQueue {
   items: Map<string, FileRecord>
-  running: boolean
+  activeCount: number
 }
 
 export type FileContentFailureKind = 'block-not-found' | 'network' | 'decrypt' | 'parse' | 'missing-data' | 'unknown'
