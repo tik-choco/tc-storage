@@ -1,6 +1,13 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const storage_add: (a: number, b: number, c: number, d: number) => any;
+export const storage_add_at: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+export const storage_add_pinned: (a: number, b: number, c: number, d: number) => any;
+export const storage_get: (a: number, b: number) => any;
+export const storage_is_pinned: (a: number, b: number) => any;
+export const storage_pin: (a: number, b: number) => any;
+export const storage_unpin: (a: number, b: number) => any;
 export const get_all_nodes: () => [number, number];
 export const get_all_nodes_in_room: (a: number, b: number) => [number, number, number, number];
 export const get_config: () => [number, number];
@@ -27,13 +34,6 @@ export const unpublish_local_track: (a: number, b: number) => [number, number];
 export const update_position_in_room: (a: number, b: number, c: number, d: number, e: number) => [number, number];
 export const leave_room: () => void;
 export const update_position: (a: number, b: number, c: number) => void;
-export const storage_add: (a: number, b: number, c: number, d: number) => any;
-export const storage_add_at: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
-export const storage_add_pinned: (a: number, b: number, c: number, d: number) => any;
-export const storage_get: (a: number, b: number) => any;
-export const storage_is_pinned: (a: number, b: number) => any;
-export const storage_pin: (a: number, b: number) => any;
-export const storage_unpin: (a: number, b: number) => any;
 export const storage_kv_delete: (a: number, b: number) => any;
 export const storage_kv_get: (a: number, b: number) => any;
 export const storage_kv_set: (a: number, b: number, c: any) => any;
