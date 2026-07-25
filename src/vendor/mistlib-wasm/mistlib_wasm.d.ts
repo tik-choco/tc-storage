@@ -97,6 +97,13 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly storage_add: (a: number, b: number, c: number, d: number) => any;
+    readonly storage_add_at: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+    readonly storage_add_pinned: (a: number, b: number, c: number, d: number) => any;
+    readonly storage_get: (a: number, b: number) => any;
+    readonly storage_is_pinned: (a: number, b: number) => any;
+    readonly storage_pin: (a: number, b: number) => any;
+    readonly storage_unpin: (a: number, b: number) => any;
     readonly get_all_nodes: () => [number, number];
     readonly get_all_nodes_in_room: (a: number, b: number) => [number, number, number, number];
     readonly get_config: () => [number, number];
@@ -123,13 +130,6 @@ export interface InitOutput {
     readonly update_position_in_room: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly leave_room: () => void;
     readonly update_position: (a: number, b: number, c: number) => void;
-    readonly storage_add: (a: number, b: number, c: number, d: number) => any;
-    readonly storage_add_at: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
-    readonly storage_add_pinned: (a: number, b: number, c: number, d: number) => any;
-    readonly storage_get: (a: number, b: number) => any;
-    readonly storage_is_pinned: (a: number, b: number) => any;
-    readonly storage_pin: (a: number, b: number) => any;
-    readonly storage_unpin: (a: number, b: number) => any;
     readonly storage_kv_delete: (a: number, b: number) => any;
     readonly storage_kv_get: (a: number, b: number) => any;
     readonly storage_kv_set: (a: number, b: number, c: any) => any;
