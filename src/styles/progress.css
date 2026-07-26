@@ -1,12 +1,28 @@
 .progress-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-subtle);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.progress-label {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-bar-row {
   display: grid;
   grid-template-columns: minmax(42px, 1fr) auto;
   align-items: center;
   gap: 7px;
   min-width: 0;
-  color: var(--text-subtle);
-  font-size: 11px;
-  font-weight: 700;
 }
 
 .progress-track {
@@ -57,7 +73,8 @@
   background: rgba(15, 23, 42, 0.72);
 }
 
-.media-progress em {
+.media-progress em,
+.media-progress .progress-label {
   color: #e2e8f0;
 }
 
@@ -81,5 +98,15 @@
 
   100% {
     transform: translateX(240%);
+  }
+}
+
+/* Indeterminate shimmer implies motion nobody can stop watching; reduced-motion users get a
+   static partial fill instead so the bar still reads as "in progress, not stalled". */
+@media (prefers-reduced-motion: reduce) {
+  .progress-indicator.indeterminate .progress-track i {
+    width: 60%;
+    animation: none;
+    opacity: 0.7;
   }
 }

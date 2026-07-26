@@ -69,6 +69,7 @@ interface AppEffectsOptions {
   pendingShares: PendingShare[]
   pendingSharesRef: MutableRef<PendingShare[]>
   preloadFileContent: (file: FileRecord) => void
+  preloadFolderContents: (folderId: string, options?: { includeDescendants?: boolean }) => number
   previewFiles: FileRecord[]
   profileOpen: boolean
   requestFolderAccess: (share: PendingShare) => Promise<void>
@@ -107,7 +108,7 @@ export function useAppEffects(options: AppEffectsOptions): void {
     currentFolderId, detailFileId, ensureFileContent, expandedPreviewOpen, fileContentCache, fileContentCacheRef, fileDataUrls,
     fileContentFailuresRef, fileShareKeys, fileShareKeysRef, files, folderAccessModes, folderAccessModesRef, folderKeys, folderKeysRef, folderPeers, folders,
     handlePreviewKey, importKeys, importKeysRef, isPendingShareAlreadyImported, joinedRooms, markPendingShareImported,
-    network, networkRef, networkMode, pendingShares, pendingSharesRef, preloadFileContent,
+    network, networkRef, networkMode, pendingShares, pendingSharesRef, preloadFileContent, preloadFolderContents,
     previewFiles, profileOpen, requestFolderAccess, scheduleFolderSync, selectedFile, selectedFileId, selectedPreviewFile,
     selectFolder, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setNotice, setSelectedFileId, setSettings, setSettingsDraft, settings, settingsOpen,
@@ -116,6 +117,11 @@ export function useAppEffects(options: AppEffectsOptions): void {
   const lastFailedThumbnailRetryPeerKeyRef = useRef('')
   const persistFailureNoticeShownRef = useRef(false)
   const settingsPersistFailureNoticeShownRef = useRef(false)
+  // Keyed by `${folderId}:${lastCid ?? ''}` so a folder is only auto-preloaded once per
+  // shared state: re-running on every render would re-queue already-cached files (a no-op
+  // via preloadFileContent's own dedup, but wasted work), while keying purely on folderId
+  // would never notice a later share update landing under the same folder.
+  const autoPreloadedShareFolderKeysRef = useRef<Set<string>>(new Set())
 
   useEffect(() => { snapshotRef.current = snapshot }, [snapshot])
   useEffect(() => { folderAccessModesRef.current = folderAccessModes }, [folderAccessModes])
@@ -237,6 +243,25 @@ export function useAppEffects(options: AppEffectsOptions): void {
       if (failed.has(file.id) && canPreloadPreviewContent(file) && canResolveFileContent(file)) preloadFileContent(file)
     }
   }, [canResolveFileContent, fileContentFailuresRef, files, networkMode, preloadFileContent, stablePeerCount, stablePeerKey])
+  useEffect(() => {
+    // A received share folder bundle arrives with metadata only (stripFileContent); the
+    // only existing preload triggers are tile-mount (grid) and preview-open, so a plain
+    // list view or an off-screen file never starts fetching until the user happens to look
+    // at it. Auto-queueing here as soon as a shared folder we hold a key for shows up makes
+    // bodies stream in the background instead. Guarded per folder+lastCid (see ref comment
+    // above) so this can never spin: preloadFolderContents completing does not change
+    // folders/files/folderKeys, so it cannot re-trigger itself.
+    for (const folder of folders) {
+      if (folder.deletedAt || !folder.shareEnabled) continue
+      const passphrase = folderKeys[folder.id]
+      if (!passphrase) continue
+      const guardKey = `${folder.id}:${folder.lastCid ?? ''}`
+      if (autoPreloadedShareFolderKeysRef.current.has(guardKey)) continue
+      autoPreloadedShareFolderKeysRef.current.add(guardKey)
+      const queued = preloadFolderContents(folder.id)
+      if (queued > 0) syncLog('auto preload queued for newly seen shared folder', { folderId: folder.id, lastCid: folder.lastCid, queued })
+    }
+  }, [folders, files, folderKeys, preloadFolderContents])
   useShareLinkImport(acceptLinkedShare)
   useFolderImportEffect({ setFolderKeys, setNotice, setSnapshot, settingsRef })
   useAppShareEffects({

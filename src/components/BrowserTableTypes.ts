@@ -1,4 +1,4 @@
-import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare, ProgressStatus } from '../app/appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserViewMode, PendingShare, ProgressStatus, ShareImportProgress } from '../app/appTypes.js'
 import type { SelectionActions } from '../app/appSelectionActions.js'
 import type { FileRecord, FolderRecord } from '../storage/domain.js'
 
@@ -18,6 +18,7 @@ export type BrowserTableProps = {
   selection?: SelectionActions
   files: FileRecord[]
   folderNameDraft: string | null
+  shareImportProgress: Record<string, ShareImportProgress>
   viewMode: BrowserViewMode
   onCancelCreateFolder: () => void
   onCancelPendingShare: (share: PendingShare) => void

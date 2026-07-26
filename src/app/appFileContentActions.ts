@@ -176,6 +176,20 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     drainPreviewPreloadQueue()
   }
 
+  function preloadFolderContents(folderId: string, options: { includeDescendants?: boolean } = {}): number {
+    const includeDescendants = options.includeDescendants ?? true
+    const snapshot = snapshotRef.current
+    const folderIds = includeDescendants ? descendantFolderIds(activeFolders(snapshot), folderId) : new Set([folderId])
+    // Delegates entirely to preloadFileContent for queueing/dedup/cooldown/concurrency:
+    // this just decides *which* files are in scope right after a share lands, so a
+    // freshly merged folder starts streaming its bodies instead of waiting for tiles
+    // to scroll into view or a preview to open.
+    const filesToPreload = activeFiles(snapshot).filter((file) => folderIds.has(file.folderId))
+    for (const file of filesToPreload) preloadFileContent(file)
+    syncLog('folder content preload queued', { folderId, queued: filesToPreload.length })
+    return filesToPreload.length
+  }
+
   function drainPreviewPreloadQueue(): void {
     const queue = fileContentPreloadQueueRef?.current
     if (!queue) return
@@ -613,7 +627,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     return 'unknown'
   }
 
-  return { canResolveFileContent, downloadFolderAsZip, downloadStoredFile, ensureFileContent, ensureFolderFilesStored, handleFileContentRepairRequest, hasUntrustedFolderContent, materializeFolderBundleFiles, preloadFileContent }
+  return { canResolveFileContent, downloadFolderAsZip, downloadStoredFile, ensureFileContent, ensureFolderFilesStored, handleFileContentRepairRequest, hasUntrustedFolderContent, materializeFolderBundleFiles, preloadFileContent, preloadFolderContents }
 }
 
 function shouldRequestFileContentRepair(kind: FileContentFailureKind): boolean {

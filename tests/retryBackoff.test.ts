@@ -195,6 +195,7 @@ test('auto folder import backs off after a storage_get failure for the same shar
       noticeCount += 1
     },
     setPendingShares: (update) => { pendingSharesRef.current = applyStateUpdate(pendingSharesRef.current, update) },
+    setShareImportProgress: () => {},
     setSnapshot: (update) => {
       snapshot = applyStateUpdate(snapshot, update)
       snapshotRef.current = snapshot
@@ -247,6 +248,7 @@ test('linked share import can force retry after peer connection despite cooldown
     setImportKeys: () => {},
     setNotice: () => { noticeCount += 1 },
     setPendingShares: (update) => { pendingSharesRef.current = applyStateUpdate(pendingSharesRef.current, update) },
+    setShareImportProgress: () => {},
     setSnapshot: () => {},
     settingsRef: { current: testSettings() },
     snapshotRef: { current: createInitialSnapshot('node-a') },
@@ -296,6 +298,7 @@ test('markPendingShareImported keeps same-folder pending shares from other rooms
     setImportKeys: (update) => { importKeys = applyStateUpdate(importKeys, update) },
     setNotice: () => {},
     setPendingShares: (update) => { pendingSharesRef.current = applyStateUpdate(pendingSharesRef.current, update) },
+    setShareImportProgress: () => {},
     setSnapshot: () => {},
     settingsRef: { current: testSettings() },
     snapshotRef: { current: createInitialSnapshot('node-a') },
@@ -343,6 +346,7 @@ test('canceling a pending folder invite clears stored access request keys', () =
     setImportKeys: () => {},
     setNotice: () => {},
     setPendingShares: (update) => { pendingSharesRef.current = applyStateUpdate(pendingSharesRef.current, update) },
+    setShareImportProgress: () => {},
     setSnapshot: () => {},
     settingsRef: { current: testSettings() },
     snapshotRef: { current: createInitialSnapshot('node-a') },

@@ -37,6 +37,7 @@ export interface FileContentActions {
   hasUntrustedFolderContent: (folderId: string) => boolean
   materializeFolderBundleFiles: (bundle: import('../storage/domain.js').FolderBundle, passphrase: string) => Promise<import('../storage/domain.js').FolderBundle>
   preloadFileContent: (file: FileRecord) => void
+  preloadFolderContents: (folderId: string, options?: { includeDescendants?: boolean }) => number
 }
 
 export interface MoveActions {
