@@ -32,6 +32,10 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
   const helloTimersRef = useRef<Record<string, number>>({})
   const connectionSeqRef = useRef(0)
   const peerReadFailuresRef = useRef(0)
+  /** Set after a session dies badly (connect threw, or peer reads kept failing); makes the next
+   * connect re-run `init_with_config`. A healthy reconnect deliberately reuses the existing runtime
+   * so mistlib keeps the signaling keypair peers already associated with this nodeId. */
+  const runtimeReinitPendingRef = useRef(false)
   const lastHelloAtRef = useRef<Record<string, number>>({})
   const peersByRoomRef = useRef<Record<string, string[]>>({})
   const peerFirstSeenAtByRoomRef = useRef<Record<string, Record<string, number>>>({})
@@ -243,7 +247,9 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
       const mist = await loadMistModule()
       if (connectionSeqRef.current !== connectionSeq) return
       mistRef.current = mist
-      p2pLog('mist module loaded; configuring runtime', { connectionSeq, rooms, nodeId: shortLogValue(settingsValue.nodeId) })
+      const forceReinit = runtimeReinitPendingRef.current
+      runtimeReinitPendingRef.current = false
+      p2pLog('mist module loaded; configuring runtime', { connectionSeq, rooms, nodeId: shortLogValue(settingsValue.nodeId), forceReinit })
       configureMistRoom(mist, { nodeId: settingsValue.nodeId }, (...events: unknown[]) => {
         if (connectionSeqRef.current !== connectionSeq || mistRef.current !== mist) return
         const timedOutPeer = peerIdFromMistConnectionTimeout(events)
@@ -255,7 +261,7 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
         }
         const envelope = parseMistEvent(events)
         if (envelope) receiveEnvelope(envelope, 'mistlib')
-      })
+      }, { forceReinit })
 
       const joinOutcomes = await Promise.allSettled(rooms.map((roomId) => joinMistRoom(mist, roomId, settingsValue.nodeId)))
       if (connectionSeqRef.current !== connectionSeq || mistRef.current !== mist) return
@@ -316,6 +322,7 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
             return
           }
           clearMistSession(mist)
+          runtimeReinitPendingRef.current = true
           p2pWarn('mist cleanup after repeated peer refresh failures')
           setState((current) => ({
             ...current,
@@ -344,6 +351,7 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
       peerTimerRef.current = window.setInterval(refreshPeers, peerRefreshIntervalMs)
     } catch (error) {
       if (connectionSeqRef.current !== connectionSeq) return
+      runtimeReinitPendingRef.current = true
       p2pWarn('connect failed', { connectionSeq, error: describeError(error, 'unknown error') })
       setState((current) => ({
         ...current,
@@ -424,6 +432,11 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
     publishPeerState()
   }, [])
 
+  // mistlib registers no unload handling of its own, so a reload/close without this leaves peers
+  // waiting out the ~30s liveness timeout before they notice we are gone. What actually reaches
+  // them is the synchronous DataChannel close inside `leave_room()` -- there is no async relay send
+  // to flush -- so `pagehide` alone is enough and `beforeunload` is deliberately not registered:
+  // it would cost bfcache eligibility for nothing.
   useEffect(() => {
     const handlePageHide = (event: PageTransitionEvent) => {
       if (!shouldCleanupMistOnPageHide(event)) return

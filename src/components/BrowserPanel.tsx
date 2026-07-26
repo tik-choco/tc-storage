@@ -15,7 +15,7 @@ import {
 } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import type { BrowserDragItem, BrowserReorderTarget, BrowserSortMode, BrowserViewMode, PendingShare, ProgressStatus } from '../app/appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserSortMode, BrowserViewMode, PendingShare, ProgressStatus, ShareImportProgress } from '../app/appTypes.js'
 import { emptySelectionActions, type SelectionActions } from '../app/appSelectionActions.js'
 import { folderPath, type FileRecord, type FolderRecord, type StorageSnapshot } from '../storage/domain.js'
 import { FileTable } from './BrowserTable.js'
@@ -40,6 +40,7 @@ export function BrowserPanel(props: {
   sortMode: BrowserSortMode
   snapshot: StorageSnapshot
   selection?: SelectionActions
+  shareImportProgress: Record<string, ShareImportProgress>
   viewMode: BrowserViewMode
   onCancelCreateFolder: () => void
   onCancelPendingShare: (share: PendingShare) => void

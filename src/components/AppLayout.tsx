@@ -53,6 +53,7 @@ export function AppLayout({ controller: c }: AppLayoutProps) {
           sortMode={c.browserSortMode}
           snapshot={c.snapshot}
           selection={c.selection}
+          shareImportProgress={c.shareImportProgress}
           viewMode={c.browserViewMode}
           onBrowserItemDragLeave={c.handleBrowserItemDragLeave}
           onBrowserItemDragOver={c.handleBrowserItemDragOver}

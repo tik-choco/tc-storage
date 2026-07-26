@@ -38,6 +38,18 @@ export type ProgressStatus = {
   percent?: number
 }
 
+export type ShareImportPhase = 'connecting' | 'fetching' | 'decrypting' | 'materializing' | 'failed'
+
+export type ShareImportProgress = {
+  phase: ShareImportPhase
+  label: string
+  /** Known once the bundle is decrypted; kept as diagnostic context on later phases (e.g.
+   * `materializing`). Once a folder is merged into the snapshot, its own row/tile computes
+   * "n/m received" straight from the file cache instead of looking this up (see
+   * browserProgressUtils.ts), so this is never used as a lookup key. */
+  folderId?: string
+}
+
 export type SyncPeer = {
   nodeId: string
   profile?: ShareProfile

@@ -136,6 +136,37 @@ test('configureMistRoom registers the event callback and initializes the mistlib
   assert.deepEqual(calls, ['register', 'init:node-local'])
 })
 
+test('configureMistRoom reuses an initialized runtime on reconnect, and re-initializes only when recovery asks for it', () => {
+  const calls: string[] = []
+  const settings = {
+    autoConnect: true,
+    avatarUrl: '',
+    nodeId: 'node-reconnect',
+    profileName: 'Local',
+    roomId: 'tc-storage-main',
+  }
+  const mist = {
+    init_with_config(id: string, _config: string): boolean {
+      calls.push(`init:${id}`)
+      return true
+    },
+    register_event_callback() {
+      calls.push('register')
+    },
+  }
+
+  configureMistRoom(mist, settings, () => undefined)
+  // A plain reconnect must not re-init: mistlib re-mints its signaling keypair on every
+  // init_with_config, and peers holding the old pubkey for this node id would reject the new one.
+  configureMistRoom(mist, settings, () => undefined)
+
+  assert.deepEqual(calls, ['register', 'init:node-reconnect', 'register'])
+
+  configureMistRoom(mist, settings, () => undefined, { forceReinit: true })
+
+  assert.deepEqual(calls.slice(3), ['register', 'init:node-reconnect'])
+})
+
 test('joinMistRoom awaits join_room_async then places the node at the room-derived position via update_position_in_room', async () => {
   const calls: string[] = []
   const mist = {

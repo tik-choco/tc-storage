@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks'
-import type { BrowserDragItem, BrowserReorderTarget, BrowserSortMode, BrowserViewMode, DeleteRequest, DownloadConfirmRequest, FolderAccessRequest, FolderPanelMode, Notice, PendingShare } from './appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, BrowserSortMode, BrowserViewMode, DeleteRequest, DownloadConfirmRequest, FolderAccessRequest, FolderPanelMode, Notice, PendingShare, ShareImportProgress } from './appTypes.js'
 import { loadBrowserSortMode, loadBrowserViewMode } from './appUtils.js'
 import { initialPopoverPosition, type PopoverKind, type PopoverPosition } from '../components/FloatingPopover.js'
 import type { StorageSnapshot } from '../storage/domain.js'
@@ -30,6 +30,7 @@ export function useAppControllerState() {
   const [browserSortMode, setBrowserSortMode] = useState<BrowserSortMode>(() => loadBrowserSortMode())
   const [browserViewMode, setBrowserViewMode] = useState<BrowserViewMode>(() => loadBrowserViewMode())
   const [pendingShares, setPendingShares] = useState<PendingShare[]>(() => loadPendingShares())
+  const [shareImportProgress, setShareImportProgress] = useState<Record<string, ShareImportProgress>>({})
   const [joinedRooms, setJoinedRooms] = useState<JoinedRoom[]>(() => loadJoinedRooms())
   const [onboardingOpen, setOnboardingOpen] = useState(() => shouldShowOnboarding())
   const [folderAccessModes, setFolderAccessModes] = useState(() => loadFolderAccessModes())
@@ -71,7 +72,8 @@ export function useAppControllerState() {
     setFolderAccessRequests, setFolderKeys, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelMode,
     setFolderPanelOpen, setFolderPeers, setImportKeys, setJoinedRooms, setNotice, setOnboardingOpen, setPendingShares, setPopoverPositions,
     setProfileOpen, setQuery, setReorderTarget, setSelectedFileId, setSelectedItems, setSettings, setSettingsDraft,
-    setSettingsOpen, setSnapshot, setThemePreference, settings, settingsDraft, settingsOpen, snapshot,
+    setSettingsOpen, setShareImportProgress, setSnapshot, setThemePreference, settings, settingsDraft, settingsOpen,
+    shareImportProgress, snapshot,
     snapshotLoadedFromStorage: initialSnapshotLoad.loadedFromStorage, themePreference,
   }
 }

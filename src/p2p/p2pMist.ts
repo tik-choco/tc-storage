@@ -3,14 +3,22 @@ import { ensureMistRuntimeInitialized } from '../storage/mistStorage.js'
 import type { MistModule } from './p2pTypes.js'
 export type { MistRoomController } from './p2pTypes.js'
 
-/** One-time-per-session runtime setup: registers the event callback and initializes mistlib for `settings.nodeId`. Room membership is handled separately by `joinMistRoom`/`leaveMistRoomId` -- this vendored mistlib build supports joining several rooms concurrently, so there's no single "the room" to join here. */
+/** One-time-per-session runtime setup: registers the event callback and initializes mistlib for `settings.nodeId`. Room membership is handled separately by `joinMistRoom`/`leaveMistRoomId` -- this vendored mistlib build supports joining several rooms concurrently, so there's no single "the room" to join here.
+ *
+ * Re-initialization is deliberately *not* forced by default: every `init_with_config` re-mints
+ * mistlib's signaling keypair, and peers that already know this node id then see the same node id
+ * announcing a different pubkey and reject it ("Nostr sender node id changed pubkey?"). Since a
+ * reconnect keeps the same nodeId, `ensureMistRuntimeInitialized` skips the re-init and the live
+ * identity survives. `forceReinit` is reserved for recovery after a failed/broken session, where a
+ * fresh engine is worth losing the identity for. */
 export function configureMistRoom(
   mist: Pick<MistModule, 'init_with_config' | 'register_event_callback'>,
   settings: Pick<AppSettings, 'nodeId'>,
   onEvent: (...events: unknown[]) => void,
+  options: { forceReinit?: boolean } = {},
 ): void {
   mist.register_event_callback(onEvent)
-  ensureMistRuntimeInitialized(mist, settings, { force: true, reason: 'p2p' })
+  ensureMistRuntimeInitialized(mist, settings, { force: options.forceReinit === true, reason: 'p2p' })
 }
 
 /** Joins a single room (concurrently safe with other joined rooms) and places this node at its room-derived position. Awaits `join_room_async` so the session is actually usable before we start reading its neighbors. */
@@ -34,6 +42,9 @@ export function leaveMistRoomId(mist: Pick<MistModule, 'leave_room_id'>, roomId:
   }
 }
 
+/** Releases every mist session this node holds: `leave_room()` tears down all joined rooms, not just
+ * one, so there is no need to walk them with `leave_room_id`. Runs from the unload path, where the
+ * synchronous DataChannel close is what tells peers we left, so it must stay synchronous. */
 export function cleanupMist(mist: MistModule | null, timer: number | undefined): void {
   if (timer !== undefined) window.clearInterval(timer)
   try {

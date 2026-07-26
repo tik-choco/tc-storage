@@ -1,10 +1,12 @@
 import { Check, Download, FileText, Folder, Info, Lock, Share2, ShieldCheck, Trash2, Video, X } from 'lucide-preact'
 import { useEffect, useRef } from 'preact/hooks'
 import { selectFromPointerEvent } from '../app/appSelectionActions.js'
-import type { BrowserDragItem, BrowserReorderTarget, PendingShare, ProgressStatus } from '../app/appTypes.js'
+import type { BrowserDragItem, BrowserReorderTarget, PendingShare, ProgressStatus, ShareImportProgress } from '../app/appTypes.js'
 import { isImageFile, isMediaFile, isVideoFile, shouldPreloadVisibleThumbnail } from '../app/appUtils.js'
+import { isShareImportActive } from '../app/shareImportProgress.js'
 import { filesInFolder, formatBytes, type FileRecord, type FolderRecord } from '../storage/domain.js'
 import { dateLabel } from '../util/format.js'
+import { folderContentProgress } from './browserProgressUtils.js'
 import type { DraftFolderProps } from './BrowserTableTypes.js'
 import { DraftFolderInput } from './DraftFolderInput.js'
 import { ProgressIndicator } from './ProgressIndicator.js'
@@ -35,6 +37,7 @@ export function FolderTile(props: {
   dropTargetFolderId: string | null | undefined
   folder: FolderRecord
   files: FileRecord[]
+  fileDataUrls?: Record<string, string>
   reorderTarget: BrowserReorderTarget | null
   selected: boolean
   selectionActive: boolean
@@ -55,6 +58,7 @@ export function FolderTile(props: {
   const isDragSource = props.dragItem?.type === 'folder' && props.dragItem.id === props.folder.id
   const isDropTarget = props.dropTargetFolderId === props.folder.id
   const reorderClass = reorderTargetClass(props.reorderTarget, 'folder', props.folder.id)
+  const contentProgress = props.folder.shareEnabled ? folderContentProgress(props.files, props.folder.id, props.fileDataUrls ?? {}) : undefined
 
   return (
     <div
@@ -88,8 +92,17 @@ export function FolderTile(props: {
           {props.folder.shareEnabled ? <Share2 size={15} /> : <Lock size={15} />}
           {props.folder.shareEnabled ? 'Shared' : 'Encrypted'}
         </span>
-        <span>{fileCount} files</span>
+        <span title={contentProgress ? `受信 ${contentProgress.ready}/${contentProgress.total}` : undefined}>
+          {contentProgress ? `受信 ${contentProgress.ready}/${contentProgress.total}` : `${fileCount} files`}
+        </span>
       </div>
+      {contentProgress ? (
+        <span class="folder-content-progress-tile" title={`受信 ${contentProgress.ready}/${contentProgress.total}`} aria-hidden="true">
+          <span class="progress-track mini-progress-track">
+            <i style={{ width: `${contentProgress.percent}%` }} />
+          </span>
+        </span>
+      ) : null}
       <span class="tile-date">{dateLabel(props.folder.updatedAt)}</span>
       <span class="row-actions tile-actions">
         <button onClick={(event) => props.onShowFolderDetails(props.folder, event.currentTarget)} title="Details"><Info size={16} /></button>
@@ -103,21 +116,39 @@ export function FolderTile(props: {
 
 export function PendingFolderShareTile(props: {
   busy: boolean
+  progress?: ShareImportProgress
   share: PendingShare
   onCancelShare: (share: PendingShare) => void
 }) {
+  const active = isShareImportActive(props.progress)
+  // `failed` (source offline, waiting to retry) is deliberately excluded from `isShareImportActive`
+  // (that flag means "actively transferring right now"), but it's still worth surfacing as a
+  // static label -- no bar/animation, since nothing is actually in flight.
+  const failed = props.progress?.phase === 'failed'
+  const statusLabel = (active || failed) && props.progress
+    ? props.progress.label
+    : props.share.cid ? (props.busy ? '読み込み中' : '読み込み待ち') : '承認待ち'
+  const detailLabel = props.share.cid ? '共有待ち' : 'リクエスト中'
+
   return (
-    <div class="tile-card pending-folder-tile" role="listitem">
+    <div class={`tile-card pending-folder-tile ${active ? 'share-receiving' : ''}`} role="listitem">
       <div class="tile-open pending-folder-open">
         <span class="tile-icon">
-          <Folder size={34} class="folder-stroke blue" />
+          <Folder size={34} class={`folder-stroke blue ${active ? 'folder-receiving-icon' : ''}`} />
         </span>
         <strong>{props.share.folderName ?? 'Shared folder'}</strong>
       </div>
       <div class="tile-meta-row">
-        <span class="status-cell"><Share2 size={15} />{props.share.cid ? props.busy ? '読み込み中' : '読み込み待ち' : '承認待ち'}</span>
-        <span>{props.share.cid ? '共有待ち' : 'リクエスト中'}</span>
+        <span class="status-cell pending-folder-status"><Share2 size={15} /><span class="pending-folder-status-text">{statusLabel}</span></span>
+        <span>{detailLabel}</span>
       </div>
+      {active ? (
+        <span class="pending-folder-progress-bar" title={statusLabel} aria-hidden="true">
+          <span class="progress-track mini-progress-track indeterminate">
+            <i />
+          </span>
+        </span>
+      ) : null}
       <span class="tile-date">{dateLabel(props.share.receivedAt)}</span>
       <span class="row-actions tile-actions">
         <button onClick={() => props.onCancelShare(props.share)} disabled={props.busy} title="Cancel pending share"><X size={16} /></button>

@@ -1,4 +1,5 @@
 import { decryptJson, encryptJson, type EncryptedPayload } from '../crypto/crypto.js'
+import { loadStoredDidIdentity } from '../crypto/didIdentity.js'
 import type { SharedStorageBackend } from '../crypto/sharedDidIdentity.js'
 import { stripFileContent, type FileBundle, type FileRecord, type FolderBundle, type FolderRecord } from './domain.js'
 import { describeError } from '../util/errors.js'
@@ -19,6 +20,12 @@ export type MistRuntimeSettings = {
   nodeId?: string
 }
 type StoredBundleKind = 'file' | 'folder'
+/** Retrieval and decryption are separate, individually slow steps of one storage_get; callers that
+ * show import progress need to tell them apart, and only this module can see the boundary. */
+export type StoredBundleLoadPhase = 'fetching' | 'decrypting'
+export type LoadEncryptedBundleOptions = {
+  onPhase?: (phase: StoredBundleLoadPhase) => void
+}
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -74,6 +81,14 @@ export function ensureMistRuntimeInitialized(
   const initKey = runtime.nodeId
   if (!options.force && mistRuntimeInitKey === initKey) return
   const reason = options.reason ?? 'storage'
+  // Both branches below cost this node the identity its peers already know: mistlib mints a fresh
+  // signaling keypair per init, and a peer that still holds the old pubkey for this node id rejects
+  // the new one. Neither should happen on a healthy page, so make them visible.
+  if (mistRuntimeInitKey && mistRuntimeInitKey !== initKey) {
+    storageWarn('mist runtime node id changed mid-session', { reason, previous: shortRuntimeValue(mistRuntimeInitKey), next: shortRuntimeValue(runtime.nodeId) })
+  } else if (mistRuntimeInitKey) {
+    storageWarn('mist runtime re-initialized for the same node id; peers must re-learn this node', { reason, nodeId: shortRuntimeValue(runtime.nodeId) })
+  }
   storageLog('mist runtime init start', { reason, force: Boolean(options.force), nodeId: shortRuntimeValue(runtime.nodeId) })
   const initialized = mist.init_with_config(runtime.nodeId, JSON.stringify({ signaling: { mode: 'nostr', nostr: { relays: [] } } }))
   if (!initialized) {
@@ -191,6 +206,7 @@ async function loadEncryptedBundle<T>(
   passphrase: string,
   runtime: MistRuntimeSettings,
   summarize: (bundle: T) => Record<string, unknown>,
+  options: LoadEncryptedBundleOptions = {},
 ): Promise<T> {
   assertMistStorageAvailable()
   const mist = await loadMistModule()
@@ -198,8 +214,10 @@ async function loadEncryptedBundle<T>(
   const normalizedCid = cid.trim()
   storageLog(`storage_get ${kind} start`, { cid: normalizedCid })
   try {
+    options.onPhase?.('fetching')
     const bytes = await loadStoredBytes(mist, kind, normalizedCid)
     const encrypted = parseEncryptedPayload(bytes, kind, normalizedCid)
+    options.onPhase?.('decrypting')
     const bundle = await decryptEncryptedPayload<T>(encrypted, passphrase, kind, normalizedCid)
     storageLog(`storage_get ${kind} decrypted`, { cid: normalizedCid, ...summarize(bundle) })
     return bundle
@@ -209,7 +227,7 @@ async function loadEncryptedBundle<T>(
   }
 }
 
-export function loadEncryptedFolderFromMist(cid: string, passphrase: string, runtime: MistRuntimeSettings = {}): Promise<FolderBundle> {
+export function loadEncryptedFolderFromMist(cid: string, passphrase: string, runtime: MistRuntimeSettings = {}, options: LoadEncryptedBundleOptions = {}): Promise<FolderBundle> {
   return loadEncryptedBundle<FolderBundle>('folder', cid, passphrase, runtime, (bundle) => ({
     folderId: bundle.folder.id,
     folderName: bundle.folder.name,
@@ -217,10 +235,10 @@ export function loadEncryptedFolderFromMist(cid: string, passphrase: string, run
     fileCidCount: bundle.files.filter((file) => Boolean(file.lastCid)).length,
     fileDataUrlCount: bundle.files.filter((file) => Boolean(file.dataUrl)).length,
     originNode: bundle.originNode,
-  }))
+  }), options)
 }
 
-export function loadEncryptedFileFromMist(cid: string, passphrase: string, runtime: MistRuntimeSettings = {}): Promise<FileBundle> {
+export function loadEncryptedFileFromMist(cid: string, passphrase: string, runtime: MistRuntimeSettings = {}, options: LoadEncryptedBundleOptions = {}): Promise<FileBundle> {
   return loadEncryptedBundle<FileBundle>('file', cid, passphrase, runtime, (bundle) => ({
     folderId: bundle.folder.id,
     folderName: bundle.folder.name,
@@ -231,7 +249,7 @@ export function loadEncryptedFileFromMist(cid: string, passphrase: string, runti
     checksum: bundle.file.checksum,
     hasDataUrl: Boolean(bundle.file.dataUrl),
     originNode: bundle.originNode,
-  }))
+  }), options)
 }
 
 /** Shared DID identity storage backed by mistlib's content-addressed storage, for a given nodeId. */
@@ -303,7 +321,17 @@ function normalizeMistRuntimeSettings(settings: MistRuntimeSettings): Required<M
   }
 }
 
+/** The node id a caller that passed none should fall back to. The stored DID comes first because it
+ * is what p2p initializes the runtime with: picking anything else here would initialize mistlib
+ * under a second node id whenever a storage call wins the race against settings/DID load, and the
+ * later p2p init would then have to tear that identity down mid-session. */
 function storedRuntimeNodeId(): string {
+  try {
+    const did = loadStoredDidIdentity()?.did.trim()
+    if (did) return did
+  } catch {
+    // localStorage unavailable (or an unreadable identity record): fall through to the legacy id.
+  }
   try {
     return globalThis.localStorage?.getItem('tc-storage-node-id-v1')?.trim() ?? ''
   } catch {
