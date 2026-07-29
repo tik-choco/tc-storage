@@ -30,6 +30,19 @@ export type LoadEncryptedBundleOptions = {
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 export const mistStorageMaxCapacityMb = 256 * 1024
+/**
+ * Nostr signaling discovery namespace shared by every tik-choco app: two
+ * peers only find each other when both `inviteSalt` and `inviteCode` match,
+ * so this MUST equal `MIST_INVITE_SALT`/`MIST_INVITE_CODE` in
+ * protocol/docs/data-contracts/reference/mistSignaling.ts exactly, or this
+ * app silently splits into its own empty-room island. Duplicated here (not
+ * imported) because this app vendors mistlib-wasm directly under
+ * src/vendor/ instead of going through the shared wrapper package, and is
+ * not one of the apps protocol/scripts/sync-vendored.mjs distributes
+ * mistSignaling.ts to -- so there is no automated drift check on this pair.
+ */
+const mistInviteSalt = 'tik-choco-v1'
+const mistInviteCode = 'tik-choco-public-v1'
 const verifyStorageAddEnabled =
   typeof import.meta.env !== 'undefined' &&
   import.meta.env.VITE_VERIFY_MIST_STORAGE === 'true'
@@ -90,7 +103,7 @@ export function ensureMistRuntimeInitialized(
     storageWarn('mist runtime re-initialized for the same node id; peers must re-learn this node', { reason, nodeId: shortRuntimeValue(runtime.nodeId) })
   }
   storageLog('mist runtime init start', { reason, force: Boolean(options.force), nodeId: shortRuntimeValue(runtime.nodeId) })
-  const initialized = mist.init_with_config(runtime.nodeId, JSON.stringify({ signaling: { mode: 'nostr', nostr: { relays: [] } } }))
+  const initialized = mist.init_with_config(runtime.nodeId, JSON.stringify({ signaling: { mode: 'nostr', nostr: { relays: [], inviteSalt: mistInviteSalt, inviteCode: mistInviteCode } } }))
   if (!initialized) {
     // Marking a failed init as done would make every later storage_get fail with no path to
     // recovery (the init is skipped for the same node id); reset instead so the next call retries.

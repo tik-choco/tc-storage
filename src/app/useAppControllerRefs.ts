@@ -1,5 +1,6 @@
-import { useRef } from 'preact/hooks'
-import type { RequestKeyEntry } from './appAccessActions.js'
+import { useRef, useState } from 'preact/hooks'
+import { loadFolderAccessGrants } from '../folder/folderAccessGrants.js'
+import type { HandledAccessRequest, RequestKeyEntry } from './appAccessActions.js'
 import type { BrowserDragItem, FolderAccessMode, PendingShare } from './appTypes.js'
 import type { FileContentFailure, FileContentPreloadQueue, FolderStateAnnouncement } from './appControllerTypes.js'
 import type { StorageSnapshot } from '../storage/domain.js'
@@ -40,13 +41,18 @@ export function useAppControllerRefs<TNetwork>(options: AppControllerRefsOptions
   const autoImportInFlightRef = useRef<Set<string>>(new Set())
   const helloResponseAtRef = useRef<Record<string, number>>({})
   const accessRequestKeysRef = useRef<Record<string, RequestKeyEntry>>({})
+  const handledAccessRequestsRef = useRef<Record<string, HandledAccessRequest>>({})
+  // Approvals survive reloads (unlike the in-memory request bookkeeping above), so read them back
+  // once on mount -- useState's lazy initializer keeps this off the per-render path.
+  const [initialFolderAccessGrants] = useState(loadFolderAccessGrants)
+  const folderAccessGrantsRef = useRef(initialFolderAccessGrants)
   const dragItemRef = useRef<BrowserDragItem | null>(null)
   const dragItemsRef = useRef<BrowserDragItem[]>([])
 
   return {
     accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
-    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
-    folderStateAnnouncementsRef,
+    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderAccessGrantsRef, folderAccessModesRef, folderKeysRef,
+    folderStateAnnouncementsRef, handledAccessRequestsRef,
     helloResponseAtRef, importKeysRef, networkRef, pendingSharesRef, settingsRef, snapshotRef,
     syncInFlightRef, syncSignaturesRef, syncTimersRef,
   }

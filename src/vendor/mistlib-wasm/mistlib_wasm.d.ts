@@ -1,6 +1,52 @@
 /* tslint:disable */
 /* eslint-disable */
 
+/**
+ * Delivery guarantee for `send_message`, mapping onto the underlying WebRTC
+ * data channel configuration.
+ */
+export enum Delivery {
+    /**
+     * Arrives, and in order.
+     */
+    Reliable = 0,
+    /**
+     * May be dropped, but never arrives out of order.
+     */
+    UnreliableOrdered = 1,
+    /**
+     * May be dropped or reordered. Lowest latency.
+     */
+    Unreliable = 2,
+}
+
+/**
+ * Event ids passed as the first argument of the `register_event_callback`
+ * callback. Media events are numbered separately, see [`MistMediaEvent`].
+ */
+export enum MistEvent {
+    Raw = 0,
+    Overlay = 1,
+    Neighbors = 2,
+    AoiEntered = 3,
+    AoiLeft = 4,
+    PeerConnected = 5,
+    PeerDisconnected = 6,
+    AoiNodes = 7,
+    RoomJoined = 8,
+    RoomJoinFailed = 9,
+    RoomLeft = 10,
+}
+
+/**
+ * Event ids passed to the `register_media_event_callback` callback. Numbered
+ * from 100 so they never collide with [`MistEvent`].
+ */
+export enum MistMediaEvent {
+    TrackAdded = 100,
+    TrackRemoved = 101,
+}
+
 export function get_all_nodes(): string;
 
 export function get_all_nodes_in_room(room_id: string): string;
@@ -126,23 +172,23 @@ export interface InitOutput {
     readonly send_message_in_room: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly set_config: (a: number, b: number) => number;
     readonly set_local_track_enabled: (a: number, b: number, c: number) => [number, number];
+    readonly storage_kv_delete: (a: number, b: number) => any;
+    readonly storage_kv_get: (a: number, b: number) => any;
+    readonly storage_kv_set: (a: number, b: number, c: any) => any;
     readonly unpublish_local_track: (a: number, b: number) => [number, number];
     readonly update_position_in_room: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly leave_room: () => void;
     readonly update_position: (a: number, b: number, c: number) => void;
-    readonly storage_kv_delete: (a: number, b: number) => any;
-    readonly storage_kv_get: (a: number, b: number) => any;
-    readonly storage_kv_set: (a: number, b: number, c: any) => any;
-    readonly wasm_bindgen__closure__destroy__h0a994dd3adbad99f: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__h0a12c93303875fcf: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__hf1eac46c7b14bbfe: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__hd9b9648ddf6074bf: (a: number, b: number) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hd6780872556661f6: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h592d43f707b8155b: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h0ab1262f5a99cee2: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h0ab1262f5a99cee2_1: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h0ab1262f5a99cee2_2: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h0ab1262f5a99cee2_3: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h0ab1262f5a99cee2_4: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h4ef299e1a41eb975: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h4ef299e1a41eb975_1: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h4ef299e1a41eb975_2: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h4ef299e1a41eb975_3: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h4ef299e1a41eb975_4: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__h56de3da8990075a8: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

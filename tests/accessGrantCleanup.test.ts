@@ -22,7 +22,9 @@ test('shared-approval grant proof clears the request on other approvers', async 
   }]
   const actions = createAccessActions({
     accessRequestKeysRef: { current: {} },
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: { [folder.id]: 'shared-approval' } },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: { [folder.id]: folderSecret } },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {},
@@ -90,7 +92,9 @@ test('owner-only grant proof from another shared holder does not clear owner req
   }]
   const actions = createAccessActions({
     accessRequestKeysRef: { current: {} },
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: { [folder.id]: 'approval' } },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: { [folder.id]: folderSecret } },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {},
@@ -152,7 +156,9 @@ test('shared-approval denial does not cancel the waiting invite', () => {
   const accessRequestKeysRef = { current: { 'request-a': entry, [`tc-storage-main:folder:${fixedFolderId}`]: entry } }
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: {} },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {},
@@ -211,7 +217,9 @@ test('folder access denied clears the waiting fixed invite on the requester', ()
   let noticeText = ''
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: {} },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {},

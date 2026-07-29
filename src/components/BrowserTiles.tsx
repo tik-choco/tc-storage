@@ -127,8 +127,8 @@ export function PendingFolderShareTile(props: {
   const failed = props.progress?.phase === 'failed'
   const statusLabel = (active || failed) && props.progress
     ? props.progress.label
-    : props.share.cid ? (props.busy ? '読み込み中' : '読み込み待ち') : '承認待ち'
-  const detailLabel = props.share.cid ? '共有待ち' : 'リクエスト中'
+    : props.share.cid ? (props.busy ? '読み込み中' : '読み込み待ち') : props.share.accessGranted ? '共有データ待ち' : '承認待ち'
+  const detailLabel = props.share.cid ? '共有待ち' : props.share.accessGranted ? '承認済み' : 'リクエスト中'
 
   return (
     <div class={`tile-card pending-folder-tile ${active ? 'share-receiving' : ''}`} role="listitem">

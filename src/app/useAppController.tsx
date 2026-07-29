@@ -68,9 +68,13 @@ export function useAppController() {
   const fileRows = useMemo(() => sortBrowserFiles(filterByName(currentFolder ? filesInFolder(snapshot, currentFolder.id) : [], queryText), browserSortMode), [browserSortMode, currentFolder, queryText, snapshot])
   const pendingFolderShares = useMemo(() => {
     if (currentFolderId !== null) return []
-    const folderShares = pendingShares.filter((share) => share.autoImport && share.type === 'folder-share')
+    // Holding the folder key means the owner already approved us; the row is then waiting for the
+    // shared data itself (the owner may not have published a cid yet), not for an approval.
+    const folderShares = pendingShares
+      .filter((share) => share.autoImport && share.type === 'folder-share')
+      .map((share) => ({ ...share, accessGranted: Boolean(share.folderId && folderKeys[share.folderId]) }))
     return queryText ? filterByName(folderShares.map((share) => ({ ...share, name: share.folderName ?? 'Shared folder' })), queryText) : folderShares
-  }, [currentFolderId, pendingShares, queryText])
+  }, [currentFolderId, folderKeys, pendingShares, queryText])
   const shareProfile: ShareProfile = useMemo(() => ({ name: settings.profileName }), [settings.profileName])
   const currentFolderKey = currentFolder ? folderKeys[currentFolder.id] ?? '' : ''
   const folderPanelPeers = folderPanelFolder ? folderPeers[folderPanelFolder.id] ?? [] : []
@@ -95,8 +99,8 @@ export function useAppController() {
   const network = useMistShare(settings, roomIds, useCallback((envelope: ShareEnvelope) => envelopeHandlerRef.current(envelope), []))
   const {
     accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
-    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderAccessModesRef, folderKeysRef,
-    folderStateAnnouncementsRef,
+    fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderAccessGrantsRef, folderAccessModesRef, folderKeysRef,
+    folderStateAnnouncementsRef, handledAccessRequestsRef,
     helloResponseAtRef, importKeysRef, networkRef, pendingSharesRef, settingsRef, snapshotRef,
     syncInFlightRef, syncSignaturesRef, syncTimersRef,
   } = useAppControllerRefs({ fileContentCache, fileShareKeys, folderAccessModes, folderKeys, importKeys, network, pendingShares, settings, snapshot })
@@ -106,8 +110,10 @@ export function useAppController() {
   const folderSync = createFolderSyncActions({ ensureFolderFilesStored: fileContent.ensureFolderFilesStored, folderKeysRef, folderStateAnnouncementsRef, hasUntrustedFolderContent: fileContent.hasUntrustedFolderContent, networkRef, setNotice, setSnapshot, settingsRef, snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef })
   const access = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef,
     folderAccessModesRef,
     folderKeysRef,
+    handledAccessRequestsRef,
     networkRef,
     openFolderAccessRequests: (folderId) => {
       setFolderPanelFolderId(folderId)
@@ -125,7 +131,7 @@ export function useAppController() {
     settingsRef,
     snapshotRef,
   })
-  const shareImport = createShareImportActions({ accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, clearFolderSyncTimer: folderSync.clearFolderSyncTimer, importKeys, materializeFolderBundleFiles: fileContent.materializeFolderBundleFiles, pendingSharesRef, rememberFolderPeer: peerActions.rememberFolderPeer, setBusy, setCurrentFolderId, setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setImportKeys, setNotice, setPendingShares, setShareImportProgress, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef })
+  const shareImport = createShareImportActions({ accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, clearFolderSyncTimer: folderSync.clearFolderSyncTimer, importKeys, materializeFolderBundleFiles: fileContent.materializeFolderBundleFiles, networkRef, pendingSharesRef, rememberFolderPeer: peerActions.rememberFolderPeer, setBusy, setCurrentFolderId, setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setImportKeys, setNotice, setPendingShares, setShareImportProgress, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef })
   const panel = createPanelActions({ previewFiles, profileImageFiles, selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderNameDraft, setFolderPanelFolderId, setFolderPanelMode, setFolderPanelOpen, setImportKeys, setJoinedRooms, setNotice, setPendingShares, setPopoverPositions, setProfileOpen, setSelectedFileId, setSettings, setSettingsOpen, settings, settingsDraft })
   const envelope = createEnvelopeActions({ announceSharedFolders: folderSync.announceSharedFolders, autoImportCidsRef, autoImportFolderShare: shareImport.autoImportFolderShare, autoImportInFlightRef, autoImportLinkedShare: shareImport.autoImportLinkedShare, currentFolderId, detailFileId, folderKeysRef, folderPanelFolderId, handleFileContentRepairRequest: fileContent.handleFileContentRepairRequest, handleFolderAccessDenied: access.handleFolderAccessDenied, handleFolderAccessGrant: access.handleFolderAccessGrant, handleFolderAccessRequest: access.handleFolderAccessRequest, helloResponseAtRef, importKeysRef, pendingSharesRef, rememberFolderPeer: peerActions.rememberFolderPeer, scheduleFolderSync: folderSync.scheduleFolderSync, selectedFileId, setCurrentFolderId, setDetailFileId, setExpandedPreviewOpen, setFolderKeys, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setPendingShares, setSelectedFileId, setSnapshot, snapshotRef })
   envelopeHandlerRef.current = envelope.handleEnvelope
