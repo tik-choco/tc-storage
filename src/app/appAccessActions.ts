@@ -5,6 +5,7 @@ import type { FolderRecord, StorageSnapshot } from '../storage/domain.js'
 import { describeError } from '../util/errors.js'
 import { isEd25519DidKey } from '../crypto/didIdentity.js'
 import { folderAccessGrantProof, matchesFolderAccessGrantProof, matchesFolderKeyHash } from '../crypto/folderKeyProof.js'
+import { hasFolderAccessGrant, saveFolderAccessGrants, withFolderAccessGrant, type FolderAccessGrants } from '../folder/folderAccessGrants.js'
 import type { AppSettings } from '../storage/localSettings.js'
 import type { ShareEnvelope } from '../p2p/p2p.js'
 
@@ -20,6 +21,15 @@ export type RequestKeyEntry = AccessRequestKey & {
   sentAt?: number
 }
 
+// What we already did with a request id, so a re-broadcast replays that decision instead of
+// asking the user again. `pending` means "already shown once, still undecided". Approvals are
+// *not* tracked here -- they live per node in folderAccessGrants (persisted), since the requester
+// re-mints its requestId on every reload.
+export type HandledAccessRequest = {
+  decision: 'pending' | 'rejected'
+  handledAt: number
+}
+
 // A send can be lost without any error surfacing here (p2p.ts swallows per-peer mist failures
 // and only drops the failed peers), so a pending request is re-broadcast -- with the same
 // requestId, which the receiving side dedupes -- once this cooldown has elapsed without a
@@ -27,9 +37,15 @@ export type RequestKeyEntry = AccessRequestKey & {
 // actually resend.
 export const accessRequestResendCooldownMs = 25_000
 
+// Bound on handledAccessRequestsRef so a peer looping through fresh request ids can't grow it
+// without limit; oldest decisions fall off first.
+export const handledAccessRequestLimit = 64
+
 interface AccessOptions {
   accessRequestKeysRef: MutableRef<Record<string, RequestKeyEntry>>
+  folderAccessGrantsRef: MutableRef<FolderAccessGrants>
   folderAccessModesRef: MutableRef<Record<string, FolderAccessMode>>
+  handledAccessRequestsRef: MutableRef<Record<string, HandledAccessRequest>>
   folderKeysRef: MutableRef<Record<string, string>>
   networkRef: MutableRef<MistShare>
   openFolderAccessRequests: (folderId: string) => void
@@ -44,12 +60,17 @@ interface AccessOptions {
 
 export function createAccessActions(options: AccessOptions) {
   const {
-    accessRequestKeysRef, folderAccessModesRef, folderKeysRef, networkRef, openFolderAccessRequests, setFolderAccessRequests,
+    accessRequestKeysRef, folderAccessGrantsRef, folderAccessModesRef, folderKeysRef, handledAccessRequestsRef, networkRef, openFolderAccessRequests, setFolderAccessRequests,
     setFolderKeys, setImportKeys, setNotice, setPendingShares, settingsRef, snapshotRef,
   } = options
 
   async function requestFolderAccess(share: PendingShare): Promise<void> {
     if (share.type !== 'folder-share' || !share.folderId) return
+    // Already granted: the pending share stays around until its bundle actually imports (the
+    // owner may not have published a cid yet), so the retry tick keeps calling in here. Without
+    // this guard the request entry is gone -- handleFolderAccessGrant clears it -- and we'd mint
+    // a *new* requestId, which the owner sees as a brand-new approval request every retry tick.
+    if (folderKeysRef.current[share.folderId]) return
     const accessGrantMode: NonNullable<ShareEnvelope['accessGrantMode']> = share.accessGrantMode === 'shared' ? 'shared' : 'owner'
     if (!share.ownerNodeId || !isEd25519DidKey(share.ownerNodeId)) {
       setNotice({ tone: 'error', text: '署名された共有URLではないため、参加リクエストを送れません' })
@@ -129,10 +150,28 @@ export function createAccessActions(options: AccessOptions) {
     if (!folder?.shareEnabled || !folderKey) return
     if (!matchesFolderKeyHash(folder.id, folderKey, envelope.folderKeyHash)) return
     const request = accessRequestFromEnvelope(envelope, folder)
+    // A requester only resends while it is still waiting, so a request from a node we already
+    // approved means our grant never landed (p2p.ts drops per-peer send failures without
+    // surfacing an error) or the requester reloaded and re-minted its request. Either way the
+    // node already holds -- or was meant to hold -- this folder key, so re-grant silently to the
+    // key it is asking with instead of putting the same person in front of the user again.
+    if (hasFolderAccessGrant(folderAccessGrantsRef.current, folder.id, request.nodeId)) {
+      void sendFolderAccessGrant(request, folder, folderKey, { silent: true })
+      return
+    }
+    const handled = handledAccessRequestsRef.current[request.id]
+    if (handled?.decision === 'rejected') {
+      sendFolderAccessDenied(request)
+      return
+    }
     setFolderAccessRequests((current) => [
       request,
       ...current.filter((item) => item.id !== request.id),
     ].slice(0, 24))
+    // Only the first sighting pops the panel open and notifies; later resends of the same
+    // still-undecided request just refresh the row above.
+    if (handled) return
+    rememberHandledAccessRequest(request.id, 'pending')
     openFolderAccessRequests(folder.id)
     setNotice({ tone: 'info', text: `${request.folderName ?? folder.name} への参加リクエストがあります` })
   }
@@ -144,6 +183,13 @@ export function createAccessActions(options: AccessOptions) {
       setNotice({ tone: 'error', text: '承認できる共有フォルダーが見つかりません' })
       return
     }
+    if (!await sendFolderAccessGrant(request, folder, folderKey)) return
+    rememberFolderAccessGrant(folder.id, request.nodeId)
+    setFolderAccessRequests((current) => current.filter((item) => item.id !== request.id))
+    setNotice({ tone: 'success', text: `${request.profile?.name?.trim() || request.nodeId} を承認しました` })
+  }
+
+  async function sendFolderAccessGrant(request: FolderAccessRequest, folder: FolderRecord, folderKey: string, options: { silent?: boolean } = {}): Promise<boolean> {
     try {
       const grant = await encryptFolderKeyForRequest(folderKey, request.publicKey)
       networkRef.current.broadcastShare({
@@ -159,14 +205,21 @@ export function createAccessActions(options: AccessOptions) {
         accessGrantIv: grant.iv,
         accessGrantCipherText: grant.cipherText,
       }, request.roomId)
-      setFolderAccessRequests((current) => current.filter((item) => item.id !== request.id))
-      setNotice({ tone: 'success', text: `${request.profile?.name?.trim() || request.nodeId} を承認しました` })
+      return true
     } catch (error) {
-      setNotice({ tone: 'error', text: describeError(error, '参加承認を送信できませんでした') })
+      if (!options.silent) setNotice({ tone: 'error', text: describeError(error, '参加承認を送信できませんでした') })
+      return false
     }
   }
 
   function rejectFolderAccess(request: FolderAccessRequest): void {
+    rememberHandledAccessRequest(request.id, 'rejected')
+    sendFolderAccessDenied(request)
+    setFolderAccessRequests((current) => current.filter((item) => item.id !== request.id))
+    setNotice({ tone: 'info', text: '参加リクエストを却下しました' })
+  }
+
+  function sendFolderAccessDenied(request: FolderAccessRequest): void {
     networkRef.current.broadcastShare({
       type: 'folder-access-denied',
       clock: snapshotRef.current.clock,
@@ -175,8 +228,19 @@ export function createAccessActions(options: AccessOptions) {
       targetNodeId: request.nodeId,
       requestId: request.requestId,
     }, request.roomId)
-    setFolderAccessRequests((current) => current.filter((item) => item.id !== request.id))
-    setNotice({ tone: 'info', text: '参加リクエストを却下しました' })
+  }
+
+  function rememberFolderAccessGrant(folderId: string, nodeId: string): void {
+    folderAccessGrantsRef.current = withFolderAccessGrant(folderAccessGrantsRef.current, folderId, nodeId)
+    saveFolderAccessGrants(folderAccessGrantsRef.current)
+  }
+
+  function rememberHandledAccessRequest(id: string, decision: HandledAccessRequest['decision']): void {
+    const next = { ...handledAccessRequestsRef.current, [id]: { decision, handledAt: Date.now() } }
+    const entries = Object.entries(next)
+    handledAccessRequestsRef.current = entries.length <= handledAccessRequestLimit
+      ? next
+      : Object.fromEntries(entries.toSorted((a, b) => b[1].handledAt - a[1].handledAt).slice(0, handledAccessRequestLimit))
   }
 
   function handleFolderAccessDenied(envelope: ShareEnvelope): void {
@@ -259,6 +323,9 @@ export function createAccessActions(options: AccessOptions) {
     if (!folder?.shareEnabled || !folderKey) return
     if (folderAccessModesRef.current[folder.id] !== 'shared-approval' && envelope.from !== settingsRef.current.nodeId) return
     if (!matchesFolderAccessGrantProof(folderKey, folder.id, envelope.requestId, envelope.targetNodeId, envelope.accessGrantProof)) return
+    // Someone (possibly us) already granted this node, so a later request from it must not
+    // re-prompt -- the grant's target is the requester.
+    rememberFolderAccessGrant(folder.id, envelope.targetNodeId)
     setFolderAccessRequests((current) => current.filter((request) => (
       request.folderId !== envelope.folderId ||
       request.requestId !== envelope.requestId ||

@@ -20,6 +20,7 @@ interface ShareImportOptions {
   clearFolderSyncTimer: (folderId: string) => void
   importKeys: Record<string, string>
   materializeFolderBundleFiles: FileContentActions['materializeFolderBundleFiles']
+  networkRef?: MutableRef<{ state: { stablePeersByRoom: Record<string, string[]> } }>
   pendingSharesRef: MutableRef<PendingShare[]>
   rememberFolderPeer: (share: PendingShare) => void
   setBusy: SetState<string>
@@ -43,7 +44,7 @@ const failedShareRetryMs = 30_000
 export function createShareImportActions(options: ShareImportOptions) {
   const {
     accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, clearFolderSyncTimer,
-    importKeys, materializeFolderBundleFiles, pendingSharesRef, rememberFolderPeer, setBusy, setCurrentFolderId,
+    importKeys, materializeFolderBundleFiles, networkRef, pendingSharesRef, rememberFolderPeer, setBusy, setCurrentFolderId,
     setDetailFileId, setFileContentCache, setFileShareKeys, setFolderKeys, setImportKeys, setNotice,
     setPendingShares, setShareImportProgress, setSnapshot, settingsRef, snapshotRef, syncSignaturesRef,
   } = options
@@ -162,10 +163,21 @@ export function createShareImportActions(options: ShareImportOptions) {
       publishShareImportProgress(pendingShareKey(share), makeShareImportProgress('failed'))
       rememberShareFailure(share, passphrase)
       syncWarn('storage_get failed for linked share; keeping pending for retry', { ...shareLogDetails(share), error: describeError(error, 'unknown error') })
-      setNotice({ tone: 'info', text: '共有データを待機中です。送り主がオンラインになったら自動的に再試行します' })
+      setNotice(pendingShareRetryNotice(share, error))
     } finally {
       autoImportInFlightRef.current.delete(share.cid)
     }
+  }
+
+  /** A failed fetch doesn't mean the sender is offline: mistlib resolves blocks on its own layer,
+   * so storage_get can fail while the sender is right there in the room (block not replicated
+   * yet, decrypt/parse trouble, ...). Only claim "waiting for the sender" when this share's room
+   * genuinely has no stable peer -- otherwise report what actually failed, so a reachable sender
+   * isn't misreported as offline. */
+  function pendingShareRetryNotice(share: PendingShare, error: unknown): Notice {
+    const stablePeers = networkRef?.current.state.stablePeersByRoom[share.roomId]?.length ?? 0
+    if (stablePeers === 0) return { tone: 'info', text: '共有データを待機中です。送り主がオンラインになったら自動的に再試行します' }
+    return { tone: 'info', text: `共有データをまだ取得できません（${describeError(error, '原因不明')}）。自動的に再試行します` }
   }
 
   function isPendingShareAlreadyImported(share: PendingShare): boolean {

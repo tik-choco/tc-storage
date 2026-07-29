@@ -9,6 +9,9 @@ export type Notice = {
 
 export type PendingShare = ShareEnvelope & {
   autoImport?: boolean
+  // Set on the view model (not persisted) once we hold the folder key: the access request was
+  // approved and the row is only waiting for the shared data to arrive.
+  accessGranted?: boolean
   receivedAt: string
 }
 

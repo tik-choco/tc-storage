@@ -27,7 +27,9 @@ test('folder access grant is accepted only from the owner pinned in the invite',
   const accessRequestKeysRef = { current: { 'request-a': entry, [`tc-storage-main:folder:${fixedFolderId}`]: entry } }
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: folderKeys },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {},
@@ -126,7 +128,9 @@ test('folder access grant marks only the pending invite in the granted room', as
   const accessRequestKeysRef = { current: { 'request-a': entry, [`room-a:folder:${fixedFolderId}`]: entry } }
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: folderKeys },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {},
@@ -184,7 +188,9 @@ test('shared-approval access grant can come from a non-owner shared holder', asy
   const accessRequestKeysRef = { current: { 'request-a': entry, [`tc-storage-main:folder:${fixedFolderId}`]: entry } }
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: folderKeys },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {},

@@ -9,7 +9,9 @@ test('folder access request targets the owner pinned in the fixed invite', async
   const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: {} },
     networkRef: { current: networkStub(broadcasts) },
     openFolderAccessRequests: () => {},
@@ -49,7 +51,9 @@ test('folder access request waits for local DID before recording a request key',
   let notice = ''
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: {} },
     networkRef: { current: networkStub(broadcasts) },
     openFolderAccessRequests: () => {},
@@ -90,7 +94,9 @@ test('folder access request no longer waits for a single active room, since the 
   const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: {} },
     networkRef: { current: networkStub(broadcasts) },
     openFolderAccessRequests: () => {},
@@ -126,7 +132,9 @@ test('folder access request is resent after the cooldown so a lost first send ca
   const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: {} },
     networkRef: { current: networkStub(broadcasts) },
     openFolderAccessRequests: () => {},
@@ -179,7 +187,9 @@ test('shared-approval access request broadcasts to connected shared peers', asyn
   const accessRequestKeysRef = { current: {} as Record<string, RequestKeyEntry> }
   const actions = createAccessActions({
     accessRequestKeysRef,
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: {} },
     networkRef: { current: networkStub(broadcasts) },
     openFolderAccessRequests: () => {},
@@ -222,7 +232,9 @@ test('shared-approval access request is shown to a connected holder with the fol
   let opened = 0
   const actions = createAccessActions({
     accessRequestKeysRef: { current: {} },
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: { [folder.id]: 'shared-approval' } },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: { [folder.id]: folderSecret } },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {
@@ -265,7 +277,9 @@ test('shared-approval access request is ignored when the holder key does not mat
   let opened = 0
   const actions = createAccessActions({
     accessRequestKeysRef: { current: {} },
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: { [folder.id]: 'shared-approval' } },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: { [folder.id]: 'different-secret' } },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {
@@ -308,7 +322,9 @@ test('folder owner ignores access requests targeted at another owner', () => {
   let opened = 0
   const actions = createAccessActions({
     accessRequestKeysRef: { current: {} },
+    folderAccessGrantsRef: { current: {} },
     folderAccessModesRef: { current: {} },
+    handledAccessRequestsRef: { current: {} },
     folderKeysRef: { current: { [folder.id]: folderSecret } },
     networkRef: { current: networkStub() },
     openFolderAccessRequests: () => {
