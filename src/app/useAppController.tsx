@@ -19,6 +19,8 @@ import { createSelectionActions } from './appSelectionActions.js'
 import { createShareImportActions } from './appShareImportActions.js'
 import { createTownBackupInboxActions, townBackupTopic } from './appTownBackupInbox.js'
 import { createTranslationsInboxActions, translationsInboxTopic } from './appTranslationsInbox.js'
+import { createVrsns2CatalogOutboxActions } from './appVrsns2CatalogOutbox.js'
+import { createVrsns2SpaceInboxActions, vrsns2SpaceInboxTopic } from './appVrsns2SpaceInbox.js'
 import { browserSortModeKey, browserViewModeKey, requiresLargeDownloadConfirmation } from './appUtils.js'
 import { readShared, subscribeShared } from '../storage/sharedBus.js'
 import { activeFiles, activeFolders, childFolders, filesInFolder } from '../storage/domain.js'
@@ -182,6 +184,23 @@ export function useAppController() {
     if (existing) booksBackupInbox.importFromBackup(existing)
     return subscribeShared(booksBackupTopic, (record) => booksBackupInbox.importFromBackup(record))
   }, [])
+  // Auto-import tc-vrsns2's (TC Space) catalog snapshot, one file per
+  // avatar/world/object, into a dedicated "TC Space" folder.
+  const vrsns2SpaceInbox = useMemo(() => createVrsns2SpaceInboxActions({ snapshotRef, setSnapshot, settingsRef, folderKeysRef, setFolderKeys, setFileContentCache }), [])
+  useEffect(() => {
+    const existing = readShared(vrsns2SpaceInboxTopic)
+    if (existing) vrsns2SpaceInbox.importFromSpaceInbox(existing)
+    return subscribeShared(vrsns2SpaceInboxTopic, (record) => vrsns2SpaceInbox.importFromSpaceInbox(record))
+  }, [])
+  // Publish this workspace's "TC Space" folder to tc-vrsns2's catalog inbox
+  // (reverse direction of vrsns2SpaceInbox above) whenever the snapshot
+  // changes, debounced like useDriveIndexPublishEffect's shared-bus publish
+  // so a burst of edits collapses into one publish instead of one per change.
+  const vrsns2CatalogOutbox = useMemo(() => createVrsns2CatalogOutboxActions({ snapshotRef, settingsRef, fileContentCacheRef }), [])
+  useEffect(() => {
+    const timer = window.setTimeout(() => void vrsns2CatalogOutbox.publishCatalogOutbox(), 1000)
+    return () => window.clearTimeout(timer)
+  }, [snapshot])
   useEffect(() => subscribeOnboardingRequests(() => setOnboardingOpen(true)), [])
   const selection = createSelectionActions({ fileRows, files, folderRows, folders, moveActions, selectedItems, setDeleteRequest, setNotice, setSelectedItems })
   const dragDrop = createDragDropActions({ announceFolderChange: folderSync.announceFolderChange, browserViewMode, currentFolderId, dragItemRef, dragItemsRef, moveActions, scheduleFolderSync: folderSync.scheduleFolderSync, selectedItems, setDragActive, setDragItem, setDropTargetFolderId, setNotice, setReorderTarget, setSelectedItems, setSnapshot, settings, snapshotRef, uploadFiles: fileActions.uploadFiles })

@@ -30,13 +30,13 @@ export const send_message: (a: number, b: number, c: number, d: number, e: numbe
 export const send_message_in_room: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
 export const set_config: (a: number, b: number) => number;
 export const set_local_track_enabled: (a: number, b: number, c: number) => [number, number];
-export const storage_kv_delete: (a: number, b: number) => any;
-export const storage_kv_get: (a: number, b: number) => any;
-export const storage_kv_set: (a: number, b: number, c: any) => any;
 export const unpublish_local_track: (a: number, b: number) => [number, number];
 export const update_position_in_room: (a: number, b: number, c: number, d: number, e: number) => [number, number];
 export const leave_room: () => void;
 export const update_position: (a: number, b: number, c: number) => void;
+export const storage_kv_delete: (a: number, b: number) => any;
+export const storage_kv_get: (a: number, b: number) => any;
+export const storage_kv_set: (a: number, b: number, c: any) => any;
 export const wasm_bindgen__closure__destroy__h0a12c93303875fcf: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__hf1eac46c7b14bbfe: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__hd9b9648ddf6074bf: (a: number, b: number) => void;

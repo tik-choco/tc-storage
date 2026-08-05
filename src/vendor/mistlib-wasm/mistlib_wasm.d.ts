@@ -172,13 +172,13 @@ export interface InitOutput {
     readonly send_message_in_room: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly set_config: (a: number, b: number) => number;
     readonly set_local_track_enabled: (a: number, b: number, c: number) => [number, number];
-    readonly storage_kv_delete: (a: number, b: number) => any;
-    readonly storage_kv_get: (a: number, b: number) => any;
-    readonly storage_kv_set: (a: number, b: number, c: any) => any;
     readonly unpublish_local_track: (a: number, b: number) => [number, number];
     readonly update_position_in_room: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly leave_room: () => void;
     readonly update_position: (a: number, b: number, c: number) => void;
+    readonly storage_kv_delete: (a: number, b: number) => any;
+    readonly storage_kv_get: (a: number, b: number) => any;
+    readonly storage_kv_set: (a: number, b: number, c: any) => any;
     readonly wasm_bindgen__closure__destroy__h0a12c93303875fcf: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__hf1eac46c7b14bbfe: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__hd9b9648ddf6074bf: (a: number, b: number) => void;
