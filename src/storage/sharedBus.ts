@@ -38,6 +38,7 @@ export type SharedAppName =
   | "tc-town"
   | "tc-travel"
   | "tc-vrm-viewer"
+  | "tc-vrsns2"
   | "tc-books"
   | "tc-lingo"
   | "tc-presenter";

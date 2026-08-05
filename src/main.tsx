@@ -15,6 +15,6 @@ writeAppManifest({
   app: 'tc-storage',
   busVersion: BUS_VERSION,
   publishes: ['drive-index', 'pdf-viewer-inbox', 'note-inbox'],
-  consumes: ['translations-inbox', 'folder-export', 'storage-drive-inbox', 'note-doc-index', 'books-backup'],
+  consumes: ['translations-inbox', 'folder-export', 'storage-drive-inbox', 'note-doc-index', 'town-backup', 'books-backup', 'vrsns2-space-inbox'],
   reads: [],
 })
