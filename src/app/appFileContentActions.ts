@@ -12,6 +12,7 @@ import { nearestSharedAncestorFolder, shortLogValue, syncLog, syncWarn } from '.
 import type { AppSettings } from '../storage/localSettings.js'
 import type { ShareEnvelope } from '../p2p/p2p.js'
 import { createZipBlob, dataUrlToBytes } from '../util/zip.js'
+import { sha256Hex } from '../crypto/crypto.js'
 
 type DownloadTarget = Pick<FileRecord, 'id' | 'name'>
 type FileContentCandidate = { cid: string; passphrase: string; source: string }
@@ -28,6 +29,8 @@ const failedContentRetryMs = 30_000
 const previewPreloadConcurrency = 4
 
 interface FileContentOptions {
+  hasEscrowContent?: (file: FileRecord) => boolean
+  loadEscrowContent?: (file: FileRecord) => Promise<string>
   failDownloadProgress: (requestId: number) => void
   failFileLoadProgress: (fileId: string) => void
   fileContentCacheRef: MutableRef<Record<string, string>>
@@ -54,6 +57,7 @@ interface FileContentOptions {
 }
 
 export function createFileContentActions(options: FileContentOptions): FileContentActions {
+  const loadEscrowContent = options.loadEscrowContent
   const {
     failDownloadProgress, failFileLoadProgress, fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef,
     fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, finishDownloadProgress, finishFileLoadProgress, folderKeysRef,
@@ -115,42 +119,57 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     return { ...bundle, files }
   }
 
+  const escrowCacheKey = (file: FileRecord) => JSON.stringify([file.id, file.checksum, file.size])
+  const previewCached = (file: FileRecord) => file.dataUrl ?? fileContentCacheRef.current[optionsForEscrow(file) ? escrowCacheKey(file) : file.id]
+
   async function ensureFileContent(file: FileRecord, options: { suppressRepairRequest?: boolean; trackProgress?: boolean } = {}): Promise<FileRecord> {
+    const escrowContent = optionsForEscrow(file)
+    const loadKey = escrowContent ? escrowCacheKey(file) : file.id
     const cached = file.dataUrl ?? fileContentCacheRef.current[file.id]
-    if (cached) {
+    if (cached && (!escrowContent || await verifyEscrowData(file, cached))) {
+      if (escrowContent && !fileContentCacheRef.current[loadKey]) setFileContentCache((current) => ({ ...current, [loadKey]: cached }))
       syncLog('file content cache hit', { fileId: file.id, fileName: file.name, hasRecordDataUrl: Boolean(file.dataUrl), hasMemoryCache: Boolean(fileContentCacheRef.current[file.id]) })
       return { ...file, dataUrl: cached }
     }
     const progressFileId = options.trackProgress ? startFileLoadProgress(file) : ''
-    const loading = fileContentLoadsRef.current[file.id]
+    const loading = fileContentLoadsRef.current[loadKey]
     try {
       if (loading) {
         syncLog('file content load joined existing request', { fileId: file.id, fileName: file.name })
         const dataUrl = await loading
+        if (escrowContent) {
+          const current = snapshotRef.current.files.find((item) => item.id === file.id && !item.deletedAt)
+          if (!current || current.checksum !== file.checksum || current.size !== file.size || !await verifyEscrowData(file, dataUrl)) throw new Error('File changed or checksum mismatch during escrow download')
+        }
         if (progressFileId) finishFileLoadProgress(progressFileId)
         return { ...file, dataUrl }
       }
       const candidates = fileContentCandidates(file)
       const folderBundleCandidate = folderBundleContentCandidate(file)
       syncLog('file content resolution planned', fileContentPlanDetails(file, candidates, folderBundleCandidate))
-      if (candidates.length === 0 && !folderBundleCandidate) throw new Error(`${file.name} のCIDまたは復号キーがありません`)
-      const promise = candidates.length > 0
-        ? loadFileContentFromCandidates(file, candidates).catch(async (error) => {
+      if (candidates.length === 0 && !folderBundleCandidate && !escrowContent) throw new Error(`${file.name} のCIDまたは復号キーがありません`)
+      const normal = candidates.length > 0
+        ? loadFileContentFromCandidates(file, candidates, escrowContent).catch(async (error) => {
           if (!folderBundleCandidate) throw error
           syncWarn('file content candidates failed; trying parent folder bundle', { fileId: file.id, fileName: file.name, folderCid: shortLogValue(folderBundleCandidate.cid), error: describeError(error, 'unknown error') })
-          return loadFileContentFromFolderBundle(file, folderBundleCandidate.cid, folderBundleCandidate.passphrase, attemptedCandidateKeys(candidates))
+          return loadFileContentFromFolderBundle(file, folderBundleCandidate.cid, folderBundleCandidate.passphrase, attemptedCandidateKeys(candidates), escrowContent)
         })
-        : loadFileContentFromFolderBundle(file, folderBundleCandidate!.cid, folderBundleCandidate!.passphrase, new Set())
-      fileContentLoadsRef.current[file.id] = promise
+        : folderBundleCandidate ? loadFileContentFromFolderBundle(file, folderBundleCandidate.cid, folderBundleCandidate.passphrase, new Set(), escrowContent) : Promise.reject(new Error('Normal CID content unavailable'))
+      const promise = escrowContent ? normal.catch(() => loadEscrowContent!(file)) : normal
+      fileContentLoadsRef.current[loadKey] = promise
       try {
         const dataUrl = await promise
         clearContentFailure(file)
-        setFileContentCache((current) => ({ ...current, [file.id]: dataUrl }))
+        if (escrowContent) {
+          const current = snapshotRef.current.files.find((item) => item.id === file.id && !item.deletedAt)
+          if (!current || current.checksum !== file.checksum || current.size !== file.size || !await verifyEscrowData(file, dataUrl)) throw new Error('File changed or checksum mismatch during escrow download')
+        }
+        setFileContentCache((current) => ({ ...current, [file.id]: dataUrl, ...(escrowContent ? { [loadKey]: dataUrl } : {}) }))
         syncLog('file content cached for preview', { fileId: file.id, fileName: file.name, bytes: dataUrlByteLength(dataUrl) })
         if (progressFileId) finishFileLoadProgress(progressFileId)
         return { ...file, dataUrl }
       } finally {
-        delete fileContentLoadsRef.current[file.id]
+        if (fileContentLoadsRef.current[loadKey] === promise) delete fileContentLoadsRef.current[loadKey]
       }
     } catch (error) {
       if (progressFileId) failFileLoadProgress(progressFileId)
@@ -161,8 +180,14 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     }
   }
 
+  function optionsForEscrow(file: FileRecord): boolean { return Boolean(options.hasEscrowContent?.(file) && options.loadEscrowContent) }
+
+  async function verifyEscrowData(file: FileRecord, dataUrl: string): Promise<boolean> {
+    try { const bytes = dataUrlToBytes(dataUrl); return bytes.length === file.size && await sha256Hex(bytes) === file.checksum } catch { return false }
+  }
+
   function preloadFileContent(file: FileRecord): void {
-    if (file.dataUrl || fileContentCacheRef.current[file.id] || fileContentLoadsRef.current[file.id] || !canResolveFileContent(file)) return
+    if (previewCached(file) || fileContentLoadsRef.current[optionsForEscrow(file) ? escrowCacheKey(file) : file.id] || !canResolveFileContent(file)) return
     if (isContentFailureCoolingDown(file)) {
       syncLog('preview preload skipped: previous content failure cooling down', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
       return
@@ -210,7 +235,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   }
 
   function startPreviewPreload(file: FileRecord): Promise<void> {
-    if (file.dataUrl || fileContentCacheRef.current[file.id] || fileContentLoadsRef.current[file.id] || !canResolveFileContent(file)) return Promise.resolve()
+    if (previewCached(file) || fileContentLoadsRef.current[optionsForEscrow(file) ? escrowCacheKey(file) : file.id] || !canResolveFileContent(file)) return Promise.resolve()
     if (isContentFailureCoolingDown(file)) {
       syncLog('preview preload skipped: previous content failure cooling down', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
       return Promise.resolve()
@@ -232,7 +257,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     const folder = snapshotRef.current.folders.find((item) => item.id === file.folderId)
     const sharedRoot = nearestSharedAncestorFolder(snapshotRef.current, file.folderId)
     const sharedRootPassphrase = sharedRoot ? folderKeysRef.current[sharedRoot.id] : undefined
-    return Boolean(file.dataUrl || fileContentCacheRef.current[file.id] || (file.lastCid && folderPassphrase) ||
+    return Boolean(options.hasEscrowContent?.(file) || file.dataUrl || fileContentCacheRef.current[file.id] || (file.lastCid && folderPassphrase) ||
       (file.lastCid && sharedRootPassphrase) || ((file.lastShareCid ?? file.lastCid) && filePassphrase) ||
       (folder?.lastCid && folderPassphrase) || (sharedRoot?.lastCid && sharedRootPassphrase))
   }
@@ -374,7 +399,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     ))
   }
 
-  async function loadFileContentFromCandidates(file: FileRecord, candidates: FileContentCandidate[]): Promise<string> {
+  async function loadFileContentFromCandidates(file: FileRecord, candidates: FileContentCandidate[], verifyContent: boolean): Promise<string> {
     let lastError: unknown
     for (const [index, candidate] of candidates.entries()) {
       try {
@@ -382,6 +407,8 @@ export function createFileContentActions(options: FileContentOptions): FileConte
         const bundle = await loadEncryptedFile(candidate.cid, candidate.passphrase, storageRuntimeSettings())
         if (!bundle.file.dataUrl) throw new Error(`${file.name} の本文が共有データに含まれていません`)
         syncLog('storage_get complete for file content', { fileId: file.id, fileName: file.name, cid: shortLogValue(candidate.cid), source: candidate.source, candidateIndex: index + 1, candidateCount: candidates.length, bytes: dataUrlByteLength(bundle.file.dataUrl) })
+        // A rejected body must never become a proof that publication can reuse.
+        if (verifyContent && !await verifyEscrowData(file, bundle.file.dataUrl)) throw new Error('File checksum mismatch')
         rememberResolvedFileCandidate(file, candidate)
         return bundle.file.dataUrl
       } catch (error) {
@@ -392,9 +419,13 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     throw lastError instanceof Error ? lastError : new Error(`${file.name} の本文を取得できませんでした`)
   }
 
-  async function loadFileContentFromFolderBundle(file: FileRecord, folderCid: string, passphrase: string, attemptedCandidates: Set<string>): Promise<string> {
+  async function loadFileContentFromFolderBundle(file: FileRecord, folderCid: string, passphrase: string, attemptedCandidates: Set<string>, verifyContent: boolean): Promise<string> {
     syncLog('storage_get start for parent folder content fallback', { fileId: file.id, fileName: file.name, folderCid: shortLogValue(folderCid) })
-    const bundle = await materializeFolderBundleFiles(await loadEncryptedFolder(folderCid, passphrase, storageRuntimeSettings()), passphrase)
+    const loadedBundle = await loadEncryptedFolder(folderCid, passphrase, storageRuntimeSettings())
+    const candidateFile = loadedBundle.files.find((item) => item.id === file.id)
+    // Validate inline bytes before materialization caches them or stores a legacy CID.
+    if (verifyContent && candidateFile?.dataUrl && !await verifyEscrowData(file, candidateFile.dataUrl)) throw new Error('File checksum mismatch')
+    const bundle = await materializeFolderBundleFiles(loadedBundle, passphrase)
     const bundledFile = bundle.files.find((item) => item.id === file.id)
     if (!bundledFile) throw new Error(`${file.name} がフォルダー共有データに見つかりません`)
     syncLog('parent folder content fallback found file entry', {
@@ -415,7 +446,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     if (bundledFile.lastCid) {
       const candidate = { cid: bundledFile.lastCid, passphrase, source: 'parent-folder-file' }
       if (attemptedCandidates.has(candidateKey(candidate))) throw new Error(`${file.name} の本文CIDは既に同じ復号キーで試行済みです`)
-      const dataUrl = await loadFileContentFromCandidates(file, [candidate])
+      const dataUrl = await loadFileContentFromCandidates(file, [candidate], verifyContent)
       rememberStoredFile({ ...bundledFile, lastCid: bundledFile.lastCid }, bundle.folder, passphrase)
       acceptBundledFileCid(file, bundledFile, bundle, 'parent-folder-file')
       return dataUrl

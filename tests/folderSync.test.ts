@@ -331,3 +331,11 @@ function snapshotWithFolderAndFile() {
   const snapshot = { ...createInitialSnapshot('node-a'), folders: [folder], files: [file] }
   return { file, folder, snapshot }
 }
+
+test('sharedFolderSignature propagates escrow settings and their CRDT stamp', () => {
+  const { folder, snapshot } = snapshotWithFolderAndFile()
+  const changed = { ...snapshot, folders: [stampFolderPatch(folder, { escrow: { mode: 'custom', room: 'mistl-room' } }, '2026-05-17T00:00:01.000Z', 'node-a')] }
+  const restamped = { ...changed, folders: [stampFolderPatch(changed.folders[0], { escrow: { mode: 'custom', room: 'mistl-room' } }, '2026-05-17T00:00:02.000Z', 'node-b')] }
+  assert.notEqual(sharedFolderSignature(snapshot, folder.id), sharedFolderSignature(changed, folder.id))
+  assert.notEqual(sharedFolderSignature(changed, folder.id), sharedFolderSignature(restamped, folder.id))
+})

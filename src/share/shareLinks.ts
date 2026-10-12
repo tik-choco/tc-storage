@@ -23,6 +23,7 @@ type ShareLinkPayload = {
   ownerNodeId?: string
   accessGrantMode?: 'owner' | 'shared'
   folderKeyHash?: string
+  mistl?: string
   senderProfile?: ShareProfile
 }
 
@@ -38,7 +39,7 @@ export function makeFolderShareUrl(folder: FolderRecord, roomId: string, senderP
   if (!isEd25519DidKey(ownerNodeId)) throw new Error('フォルダー共有URLには署名用DIDが必要です')
   const trimmedKey = folderKey.trim()
   if (!trimmedKey) throw new Error('フォルダー共有URLにはフォルダーキーの検証情報が必要です')
-  return makeShareUrl({ v: 1, type: 'folder-share', roomId, folderId: folder.id, folderName: folder.name, ownerNodeId, accessGrantMode: folderAccessGrantMode(accessMode), folderKeyHash: folderKeyHash(folder.id, trimmedKey), senderProfile })
+  return makeShareUrl({ v: 1, type: 'folder-share', roomId, folderId: folder.id, folderName: folder.name, ownerNodeId, accessGrantMode: folderAccessGrantMode(accessMode), folderKeyHash: folderKeyHash(folder.id, trimmedKey), ...(folder.escrow?.mode === 'custom' ? { mistl: folder.escrow.room } : folder.escrow?.mode === 'off' ? { mistl: 'off' } : {}), senderProfile })
 }
 
 export function makeFileShareUrl(file: FileRecord, folder: FolderRecord, roomId: string, clock: number, cid: string, key: string, senderProfile: ShareProfile): string {
@@ -94,6 +95,7 @@ export function readShareLink(hash: string): LinkedShare | undefined {
         ownerNodeId: payload.ownerNodeId,
         accessGrantMode: payload.accessGrantMode,
         folderKeyHash: payload.folderKeyHash,
+        mistl: payload.mistl,
         cid: payload.cid,
         senderProfile: payload.senderProfile,
       },
@@ -110,6 +112,7 @@ function isShareLinkPayload(value: unknown): value is ShareLinkPayload {
       payload.v === 1 &&
       (payload.type === 'folder-share' || payload.type === 'file-share') &&
       typeof payload.roomId === 'string' &&
+      (payload.mistl === undefined || payload.mistl === 'off' || typeof payload.mistl === 'string' && /^[A-Za-z0-9_./:-]{1,96}$/.test(payload.mistl)) &&
       (payload.clock === undefined || typeof payload.clock === 'number') &&
       (payload.accessGrantMode === undefined || payload.accessGrantMode === 'owner' || payload.accessGrantMode === 'shared') &&
       (payload.type === 'folder-share'

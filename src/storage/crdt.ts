@@ -9,6 +9,7 @@ const folderFields = [
   'encrypted',
   'shareEnabled',
   'sharedRoomId',
+  'escrow',
   'lastCid',
   'lastSavedAt',
   'lastSharedAt',

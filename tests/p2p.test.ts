@@ -129,6 +129,8 @@ test('configureMistRoom registers the event callback and initializes the mistlib
     register_event_callback() {
       calls.push('register')
     },
+    async join_room_async() {},
+    leave_room_id() {},
   }
 
   configureMistRoom(mist, settings, () => undefined)
@@ -153,6 +155,8 @@ test('configureMistRoom reuses an initialized runtime on reconnect, and re-initi
     register_event_callback() {
       calls.push('register')
     },
+    async join_room_async() {},
+    leave_room_id() {},
   }
 
   configureMistRoom(mist, settings, () => undefined)
@@ -160,16 +164,18 @@ test('configureMistRoom reuses an initialized runtime on reconnect, and re-initi
   // init_with_config, and peers holding the old pubkey for this node id would reject the new one.
   configureMistRoom(mist, settings, () => undefined)
 
-  assert.deepEqual(calls, ['register', 'init:node-reconnect', 'register'])
+  assert.deepEqual(calls, ['register', 'init:node-reconnect'])
 
   configureMistRoom(mist, settings, () => undefined, { forceReinit: true })
 
-  assert.deepEqual(calls.slice(3), ['register', 'init:node-reconnect'])
+  assert.deepEqual(calls.slice(2), ['init:node-reconnect'])
 })
 
 test('joinMistRoom awaits join_room_async then places the node at the room-derived position via update_position_in_room', async () => {
   const calls: string[] = []
   const mist = {
+    register_event_callback() {},
+    leave_room_id() {},
     async join_room_async(roomId: string) {
       calls.push(`join:${roomId}`)
     },
@@ -185,28 +191,15 @@ test('joinMistRoom awaits join_room_async then places the node at the room-deriv
   assert.deepEqual(result.position, positionForSharedRoom('tc-storage-main', 'node-local'))
 })
 
-test('leaveMistRoomId leaves only the given room and swallows teardown errors', () => {
+test('leaveMistRoomId releases only the acquired folder room and swallows teardown errors', async () => {
   const calls: string[] = []
-  leaveMistRoomId(
-    {
-      leave_room_id(roomId: string) {
-        calls.push(roomId)
-      },
-    },
-    'tc-storage-shared',
-  )
+  const mist = { register_event_callback() {}, async join_room_async() {}, update_position_in_room() {}, leave_room_id(id: string) { calls.push(id) } }
+  await joinMistRoom(mist, 'tc-storage-shared', 'node-local')
+  leaveMistRoomId(mist, 'tc-storage-shared')
   assert.deepEqual(calls, ['tc-storage-shared'])
-
-  assert.doesNotThrow(() =>
-    leaveMistRoomId(
-      {
-        leave_room_id() {
-          throw new Error('Room not joined')
-        },
-      },
-      'tc-storage-shared',
-    ),
-  )
+  const failing = { ...mist, leave_room_id() { throw new Error('Room not joined') } }
+  await joinMistRoom(failing, 'tc-storage-shared', 'node-local')
+  assert.doesNotThrow(() => leaveMistRoomId(failing, 'tc-storage-shared'))
 })
 
 test('observeStableMistPeers withholds peers until they survive the warmup window', () => {

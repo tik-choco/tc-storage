@@ -161,3 +161,16 @@ function didFromSeed(seed: number): string {
   bytes.fill(seed)
   return didKeyFromEd25519PublicKey(bytes)
 }
+
+test('escrow invite hints round-trip Custom and Off while Auto is omitted and the key stays private', () => {
+  Object.defineProperty(globalThis, 'location', { configurable: true, value: { href: 'http://localhost/app/' } })
+  const folder = makeFolder({ id: 'folder-fixed', name: 'Shared docs', parentId: null, color: 'teal', roomId: 'room-a', now: '2026-05-21T00:00:00.000Z', nodeId: 'node-a' })
+  for (const escrow of [{mode:'auto',room:''}, {mode:'custom',room:'mistl/custom'}, {mode:'off',room:''}] as const) {
+    const url = makeFolderShareUrl({...folder,escrow}, 'room-a', {name:'Owner'}, ownerDid, folderSecret)
+    const linked = readShareLink(new URL(url).hash)
+    assert.equal(linked?.share.mistl, escrow.mode==='auto' ? undefined : escrow.mode==='off' ? 'off' : escrow.room)
+    assert.equal(linked?.key, '')
+  }
+  const invalid = Buffer.from(JSON.stringify({v:1,type:'folder-share',roomId:'room-a',folderId:folder.id,ownerNodeId:ownerDid,folderKeyHash:folderKeyHash(folder.id,folderSecret),mistl:'bad room'})).toString('base64url')
+  assert.equal(readShareLink('#tc-share='+invalid), undefined)
+})

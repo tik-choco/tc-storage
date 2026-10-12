@@ -136,6 +136,9 @@ function renderFolderPanel(c: AppController) {
           accessRequests={c.folderPanelAccessRequests}
           shareUrl={c.folderShareUrl}
           syncPeers={c.folderPanelPeers}
+          escrowView={c.folderEscrowView}
+          escrowAppRoomIds={c.escrowAppRoomIds}
+          onEscrowChange={(setting) => { if (c.folderPanelFolder) c.configureFolderEscrow(c.folderPanelFolder.id, setting) }}
           onAccessModeChange={(mode) => {
             const folderId = c.folderPanelFolder?.id
             if (folderId) c.setFolderAccessModes((current) => ({ ...current, [folderId]: mode }))

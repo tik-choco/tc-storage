@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'preact/hooks'
+import { useFolderEscrow } from './useFolderEscrow.js'
 import { descendantFolderIds, filterByName, sortBrowserFiles, sortBrowserFolders } from './appHelpers.js'
 import { createAccessActions } from './appAccessActions.js'
 import { createBooksBackupInboxActions, booksBackupTopic } from './appBooksBackupInbox.js'
@@ -58,8 +59,9 @@ export function useAppController() {
   const selectedFile = files.find((file) => file.id === selectedFileId) ?? null
   const detailFile = files.find((file) => file.id === detailFileId) ?? null
   const detailFolder = detailFile ? folders.find((folder) => folder.id === detailFile.folderId) ?? null : null
+  const escrowCallbacksRef = useRef<{ hasContent(file: typeof files[number]): boolean; loadContent(file: typeof files[number]): Promise<string> }>({ hasContent: () => false, loadContent: () => Promise.reject(new Error('Escrow unavailable')) })
   const fileDataUrls = useMemo(() => Object.fromEntries(files.flatMap((file) => {
-    const dataUrl = file.dataUrl ?? fileContentCache[file.id]
+    const dataUrl = file.dataUrl ?? fileContentCache[escrowCallbacksRef.current.hasContent(file) ? JSON.stringify([file.id, file.checksum, file.size]) : file.id]
     return dataUrl ? [[file.id, dataUrl]] : []
   })), [fileContentCache, files])
   const selectedPreviewFile = selectedFile ? { ...selectedFile, dataUrl: fileDataUrls[selectedFile.id] } : null
@@ -98,7 +100,8 @@ export function useAppController() {
 
   const envelopeHandlerRef = useRef<(envelope: ShareEnvelope) => void>(() => {})
   const roomIds = useMemo(() => roomIdsToMaintain(settings.roomId, joinedRooms), [settings.roomId, joinedRooms])
-  const network = useMistShare(settings, roomIds, useCallback((envelope: ShareEnvelope) => envelopeHandlerRef.current(envelope), []))
+  const escrowFlushRef = useRef<() => Promise<void>>(() => Promise.resolve())
+  const network = useMistShare(settings, roomIds, useCallback((envelope: ShareEnvelope) => envelopeHandlerRef.current(envelope), []), () => escrowFlushRef.current())
   const {
     accessRequestKeysRef, autoImportCidsRef, autoImportFailuresRef, autoImportInFlightRef, dragItemRef, dragItemsRef,
     fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderAccessGrantsRef, folderAccessModesRef, folderKeysRef,
@@ -108,7 +111,10 @@ export function useAppController() {
   } = useAppControllerRefs({ fileContentCache, fileShareKeys, folderAccessModes, folderKeys, importKeys, network, pendingShares, settings, snapshot })
 
   const peerActions = createPeerActions({ setFolderPeers, settingsRef })
-  const fileContent = createFileContentActions({ ...transfer, fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderKeysRef, networkRef, setFileContentCache, setNotice, setSnapshot, settingsRef, snapshotRef })
+  const fileContent = createFileContentActions({ ...transfer, hasEscrowContent: (file) => escrowCallbacksRef.current.hasContent(file), loadEscrowContent: (file) => escrowCallbacksRef.current.loadContent(file), fileContentCacheRef, fileContentFailuresRef, fileContentLoadsRef, fileContentPreloadQueueRef, fileContentStorageRef, fileShareKeysRef, folderKeysRef, networkRef, setFileContentCache, setNotice, setSnapshot, settingsRef, snapshotRef })
+  const escrow = useFolderEscrow({ snapshot, folderKeys, pendingShares, roomIds, nodeId: settings.nodeId, connected: network.state.mode === 'mistlib', setSnapshot, ensureFileContent: fileContent.ensureFileContent })
+  escrowCallbacksRef.current = escrow
+  escrowFlushRef.current = () => escrow.flush()
   const folderSync = createFolderSyncActions({ ensureFolderFilesStored: fileContent.ensureFolderFilesStored, folderKeysRef, folderStateAnnouncementsRef, hasUntrustedFolderContent: fileContent.hasUntrustedFolderContent, networkRef, setNotice, setSnapshot, settingsRef, snapshotRef, syncInFlightRef, syncSignaturesRef, syncTimersRef })
   const access = createAccessActions({
     accessRequestKeysRef,
@@ -370,6 +376,9 @@ export function useAppController() {
     folderPanelAccessMode,
     folderPanelAccessRequests,
     folderPanelPeers,
+    folderEscrowView: folderPanelFolder ? escrow.views[folderPanelFolder.id] : undefined,
+    configureFolderEscrow: escrow.configure,
+    escrowAppRoomIds: escrow.appRoomIds,
     folderRows,
     folderShareUrl,
     handleBrowserItemDragLeave: dragDrop.handleBrowserItemDragLeave,
@@ -383,7 +392,7 @@ export function useAppController() {
     importKeys,
     importShare: shareImport.importShare,
     joinedRooms,
-    leaveJoinedRoom: panel.leaveJoinedRoom,
+    leaveJoinedRoom: (roomId: string) => { void escrow.flush(roomId).finally(() => panel.leaveJoinedRoom(roomId)) },
     movePopover: panel.movePopover,
     movePreview: panel.movePreview,
     networkState: network.state,
