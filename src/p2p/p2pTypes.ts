@@ -39,6 +39,7 @@ export type ShareEnvelope = {
   ownerNodeId?: string
   accessGrantMode?: 'owner' | 'shared'
   folderKeyHash?: string
+  mistl?: string
   targetNodeId?: string
   requestId?: string
   accessPublicKey?: string

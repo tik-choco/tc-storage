@@ -14,6 +14,7 @@ export type FolderRecord = {
   encrypted: boolean
   shareEnabled: boolean
   sharedRoomId: string
+  escrow?: { mode: 'auto' | 'custom' | 'off'; room: string }
   lastCid?: string
   lastSavedAt?: string
   lastSharedAt?: string

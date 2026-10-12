@@ -93,6 +93,7 @@ function pickFolderSyncFields(folder: FolderRecord) {
     color: folder.color,
     encrypted: folder.encrypted,
     shareEnabled: folder.shareEnabled,
+    ...(folder.escrow && { escrow: folder.escrow, escrowVersion: folder.fieldVersions?.escrow }),
     deletedAt: folder.deletedAt ?? '',
   }
 }

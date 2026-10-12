@@ -1,6 +1,7 @@
 import { defaultRoomIdValue, type AppSettings } from '../storage/localSettings.js'
 import { ensureMistRuntimeInitialized } from '../storage/mistStorage.js'
 import type { MistModule } from './p2pTypes.js'
+import { folderSyncOwner, mistRuntime } from './mistRuntime.js'
 export type { MistRoomController } from './p2pTypes.js'
 
 /** One-time-per-session runtime setup: registers the event callback and initializes mistlib for `settings.nodeId`. Room membership is handled separately by `joinMistRoom`/`leaveMistRoomId` -- this vendored mistlib build supports joining several rooms concurrently, so there's no single "the room" to join here.
@@ -12,31 +13,33 @@ export type { MistRoomController } from './p2pTypes.js'
  * identity survives. `forceReinit` is reserved for recovery after a failed/broken session, where a
  * fresh engine is worth losing the identity for. */
 export function configureMistRoom(
-  mist: Pick<MistModule, 'init_with_config' | 'register_event_callback'>,
+  mist: Pick<MistModule, 'init_with_config' | 'register_event_callback' | 'join_room_async' | 'leave_room_id'>,
   settings: Pick<AppSettings, 'nodeId'>,
   onEvent: (...events: unknown[]) => void,
   options: { forceReinit?: boolean } = {},
 ): void {
-  mist.register_event_callback(onEvent)
+  const broker = mistRuntime(mist)
+  broker.subscribe(folderSyncOwner, onEvent)
   ensureMistRuntimeInitialized(mist, settings, { force: options.forceReinit === true, reason: 'p2p' })
+  if (options.forceReinit) broker.recover()
 }
 
 /** Joins a single room (concurrently safe with other joined rooms) and places this node at its room-derived position. Awaits `join_room_async` so the session is actually usable before we start reading its neighbors. */
 export async function joinMistRoom(
-  mist: Pick<MistModule, 'join_room_async' | 'update_position_in_room'>,
+  mist: Pick<MistModule, 'join_room_async' | 'update_position_in_room' | 'register_event_callback' | 'leave_room_id'>,
   roomId: string,
   nodeId: string,
 ): Promise<{ position: { x: number; y: number; z: number } }> {
-  await mist.join_room_async(roomId)
+  await mistRuntime(mist).acquire(roomId, folderSyncOwner)
   const position = positionForSharedRoom(roomId, nodeId)
   mist.update_position_in_room(roomId, position.x, position.y, position.z)
   return { position }
 }
 
 /** Leaves a single joined room without tearing down any other joined sessions. */
-export function leaveMistRoomId(mist: Pick<MistModule, 'leave_room_id'>, roomId: string): void {
+export function leaveMistRoomId(mist: Pick<MistModule, 'leave_room_id' | 'register_event_callback' | 'join_room_async'>, roomId: string): void {
   try {
-    mist.leave_room_id(roomId)
+    mistRuntime(mist).release(roomId, folderSyncOwner)
   } catch {
     // Ignore teardown races (e.g. the room was already left).
   }
@@ -48,7 +51,7 @@ export function leaveMistRoomId(mist: Pick<MistModule, 'leave_room_id'>, roomId:
 export function cleanupMist(mist: MistModule | null, timer: number | undefined): void {
   if (timer !== undefined) window.clearInterval(timer)
   try {
-    mist?.leave_room()
+    if (mist) mistRuntime(mist).releaseOwner(folderSyncOwner)
   } catch {
     // Ignore teardown races while the page is closing.
   }

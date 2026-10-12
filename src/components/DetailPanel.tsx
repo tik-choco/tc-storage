@@ -4,6 +4,8 @@ import type { FolderAccessMode, FolderAccessRequest, FolderPanelMode, SyncPeer }
 import type { FolderColor, FolderRecord } from '../storage/domain.js'
 import { dateLabel, shortNode } from '../util/format.js'
 import { ShareQrCode } from './ShareQrCode.js'
+import type { FolderEscrowView } from '../app/folderEscrowController.js'
+import { FolderEscrowSettings } from './FolderEscrowSettings.js'
 
 const folderColors: FolderColor[] = ['teal', 'blue', 'amber', 'rose', 'slate']
 
@@ -14,6 +16,9 @@ export function FolderPanel(props: {
   accessRequests: FolderAccessRequest[]
   shareUrl: string
   syncPeers: SyncPeer[]
+  escrowView?: FolderEscrowView
+  escrowAppRoomIds?: string[]
+  onEscrowChange?: (setting: NonNullable<FolderRecord['escrow']>) => void
   onAccessModeChange: (mode: FolderAccessMode) => void
   onApproveAccess: (request: FolderAccessRequest) => void
   onCopy: (value: string, label: string) => void
@@ -78,6 +83,9 @@ function FolderShareSettings(props: {
   accessRequests: FolderAccessRequest[]
   shareUrl: string
   syncPeers: SyncPeer[]
+  escrowView?: FolderEscrowView
+  escrowAppRoomIds?: string[]
+  onEscrowChange?: (setting: NonNullable<FolderRecord['escrow']>) => void
   onAccessModeChange: (mode: FolderAccessMode) => void
   onApproveAccess: (request: FolderAccessRequest) => void
   onCopy: (value: string, label: string) => void
@@ -100,6 +108,7 @@ function FolderShareSettings(props: {
             <AccessRequests requests={props.accessRequests} onApprove={props.onApproveAccess} onReject={props.onRejectAccess} />
           ) : null}
           <SyncPeers peers={props.syncPeers} />
+          {props.onEscrowChange ? <FolderEscrowSettings key={props.folder.id} folder={props.folder} view={props.escrowView} appRoomIds={props.escrowAppRoomIds ?? []} onChange={props.onEscrowChange} onCopy={props.onCopy} /> : null}
           <label class="check-line">
             <input type="checkbox" checked={props.folder.shareEnabled} onChange={(event) => props.onPatchFolder({ shareEnabled: event.currentTarget.checked })} />
             <span>Shared folder</span>

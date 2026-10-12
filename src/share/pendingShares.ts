@@ -81,6 +81,7 @@ function normalizePendingShare(value: unknown): PendingShare | undefined {
   assignOptionalString(normalized, 'ownerNodeId', share.ownerNodeId)
   if (share.accessGrantMode === 'owner' || share.accessGrantMode === 'shared') normalized.accessGrantMode = share.accessGrantMode
   assignOptionalString(normalized, 'folderKeyHash', share.folderKeyHash)
+  if (share.mistl === 'off' || typeof share.mistl === 'string' && /^[A-Za-z0-9_./:-]{1,96}$/.test(share.mistl)) normalized.mistl = share.mistl
   assignOptionalString(normalized, 'folderSignature', share.folderSignature)
   assignOptionalString(normalized, 'signature', share.signature)
   const senderProfile = normalizeShareProfile(share.senderProfile)

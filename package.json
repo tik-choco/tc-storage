@@ -11,7 +11,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "build:mistlib": "node scripts/fetch-mistlib.mjs",
     "pretest": "node -e \"require('node:fs').rmSync('dist-test',{recursive:true,force:true})\"",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/*.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/*.test.js",
+    "test:escrow": "vitest run src/escrow"
   },
   "dependencies": {
     "@pixiv/three-vrm": "^3.4.2",
@@ -27,6 +28,7 @@
     "@types/node": "^24.12.3",
     "@types/three": "^0.180.0",
     "typescript": "~6.0.2",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "vitest": "^5.0.3"
   }
 }

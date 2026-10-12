@@ -22,7 +22,9 @@ function unionPeerLists(byRoom: Record<string, string[]>): string[] {
   return [...ids]
 }
 
-export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelope: (envelope: ShareEnvelope) => void) {
+export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelope: (envelope: ShareEnvelope) => void, beforeDisconnect?: () => Promise<void>) {
+  const beforeDisconnectRef = useRef(beforeDisconnect)
+  beforeDisconnectRef.current = beforeDisconnect
   const settingsRef = useRef(settings)
   const callbackRef = useRef(onEnvelope)
   const channelsRef = useRef<Record<string, BroadcastChannel>>({})
@@ -252,6 +254,8 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
       p2pLog('mist module loaded; configuring runtime', { connectionSeq, rooms, nodeId: shortLogValue(settingsValue.nodeId), forceReinit })
       configureMistRoom(mist, { nodeId: settingsValue.nodeId }, (...events: unknown[]) => {
         if (connectionSeqRef.current !== connectionSeq || mistRef.current !== mist) return
+        const transportRoom = events[3]
+        if (typeof transportRoom !== 'string' || !roomIdsRef.current.includes(transportRoom)) return
         const timedOutPeer = peerIdFromMistConnectionTimeout(events)
         if (timedOutPeer) {
           p2pWarn('mist peer connection timeout', { peerId: shortLogValue(timedOutPeer) })
@@ -260,7 +264,7 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
           return
         }
         const envelope = parseMistEvent(events)
-        if (envelope) receiveEnvelope(envelope, 'mistlib')
+        if (envelope && envelope.roomId === transportRoom && envelope.from === events[1]) receiveEnvelope(envelope, 'mistlib')
       }, { forceReinit })
 
       const joinOutcomes = await Promise.allSettled(rooms.map((roomId) => joinMistRoom(mist, roomId, settingsValue.nodeId)))
@@ -368,9 +372,13 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
     }
   }, [queueHelloForRoom, receiveEnvelope])
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback((pageHide = false): void => {
+    void (async () => {
     p2pLog('disconnect requested', { nodeId: shortLogValue(settingsRef.current.nodeId), rooms: roomIdsRef.current })
-    connectionSeqRef.current += 1
+    const disconnectSeq = ++connectionSeqRef.current
+    const flushing = beforeDisconnectRef.current?.()
+    if (!pageHide) await flushing?.catch(() => {})
+    if (connectionSeqRef.current !== disconnectSeq) return
     if (reconnectTimerRef.current !== undefined) {
       window.clearTimeout(reconnectTimerRef.current)
       reconnectTimerRef.current = undefined
@@ -390,6 +398,7 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
       stablePeersByRoom: {},
       lastEvent: '切断しました',
     }))
+    })()
   }, [])
 
   /** Joins each newly-added room (concurrently safe with rooms already joined) once mistlib is connected; a no-op while still connecting or offline since `connect()` itself joins every room in `roomIdsRef.current`. */
@@ -441,7 +450,7 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
     const handlePageHide = (event: PageTransitionEvent) => {
       if (!shouldCleanupMistOnPageHide(event)) return
       p2pLog('page hidden permanently; disconnecting mist session')
-      disconnect()
+      void disconnect(true)
     }
     window.addEventListener('pagehide', handlePageHide)
     return () => window.removeEventListener('pagehide', handlePageHide)
