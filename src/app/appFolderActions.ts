@@ -4,9 +4,9 @@ import { descendantFolderIds, nextFolderName } from './appHelpers.js'
 import { folderColors, nearestSharedAncestorFolder } from './appUtils.js'
 import { reserveClipboardWrite, writeReservedClipboard } from '../util/clipboard.js'
 import { stampFilePatch, stampFolderPatch } from '../storage/crdt.js'
-import { addActivity, childFolders, makeFolder, stripFileContent, touchSnapshot, type FileRecord, type FolderRecord, type StorageSnapshot } from '../storage/domain.js'
+import { addActivity, childFolders, makeFolder, touchSnapshot, type FileRecord, type FolderRecord, type StorageSnapshot } from '../storage/domain.js'
 import { describeError } from '../util/errors.js'
-import { folderFilesForSync, foldersForSync, sharedFolderSignature } from '../folder/folderSync.js'
+import { applyStoredFileCids, folderFilesForSync, foldersForSync, sharedFolderSignature } from '../folder/folderSync.js'
 import { generateFolderKey } from '../crypto/folderKeys.js'
 import { isEd25519DidKey } from '../crypto/didIdentity.js'
 import type { AppSettings } from '../storage/localSettings.js'
@@ -48,6 +48,7 @@ interface FolderActionOptions {
   snapshot: StorageSnapshot
   snapshotRef: MutableRef<StorageSnapshot>
   syncSignaturesRef: MutableRef<Record<string, string>>
+  saveEncryptedFolder?: typeof saveEncryptedFolderToMist
 }
 
 export function createFolderActions(options: FolderActionOptions) {
@@ -57,7 +58,7 @@ export function createFolderActions(options: FolderActionOptions) {
     scheduleFolderSync, setBusy, setCurrentFolderId, setDeleteRequest, setDetailFileId, setExpandedPreviewOpen, setFolderKeys,
     setFolderNameDraft, setFolderPanelFolderId, setFolderPanelOpen, setNotice, setProfileOpen,
     setSelectedFileId, setSettings, setSettingsOpen, setSnapshot, settings, shareProfile, snapshot, snapshotRef,
-    syncSignaturesRef,
+    syncSignaturesRef, saveEncryptedFolder = saveEncryptedFolderToMist,
   } = options
 
   function patchCurrentFolder(patch: Partial<FolderRecord>) {
@@ -153,16 +154,15 @@ export function createFolderActions(options: FolderActionOptions) {
       const folderForSave = shareAfterSave ? stampFolderPatch(targetFolder, { shareEnabled: true, sharedRoomId: shareRoomId }, now, settings.nodeId) : targetFolder
       const foldersForSave = foldersForSync(sourceSnapshot, targetFolder.id).map((item) => (item.id === targetFolder.id ? folderForSave : item))
       const filesForSave = await ensureFolderFilesStored(folderForSave, folderFilesForSync(sourceSnapshot, targetFolder.id), passphrase)
-      const cid = await saveEncryptedFolderToMist({ folder: folderForSave, folders: foldersForSave, files: filesForSave, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId })
+      const cid = await saveEncryptedFolder({ folder: folderForSave, folders: foldersForSave, files: filesForSave, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId })
+      const published = markFolderSaved(targetFolder, cid, new Date().toISOString(), shareAfterSave, filesForSave, shareRoomId, passphrase, sharedFolderSignature(sourceSnapshot, targetFolder.id))
+      if (!published) {
+        clipboard?.cancel()
+        scheduleSharedFolderSync(snapshotRef.current.folders.find((f) => f.id === targetFolder.id) ?? targetFolder, 'folder changed during save')
+        return
+      }
       clearFolderSyncTimer(targetFolder.id)
-      const filesForSaveById = new Map(
-        filesForSave
-          .filter((file) => shouldPersistStoredFileForFolder(sourceSnapshot, file, targetFolder.id))
-          .map((file) => [file.id, stripFileContent(file)]),
-      )
-      syncSignaturesRef.current[targetFolder.id] = sharedFolderSignature({ ...sourceSnapshot, folders: sourceSnapshot.folders.map((item) => (item.id === targetFolder.id ? folderForSave : item)), files: sourceSnapshot.files.map((file) => filesForSaveById.get(file.id) ?? file) }, targetFolder.id)
-      markFolderSaved(targetFolder, cid, now, shareAfterSave, filesForSave, shareRoomId)
-      if (shareAfterSave) networkRef.current.broadcastShare({ clock: sourceSnapshot.clock + 1, folderId: targetFolder.id, folderName: targetFolder.name, cid }, shareRoomId)
+      if (shareAfterSave) networkRef.current.broadcastShare({ clock: snapshotRef.current.clock, folderId: published.id, folderName: published.name, cid }, shareRoomId)
       const copied = shareAfterSave ? await writeReservedClipboard(makeFolderShareUrl(targetFolder, shareRoomId, shareProfile, settings.nodeId, passphrase, folderAccessModes[targetFolder.id] ?? 'approval'), clipboard) : false
       setNotice({ tone: 'success', text: shareAfterSave ? copied ? '共有URLをコピーしました' : '共有URLを作成しました' : '暗号化してmistlibへ保存しました' })
     } catch (error) {
@@ -177,18 +177,20 @@ export function createFolderActions(options: FolderActionOptions) {
     setSettings((current) => (current.roomId === roomId && current.autoConnect ? current : { ...current, roomId, autoConnect: true }))
   }
 
-  function markFolderSaved(folder: FolderRecord, cid: string, now: string, shared: boolean, storedFiles: FileRecord[], sharedRoomId: string) {
+  function markFolderSaved(folder: FolderRecord, cid: string, now: string, shared: boolean, storedFiles: FileRecord[], sharedRoomId: string, passphrase: string, sourceSignature: string): FolderRecord | undefined {
+    let accepted: FolderRecord | undefined
     setSnapshot((current) => {
-      const patch = { lastCid: cid, lastSavedAt: now, lastSharedAt: shared ? now : folder.lastSharedAt, shareEnabled: shared ? true : folder.shareEnabled, sharedRoomId }
-      const foldersNext = current.folders.map((item) => (item.id === folder.id ? stampFolderPatch(item, patch, now, settings.nodeId) : item))
-      const storedFilesById = new Map(
-        storedFiles
-          .filter((file) => shouldPersistStoredFileForFolder(current, file, folder.id))
-          .map((file) => [file.id, stripFileContent(file)]),
-      )
-      const filesNext = current.files.map((item) => storedFilesById.get(item.id) ?? item)
-      return touchSnapshot(addActivity({ ...current, folders: foldersNext, files: filesNext }, { actorNodeId: settings.nodeId, folderId: folder.id, action: shared ? 'folder.share' : 'folder.save', detail: shared ? `${folder.name} をmistlib共有` : `${folder.name} を暗号化保存` }, now), settings.nodeId)
+      if (folderKeysRef.current[folder.id] !== passphrase) return current
+      const stored = storedFiles.filter((file) => shouldPersistStoredFileForFolder(current, file, folder.id))
+      const withCids = applyStoredFileCids(current, stored, now, settings.nodeId)
+      const currentFolder = current.folders.find((f) => f.id === folder.id && !f.deletedAt)
+      if (!currentFolder || sharedFolderSignature(current, folder.id) !== sourceSignature) return withCids
+      accepted = stampFolderPatch(currentFolder, { lastCid: cid, lastSavedAt: now, ...(shared ? { lastSharedAt: now, shareEnabled: true, sharedRoomId } : {}) }, now, settings.nodeId)
+      const next = touchSnapshot(addActivity({ ...withCids, folders: withCids.folders.map((f) => f.id === folder.id ? accepted! : f) }, { actorNodeId: settings.nodeId, folderId: folder.id, action: shared ? 'folder.share' : 'folder.save', detail: shared ? `${currentFolder.name} をmistlib共有` : `${currentFolder.name} を暗号化保存` }, now), settings.nodeId)
+      syncSignaturesRef.current[folder.id] = sharedFolderSignature(next, folder.id)
+      return next
     })
+    return accepted
   }
 
   function deleteCurrentFolder() {

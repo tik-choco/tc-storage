@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { createFileEditActions, type FileEditActions } from '../src/app/appFileEditActions.js'
 import { sha256Hex } from '../src/crypto/crypto.js'
 import { bytesToBase64 } from '../src/crypto/cryptoEncoding.js'
-import { makeFileFromDataUrl, makeFolder, stripFileContent, type FileRecord, type FolderRecord, type StorageSnapshot } from '../src/storage/domain.js'
+import { fileContentIdentity, makeFileFromDataUrl, makeFolder, stripFileContent, type FileRecord, type FolderRecord, type StorageSnapshot } from '../src/storage/domain.js'
 import type { Notice } from '../src/app/appTypes.js'
 
 if (!globalThis.crypto) {
@@ -27,7 +27,7 @@ test('saveTextFileContent updates the snapshot, caches the dataUrl and stores in
   assert.notEqual(savedFile?.checksum, harness.file.checksum)
   assert.equal(savedFile?.version, harness.file.version + 1)
   assert.equal(savedFile?.dataUrl, undefined)
-  assert.equal(harness.cache()[harness.file.id], `data:text/plain;base64,${bytesToBase64(new TextEncoder().encode(updatedText))}`)
+  assert.equal(harness.cache()[fileContentIdentity(savedFile!)], `data:text/plain;base64,${bytesToBase64(new TextEncoder().encode(updatedText))}`)
   assert.equal(harness.notices.at(-1)?.tone, 'success')
 
   await settle()

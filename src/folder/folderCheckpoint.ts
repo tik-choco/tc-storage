@@ -1,6 +1,7 @@
 import type { FileRecord, FolderRecord, StorageSnapshot } from '../storage/domain.js'
 import { stripFileContent } from '../storage/domain.js'
 import { mergeSnapshots, normalizeFolderVersions, normalizeFileVersions } from '../storage/crdt.js'
+import { foldersForSync, folderFilesForSync } from './folderSync.js'
 import { descendantFolderIds } from '../app/appHelpers.js'
 import { isRecord, parseHead, safeInt, stableStringify, HASH_RE, verifyHead } from '../escrow/head'
 import type { EscrowHead } from '../escrow/head'
@@ -12,6 +13,14 @@ export const CHECKPOINT_SCHEMA = 'tc-storage/folder-checkpoint/1'
 export const PACK_BYTES = 8 * 1024 * 1024
 export const MANIFEST_BYTES = 16 * 1024 * 1024
 export const MAX_PACKS = 1023
+/**
+ * Live packs (those the current manifest references) are capped at a quarter of the slot budget.
+ * A full replacement of the live set then still fits: live (256) + the retained previous
+ * generation (256) leave 511 slots for retired, deleting and unresolved-upload slots, which is one
+ * more full generation plus headroom. Content beyond the cap is omitted (metadata still saved)
+ * and protected later, when edits or deletions free capacity.
+ */
+export const MAX_LIVE_PACKS = 256
 export interface ContentEntry {
   fileId: string
   checksum: string
@@ -26,6 +35,59 @@ export interface PackEntry {
   digest: string
   length: number
   head: EscrowHead
+  /** Random per upload; absent = legacy slot derived from the digest alone. */
+  nonce?: string
+}
+/** A file whose content was left out of the packs; its metadata is still in the snapshot. */
+export interface ContentOmission {
+  fileId: string
+  checksum: string
+  size: number
+  reason: 'capacity' | 'unavailable'
+}
+/** A pack no manifest references any more (`retired`) or that is committed for deletion (`deleting`). */
+export interface RetiredPack {
+  digest: string
+  /** Wall clock of the writer that retired it. */
+  since: number
+  /** Manifest sequence that retired it; absent entries are re-stamped by the next writer. */
+  seq?: number
+  head: EscrowHead
+  nonce?: string
+}
+/** Recorded durably BEFORE a pack PUT: the slot may exist without any manifest ever listing it. */
+export interface PendingUpload {
+  digest: string
+  length: number
+  nonce: string
+  at: number
+  /** Manifest sequence at which no head was visible for this slot yet (expiry counts manifests, not clocks). */
+  absentSeq?: number
+}
+/** No new upload starts while this many intents are unresolved. */
+export const MAX_PENDING_UPLOADS = 256
+/** From here on a save first folds unresolved intents into the retirement list. */
+export const PENDING_UPLOAD_PRESSURE = 128
+/** Loading never drops intents below this hard bound (it is far above what saving can create). */
+const MAX_STORED_UPLOADS = 1024
+export function sanitizePendingUploads(value: unknown): PendingUpload[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const result: PendingUpload[] = []
+  for (const u of value) {
+    if (
+      isRecord(u) && typeof u.digest === 'string' && HASH_RE.test(u.digest) && safeInt(u.length, 1, PACK_BYTES) &&
+      typeof u.nonce === 'string' && NONCE_RE.test(u.nonce) && safeInt(u.at, 0) && !seen.has(u.nonce) &&
+      (u.absentSeq === undefined || safeInt(u.absentSeq, 1))
+    ) {
+      seen.add(u.nonce)
+      result.push({
+        digest: u.digest, length: u.length, nonce: u.nonce, at: u.at,
+        ...(u.absentSeq !== undefined && { absentSeq: u.absentSeq }),
+      })
+    }
+  }
+  return result.slice(-MAX_STORED_UPLOADS)
 }
 export interface FolderCheckpoint {
   v: 1
@@ -34,9 +96,27 @@ export interface FolderCheckpoint {
   snapshot: StorageSnapshot
   contents: ContentEntry[]
   packs: PackEntry[]
+  // Unreferenced packs waiting out the grace period; never referenced again.
+  // Files not protected because the live packs would exceed MAX_LIVE_PACKS (absent = none).
+  omitted?: ContentOmission[]
+  retired?: RetiredPack[]
+  // Retired packs committed for deletion; removed from the list once the slot is gone.
+  deleting?: RetiredPack[]
+  // Carry the previous manifest's pack descriptors across writers/restarts.
+  retained?: PackEntry[]
 }
 export const folderInput = (id: string, key: string) => JSON.stringify(['folder', id, key.trim()])
-export const packInput = (id: string, key: string, digest: string) => JSON.stringify(['folder', id, key.trim(), digest])
+export const packInput = (id: string, key: string, digest: string, nonce?: string) =>
+  JSON.stringify(nonce === undefined ? ['folder', id, key.trim(), digest] : ['folder', id, key.trim(), digest, nonce])
+export const NONCE_RE = /^[A-Za-z0-9_-]{16,64}$/
+export function newPackNonce(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+export const packSlot = (pack: { head: EscrowHead }) => pack.head?.slot
+/** Distinct slots a manifest keeps alive on the provider, excluding the manifest slot itself. */
+export function manifestSlots(c: Pick<FolderCheckpoint, 'packs' | 'retained' | 'retired' | 'deleting'>): Set<string> {
+  return new Set([...c.packs, ...(c.retained ?? []), ...(c.retired ?? []), ...(c.deleting ?? [])].map(packSlot))
+}
 export const contentIdentity = (f: Pick<FileRecord, 'id' | 'checksum' | 'size'>) =>
   JSON.stringify([f.id, f.checksum, f.size])
 export const validRoom = (r: unknown): r is string => typeof r === 'string' && /^[A-Za-z0-9_./:-]{1,96}$/.test(r)
@@ -56,9 +136,7 @@ function stripCheckpointFile(file: FileRecord): FileRecord {
   return { ...stripFileContent(file), fieldVersions }
 }
 export function projectFolder(snapshot: StorageSnapshot, rootId: string): StorageSnapshot {
-  const ids = descendantFolderIds(snapshot.folders, rootId)
-  const folders = snapshot.folders
-    .filter((f) => ids.has(f.id))
+  const folders = foldersForSync(snapshot, rootId)
     .map((f) => {
       if (f.id !== rootId && f.shareEnabled && !f.deletedAt) throw new Error('Nested shared roots are unsupported')
       const normalized = normalizeFolderVersions(f, snapshot.originNode || 'local')
@@ -79,10 +157,10 @@ export function projectFolder(snapshot: StorageSnapshot, rootId: string): Storag
     .sort((a, b) => a.id.localeCompare(b.id))
   if (!folders.some((f) => f.id === rootId)) throw new Error('Missing shared root')
   return {
-    ...snapshot,
+    clock: snapshot.clock,
+    originNode: snapshot.originNode,
     folders,
-    files: snapshot.files
-      .filter((f) => ids.has(f.folderId))
+    files: folderFilesForSync(snapshot, rootId)
       .map((f) => stripCheckpointFile(normalizeFileVersions(f, snapshot.originNode || 'local')))
       .sort((a, b) => a.id.localeCompare(b.id)),
     activity: [],
@@ -234,6 +312,7 @@ export function encodeCheckpoint(checkpoint: FolderCheckpoint): Uint8Array {
   const bytes = utf8(stableStringify(checkpoint))
   if (bytes.length > MANIFEST_BYTES) throw new Error('Checkpoint metadata exceeds 16 MiB')
   if (checkpoint.packs.length > MAX_PACKS) throw new Error('Checkpoint exceeds 1023 packs')
+  if (manifestSlots(checkpoint).size > MAX_PACKS) throw new Error('Checkpoint exceeds 1023 slots')
   return bytes
 }
 /** All validation completes before any snapshot mutation or descriptor persistence. */
@@ -247,7 +326,7 @@ export async function validateCheckpoint(
   const c = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as FolderCheckpoint
   if (
     !isRecord(c) ||
-    Object.keys(c).sort().join(',') !== 'appRoomId,contents,packs,rootFolderId,snapshot,v' ||
+    Object.keys(c).filter((k) => k !== 'retired' && k !== 'retained' && k !== 'deleting' && k !== 'omitted').sort().join(',') !== 'appRoomId,contents,packs,rootFolderId,snapshot,v' ||
     c.v !== 1 ||
     c.rootFolderId !== root ||
     c.appRoomId !== room ||
@@ -262,6 +341,10 @@ export async function validateCheckpoint(
     !Array.isArray(c.contents) ||
     !Array.isArray(c.packs) ||
     c.packs.length > MAX_PACKS ||
+    (c.retired !== undefined && (!Array.isArray(c.retired) || c.retired.length > MAX_PACKS)) ||
+    (c.retained !== undefined && (!Array.isArray(c.retained) || c.retained.length > MAX_PACKS)) ||
+    (c.deleting !== undefined && (!Array.isArray(c.deleting) || c.deleting.length > MAX_PACKS)) ||
+    (c.omitted !== undefined && (!Array.isArray(c.omitted) || c.omitted.length > 100000)) ||
     c.snapshot.folders.length > 100000 ||
     c.snapshot.files.length > 100000
   )
@@ -297,14 +380,15 @@ export async function validateCheckpoint(
   for (const p of c.packs) {
     if (
       !isRecord(p) ||
-      Object.keys(p).sort().join(',') !== 'digest,head,length' ||
+      !hasKeys(p, ['digest', 'head', 'length'], ['nonce']) ||
       typeof p.digest !== 'string' ||
       !HASH_RE.test(p.digest) ||
       !safeInt(p.length, 1, PACK_BYTES) ||
+      !validNonce(p.nonce) ||
       packs.has(p.digest)
     )
       throw new Error('Invalid checkpoint pack')
-    const keys = await deriveEscrowKeys(PACK_APP, packInput(root, key, p.digest))
+    const keys = await deriveEscrowKeys(PACK_APP, packInput(root, key, p.digest, p.nonce))
     const head = parseHead(p.head, { slot: keys.slot, writer: keys.writer, maxBlob: PACK_BYTES + 28 })
     if (
       !head ||
@@ -318,6 +402,32 @@ export async function validateCheckpoint(
       throw new Error('Invalid checkpoint pack head')
     packs.set(p.digest, p)
   }
+  // Slots, not digests, identify packs: identical bytes are uploaded again under a new nonce.
+  const packSlots = new Set([...packs.values()].map(packSlot))
+  const lists = new Set<string>()
+  for (const [name, list] of [['retired', c.retired], ['deleting', c.deleting]] as const) {
+    for (const p of list ?? []) {
+      if (!hasKeys(p, ['digest', 'head', 'since'], ['nonce', 'seq']) ||
+          typeof p.digest !== 'string' || !HASH_RE.test(p.digest) || !safeInt(p.since, 0) ||
+          (p.seq !== undefined && !safeInt(p.seq, 1)) || !validNonce(p.nonce))
+        throw new Error('Invalid ' + name + ' pack')
+      await validatePackDescriptor(p.digest, p.head, root, key, undefined, p.nonce)
+      // A pack that is retired or deleting is never referenced again.
+      if (lists.has(p.head.slot) || packSlots.has(p.head.slot)) throw new Error('Invalid ' + name + ' pack')
+      lists.add(p.head.slot)
+    }
+  }
+  const retained = new Set<string>()
+  for (const p of c.retained ?? []) {
+    if (!hasKeys(p, ['digest', 'head', 'length'], ['nonce']) ||
+        typeof p.digest !== 'string' || !HASH_RE.test(p.digest) || !safeInt(p.length, 1, PACK_BYTES) ||
+        !validNonce(p.nonce))
+      throw new Error('Invalid retained pack')
+    await validatePackDescriptor(p.digest, p.head, root, key, p.length, p.nonce)
+    if (retained.has(p.head.slot) || lists.has(p.head.slot)) throw new Error('Invalid retained pack')
+    retained.add(p.head.slot)
+  }
+  if (new Set([...packSlots, ...retained, ...lists]).size > MAX_PACKS) throw new Error('Checkpoint exceeds 1023 slots')
   const admitted = new Set<string>()
   const referenced = new Set<string>()
   for (const entry of c.contents) {
@@ -351,7 +461,34 @@ export async function validateCheckpoint(
     if (size !== file.size) throw new Error('Checkpoint content size mismatch')
     admitted.add(entry.fileId)
   }
-  if (c.snapshot.files.some((f) => !f.deletedAt && !admitted.has(f.id)) || referenced.size !== packs.size)
+  const omitted = new Set<string>()
+  for (const o of c.omitted ?? []) {
+    const file = isRecord(o) ? fileMap.get(o.fileId as string) : undefined
+    if (
+      !hasKeys(o, ['fileId', 'checksum', 'size', 'reason'], []) || (o.reason !== 'capacity' && o.reason !== 'unavailable') || !file || file.deletedAt ||
+      file.checksum !== o.checksum || file.size !== o.size || admitted.has(file.id) || omitted.has(file.id)
+    )
+      throw new Error('Invalid omitted content')
+    omitted.add(file.id)
+  }
+  if (c.snapshot.files.some((f) => !f.deletedAt && !admitted.has(f.id) && !omitted.has(f.id)) || referenced.size !== packs.size)
     throw new Error('Checkpoint has missing content or unused packs')
   return c
+}
+
+const validNonce = (v: unknown) => v === undefined || (typeof v === 'string' && NONCE_RE.test(v))
+function hasKeys(value: unknown, required: string[], optional: string[]): value is Record<string, unknown> {
+  if (!isRecord(value)) return false
+  const keys = Object.keys(value)
+  return required.every((k) => keys.includes(k)) && keys.every((k) => required.includes(k) || optional.includes(k))
+}
+async function validatePackDescriptor(
+  digest: string, value: EscrowHead, root: string, key: string, length?: number, nonce?: string,
+): Promise<void> {
+  const keys = await deriveEscrowKeys(PACK_APP, packInput(root, key, digest, nonce))
+  const head = parseHead(value, { slot: keys.slot, writer: keys.writer, maxBlob: PACK_BYTES + 28 })
+  if (!head || head.seq !== 1 || head.parent !== null || head.comp !== 'none' ||
+      head.schema !== PACK_APP || head.size < 29 || (length !== undefined && head.size !== length + 28) ||
+      !await verifyHead(head, { slot: keys.slot, writer: keys.writer }))
+    throw new Error('Invalid GC pack head')
 }

@@ -22,7 +22,7 @@ import { FolderEscrowController } from '../app/folderEscrowController'
 import type { EscrowLocal } from '../storage/folderEscrow'
 import { EscrowClient } from './client'
 import { deriveAutoRoom, deriveEscrowKeys, encryptBlob, sha256, utf8 } from './crypto'
-import { buildHead, headHash } from './head'
+import { buildHead } from './head'
 import { EscrowTestServer } from './storageTestTransport'
 
 const time = '2026-10-12T00:00:00.000Z',
@@ -296,9 +296,13 @@ describe('immutable packs', () => {
       f = await file('a', bytes),
       s = snapshot()
     s.files = [f]
-    await expect(buildContentPacks(tx, 'root', 'secret', [f], null, async () => utf8('wrong'))).rejects.toThrow(
-      'source',
-    )
+    // Mismatching or missing source bytes never become pack content: the file is reported as omitted.
+    for (const read of [async () => utf8('wrong'), async () => Promise.reject(new Error('missing'))]) {
+      const none = await buildContentPacks(tx, 'root', 'secret', [f], null, read)
+      expect(none.packs).toEqual([])
+      expect(none.contents).toEqual([])
+      expect(none.omitted).toEqual([{ fileId: f.id, checksum: f.checksum, size: f.size, reason: 'unavailable' }])
+    }
     const content = await buildContentPacks(tx, 'root', 'secret', [f], null, async () => bytes),
       c = { ...checkpoint(s), ...content }
     const bad = structuredClone(c)
@@ -313,7 +317,7 @@ describe('immutable packs', () => {
     server.blobs.set(c.packs[0].head.cid, utf8('corrupt'))
     await expect(readPinnedPack(tx.transport, c.packs[0], 'root', 'secret')).rejects.toThrow('ciphertext')
   })
-  it('reuses a concurrently created immutable pack without advancing its sequence', async () => {
+  it('uploads identical bytes from concurrent builders into separate slots, each at sequence 1', async () => {
     const server = new EscrowTestServer(),
       a = await session(server),
       b = await session(server),
@@ -323,8 +327,12 @@ describe('immutable packs', () => {
       buildContentPacks(a, 'root', 'secret', [f], null, async () => bytes),
       buildContentPacks(b, 'root', 'secret', [f], null, async () => bytes),
     ])
-    expect(await headHash(one.packs[0].head)).toBe(await headHash(two.packs[0].head))
+    // A fresh nonce per upload keeps a later delete of one slot from ever hitting another upload.
+    expect(one.packs[0].digest).toBe(two.packs[0].digest)
+    expect(one.packs[0].nonce).not.toBe(two.packs[0].nonce)
+    expect(one.packs[0].head.slot).not.toBe(two.packs[0].head.slot)
     expect(one.packs[0].head.seq).toBe(1)
+    expect(two.packs[0].head.seq).toBe(1)
   })
 })
 

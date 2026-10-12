@@ -1,3 +1,4 @@
+import { stripFileContent } from './domain.js'
 import type { ActivityEntry, FileRecord, FolderRecord, StorageSnapshot, VersionStamp } from './domain.js'
 
 const baselineTimestamp = '1970-01-01T00:00:00.000Z'
@@ -59,12 +60,15 @@ export function stampFilePatch(
 export function mergeSnapshots(local: StorageSnapshot, remote: StorageSnapshot): StorageSnapshot {
   const localSnapshot = normalizeSnapshot(local)
   const remoteSnapshot = normalizeSnapshot(remote)
+  const left = withoutOlderScopeExits(localSnapshot, remoteSnapshot)
+  const right = withoutOlderScopeExits(remoteSnapshot, localSnapshot)
   return {
-    folders: mergeFolders(localSnapshot.folders, remoteSnapshot.folders),
-    files: mergeFiles(localSnapshot.files, remoteSnapshot.files),
+    folders: mergeFolders(left.folders, right.folders),
+    files: mergeFiles(left.files, right.files),
     activity: mergeActivity(localSnapshot.activity, remoteSnapshot.activity),
     clock: Math.max(localSnapshot.clock, remoteSnapshot.clock),
     originNode: localSnapshot.originNode,
+    ...((local.scopeTombstones || remote.scopeTombstones) && { scopeTombstones: mergeScopeTombstones(local.scopeTombstones ?? [], remote.scopeTombstones ?? []) }),
   }
 }
 
@@ -80,13 +84,13 @@ export function normalizeSnapshot(snapshot: StorageSnapshot): StorageSnapshot {
   }
 }
 
-export function mergeFolders(local: FolderRecord[], remote: FolderRecord[]): FolderRecord[] {
+export function mergeFolders(local: FolderRecord[], remote: FolderRecord[], repairHierarchy = true): FolderRecord[] {
   const map = new Map<string, FolderRecord>()
   for (const folder of [...local, ...remote]) {
     const existing = map.get(folder.id)
     map.set(folder.id, existing ? mergeFolder(existing, folder) : normalizeFolderVersions(folder))
   }
-  return repairFolderHierarchy([...map.values()]).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+  return (repairHierarchy ? repairFolderHierarchy([...map.values()]) : [...map.values()]).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
 }
 
 export function mergeFiles(local: FileRecord[], remote: FileRecord[]): FileRecord[] {
@@ -165,7 +169,8 @@ function mergeFile(local: FileRecord, remote: FileRecord): FileRecord {
     }
   }
 
-  return { ...merged, fieldVersions, updatedAt: maxTimestamp(left.updatedAt, right.updatedAt) }
+  const result = { ...merged, fieldVersions, updatedAt: maxTimestamp(left.updatedAt, right.updatedAt) }
+  return result.checksum !== left.checksum || result.size !== left.size ? stripFileContent(result) : result
 }
 
 function mergeActivity(local: ActivityEntry[], remote: ActivityEntry[]): ActivityEntry[] {
@@ -259,4 +264,48 @@ function isFolderField(field: string): field is FolderField {
 
 function isFileField(field: string): field is FileField {
   return fileFields.includes(field as FileField)
+}
+
+export function rememberScopeTombstones(snapshot: StorageSnapshot, scopeId: string, folders: FolderRecord[], files: FileRecord[]): StorageSnapshot {
+  return { ...snapshot, scopeTombstones: mergeScopeTombstones(snapshot.scopeTombstones ?? [], [{ scopeId, folders, files: files.map(stripFileContent) }]) }
+}
+
+function mergeScopeTombstones(left: NonNullable<StorageSnapshot['scopeTombstones']>, right: NonNullable<StorageSnapshot['scopeTombstones']>): NonNullable<StorageSnapshot['scopeTombstones']> {
+  const scopes = new Map<string, NonNullable<StorageSnapshot['scopeTombstones']>[number]>()
+  for (const scope of [...left, ...right]) {
+    const previous = scopes.get(scope.scopeId)
+    const folders = new Map((previous?.folders ?? []).map((f) => [f.id, f]))
+    for (const f of scope.folders) folders.set(f.id, folders.has(f.id) ? mergeFolder(folders.get(f.id)!, f) : f)
+    scopes.set(scope.scopeId, { scopeId: scope.scopeId, folders: [...folders.values()], files: mergeFiles(previous?.files ?? [], scope.files) })
+  }
+  return [...scopes.values()].sort((a, b) => a.scopeId.localeCompare(b.scopeId))
+}
+
+// Source-share deletions must not erase a later placement in another share.
+function hasNewerDestination(local: StorageSnapshot, remote: StorageSnapshot, folderId: string, removedAt: string): boolean {
+  const seen = new Set<string>()
+  let id: string | null = folderId
+  while (id && !seen.has(id)) {
+    seen.add(id)
+    const current = local.folders.find((f) => f.id === id)
+    if (!current) break
+    const former = remote.folders.find((f) => f.id === id)
+    if (former && current.parentId !== former.parentId &&
+        (current.fieldVersions?.parentId?.updatedAt ?? current.updatedAt) > removedAt) return true
+    id = current.parentId
+  }
+  return false
+}
+
+function withoutOlderScopeExits(source: StorageSnapshot, destination: StorageSnapshot): StorageSnapshot {
+  return { ...source,
+    folders: source.folders.filter((f) => !f.deletedAt || !hasNewerDestination(destination, source, f.id, f.deletedAt)),
+    files: source.files.filter((f) => {
+      const current = destination.files.find((item) => item.id === f.id)
+      return !f.deletedAt || !current || !(
+        (current.folderId !== f.folderId && (current.fieldVersions?.folderId?.updatedAt ?? current.updatedAt) > f.deletedAt) ||
+        hasNewerDestination(destination, source, current.folderId, f.deletedAt)
+      )
+    }),
+  }
 }

@@ -5,7 +5,7 @@ import { createShareImportActions } from '../src/app/appShareImportActions.js'
 import type { FileContentFailure } from '../src/app/appControllerTypes.js'
 import type { Notice, PendingShare } from '../src/app/appTypes.js'
 import { stampFilePatch } from '../src/storage/crdt.js'
-import { createInitialSnapshot, makeFileFromDataUrl, makeFolder, stripFileContent } from '../src/storage/domain.js'
+import { fileContentIdentity, createInitialSnapshot, makeFileFromDataUrl, makeFolder, stripFileContent } from '../src/storage/domain.js'
 
 type StateUpdate<T> = T | ((current: T) => T)
 
@@ -81,7 +81,7 @@ test('thumbnail preload does not start duplicate progress while content is alrea
     failFileLoadProgress: () => {},
     fileContentCacheRef: { current: {} },
     fileContentFailuresRef: { current: {} },
-    fileContentLoadsRef: { current: { [file.id]: new Promise<string>(() => {}) } },
+    fileContentLoadsRef: { current: { [fileContentIdentity(file)]: new Promise<string>(() => {}) } },
     fileShareKeysRef: { current: {} },
     finishDownloadProgress: () => {},
     finishFileLoadProgress: () => {},

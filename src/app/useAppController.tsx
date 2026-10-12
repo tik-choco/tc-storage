@@ -61,7 +61,7 @@ export function useAppController() {
   const detailFolder = detailFile ? folders.find((folder) => folder.id === detailFile.folderId) ?? null : null
   const escrowCallbacksRef = useRef<{ hasContent(file: typeof files[number]): boolean; loadContent(file: typeof files[number]): Promise<string> }>({ hasContent: () => false, loadContent: () => Promise.reject(new Error('Escrow unavailable')) })
   const fileDataUrls = useMemo(() => Object.fromEntries(files.flatMap((file) => {
-    const dataUrl = file.dataUrl ?? fileContentCache[escrowCallbacksRef.current.hasContent(file) ? JSON.stringify([file.id, file.checksum, file.size]) : file.id]
+    const dataUrl = file.dataUrl ?? fileContentCache[JSON.stringify([file.id, file.checksum, file.size])]
     return dataUrl ? [[file.id, dataUrl]] : []
   })), [fileContentCache, files])
   const selectedPreviewFile = selectedFile ? { ...selectedFile, dataUrl: fileDataUrls[selectedFile.id] } : null

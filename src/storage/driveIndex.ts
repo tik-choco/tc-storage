@@ -1,3 +1,5 @@
+import { encryptJson } from '../crypto/crypto.js'
+import { bytesToBase64 } from '../crypto/cryptoEncoding.js'
 import { activeFiles, folderPath, type FolderRecord, type StorageSnapshot } from './domain.js'
 
 /** Shared-bus topic this app publishes its file index to. See
@@ -58,4 +60,20 @@ export function buildDriveIndex(snapshot: StorageSnapshot, folderKeys: Record<st
     })
   }
   return { version: 1, updatedAt: now, files }
+}
+
+/** CID bytes are public to mist peers; the random index key stays in the local bus.
+ * The decrypted v1 payload remains identical to the legacy wrapped index. */
+export const encryptedDriveIndexFormat = 'tc-storage/drive-index/encrypted/1'
+
+export async function encodeDriveIndex(index: DriveIndexMeta): Promise<{
+  bytes: Uint8Array
+  meta: { format: typeof encryptedDriveIndexFormat; indexKey: string; count: number; updatedAt: string }
+}> {
+  const indexKey = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)))
+  const encrypted = await encryptJson(index, indexKey)
+  return {
+    bytes: new TextEncoder().encode(JSON.stringify(encrypted)),
+    meta: { format: encryptedDriveIndexFormat, indexKey, count: index.files.length, updatedAt: index.updatedAt },
+  }
 }

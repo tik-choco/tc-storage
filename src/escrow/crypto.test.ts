@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { base64url, blobAAD, decryptBlob, deriveAutoRoom, deriveEscrowKeys, encryptBlob, fromHex, gunzip, gzip, hex, sha256, utf8 } from './crypto'
 import { buildHead, headHash, parseHead, signHead, signingPayload, stableStringify, verifyHead } from './head'
-import { vector } from './vectors.fixture'
+import { vector, deleteVector } from './vectors.fixture'
 
 describe('escrow vectors and cryptography', () => {
   it('reproduces every derivation, fixed-IV blob, signing payload, signature, and head hash byte-exactly', async () => {
@@ -114,3 +114,14 @@ describe('escrow vectors and cryptography', () => {
     await expect(gzip(bytes, 1)).rejects.toThrow('limit')
   })
 })
+
+ it('signs the byte-exact delete vector and rejects an untrusted current head', async () => {
+  const { signDelete, deleteSigningPayload } = await import('./head')
+  const keys = await deriveEscrowKeys(vector.input.app, vector.input.roomId)
+  expect(await signDelete({ ...vector.head_signed }, keys)).toEqual({
+    slot: deleteVector.request.slot, seq: deleteVector.request.seq, head: deleteVector.request.head, sig: deleteVector.request.sig,
+  })
+  expect(new TextDecoder().decode(deleteSigningPayload(deleteVector.request))).toBe(deleteVector.signing_payload_utf8)
+  await expect(signDelete({ ...vector.head_signed, seq: 2 }, keys)).rejects.toThrow('Invalid escrow head')
+  await expect(signDelete({ ...vector.head_signed }, { ...keys, slot: '0'.repeat(32) })).rejects.toThrow('Invalid escrow head')
+ })

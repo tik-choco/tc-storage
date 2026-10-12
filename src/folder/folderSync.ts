@@ -1,17 +1,29 @@
 import type { FileRecord, FolderRecord, StorageSnapshot } from '../storage/domain.js'
-import { compareFilesForDisplay } from '../storage/domain.js'
+import { stampFilePatch, mergeFolders, mergeFiles, normalizeFolderVersions, normalizeFileVersions } from '../storage/crdt.js'
+import { canApplyFileCid, compareFilesForDisplay } from '../storage/domain.js'
 
 export function foldersForSync(snapshot: StorageSnapshot, folderId: string): FolderRecord[] {
   const ids = descendantFolderIds(snapshot.folders, folderId)
-  return snapshot.folders
-    .filter((folder) => ids.has(folder.id))
+  const history = snapshot.scopeTombstones?.find((scope) => scope.scopeId === folderId)?.folders ?? []
+  const current = snapshot.folders.filter((folder) => ids.has(folder.id))
+    .map((f) => normalizeFolderVersions(f, snapshot.originNode))
+  const exits = history.filter((f) => !returnedToScope(snapshot, ids, f.id, f.deletedAt))
+    .map((f) => normalizeFolderVersions(f, snapshot.originNode))
+  // A scope projection keeps former parent placement, including parents outside the projection.
+  return mergeFolders(current, exits, false)
     .sort((a, b) => folderSortKey(a).localeCompare(folderSortKey(b)) || a.id.localeCompare(b.id))
 }
 
 export function folderFilesForSync(snapshot: StorageSnapshot, folderId: string): FileRecord[] {
   const ids = descendantFolderIds(snapshot.folders, folderId)
-  return snapshot.files
-    .filter((file) => ids.has(file.folderId))
+  const history = snapshot.scopeTombstones?.find((scope) => scope.scopeId === folderId)?.files ?? []
+  const current = snapshot.files.filter((file) => ids.has(file.folderId))
+    .map((f) => normalizeFileVersions(f, snapshot.originNode))
+  const exits = history.filter((f) => {
+    const record = snapshot.files.find((item) => item.id === f.id)
+    return !record || !returnedToScope(snapshot, ids, record.folderId, f.deletedAt, record.fieldVersions?.folderId?.updatedAt)
+  }).map((f) => normalizeFileVersions(f, snapshot.originNode))
+  return mergeFiles(current, exits)
     .sort((a, b) => a.folderId.localeCompare(b.folderId) || compareFilesForDisplay(a, b))
 }
 
@@ -93,6 +105,7 @@ function pickFolderSyncFields(folder: FolderRecord) {
     color: folder.color,
     encrypted: folder.encrypted,
     shareEnabled: folder.shareEnabled,
+    sharedRoomId: folder.sharedRoomId ?? '',
     ...(folder.escrow && { escrow: folder.escrow, escrowVersion: folder.fieldVersions?.escrow }),
     deletedAt: folder.deletedAt ?? '',
   }
@@ -112,4 +125,30 @@ function pickFileSyncFields(file: FileRecord) {
     starred: file.starred,
     deletedAt: file.deletedAt ?? '',
   }
+}
+
+// Apply only the uploaded reference to a current, still matching content revision.
+export function applyStoredFileCids(snapshot: StorageSnapshot, stored: FileRecord[], now: string, nodeId: string): StorageSnapshot {
+  const uploads = new Map(stored.map((f) => [f.id, f]))
+  return { ...snapshot, files: snapshot.files.map((file) => {
+    const upload = uploads.get(file.id)
+    return upload?.lastCid && canApplyFileCid(file, upload)
+      ? stampFilePatch(file, { lastCid: upload.lastCid }, now, nodeId) : file
+  }) }
+}
+
+// A later move back into this share supersedes its former source-scope exit.
+function returnedToScope(snapshot: StorageSnapshot, ids: Set<string>, folderId: string, removedAt?: string, fileMoveAt?: string): boolean {
+  if (!ids.has(folderId) || !removedAt) return false
+  if (fileMoveAt && fileMoveAt > removedAt) return true
+  const seen = new Set<string>()
+  let id: string | null = folderId
+  while (id && !seen.has(id)) {
+    seen.add(id)
+    const folder = snapshot.folders.find((f) => f.id === id)
+    if (!folder || !folder.parentId || !ids.has(folder.parentId)) break
+    if ((folder.fieldVersions?.parentId?.updatedAt ?? folder.updatedAt) > removedAt) return true
+    id = folder.parentId
+  }
+  return false
 }

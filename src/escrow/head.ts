@@ -108,3 +108,22 @@ export async function headHash(head: EscrowHead, options: HeadValidation = {}): 
   if (!parsed) throw new Error('Invalid escrow head')
   return sha256(utf8(stableStringify(parsed)))
 }
+
+export interface DeleteFields { slot: string; seq: number; head: string }
+export interface SignedDelete extends DeleteFields { sig: string }
+export function parseDelete(value: unknown): SignedDelete | null {
+  if (!isRecord(value) || typeof value.slot !== 'string' || !SLOT_RE.test(value.slot) ||
+    !safeInt(value.seq, 1) || typeof value.head !== 'string' || !HASH_RE.test(value.head) ||
+    !canonicalB64(value.sig, 64)) return null
+  return { slot: value.slot, seq: value.seq, head: value.head, sig: value.sig }
+}
+export function deleteSigningPayload(fields: DeleteFields): Uint8Array<ArrayBuffer> {
+  return utf8('tc-escrow/v1/delete\n' + stableStringify({ slot: fields.slot, seq: fields.seq, head: fields.head }))
+}
+export async function signDelete(current: EscrowHead, keys: Pick<EscrowKeys, 'slot' | 'writer' | 'sign'>, options: HeadValidation = {}): Promise<SignedDelete> {
+  if (!await verifyHead(current, { ...options, slot: keys.slot, writer: keys.writer })) throw new Error('Invalid escrow head')
+  const fields = { slot: keys.slot, seq: current.seq, head: await headHash(current, options) }
+  const result = { ...fields, sig: base64url(await keys.sign(deleteSigningPayload(fields))) }
+  if (!parseDelete(result)) throw new Error('Invalid escrow signature')
+  return result
+}

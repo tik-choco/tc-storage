@@ -7,6 +7,8 @@ import type { MistModule } from '../p2p/p2pTypes.js'
 
 const reads = new Map<string, Promise<Uint8Array>>()
 export interface StorageEscrowTransport extends EscrowTransport {
+  excludeAppPeers?(room: string): void
+  onRoomCollision?(callback: (room: string) => void): () => void
   assertProvider(): void
   releasePins(): Promise<void>
 }
@@ -31,6 +33,7 @@ export function createMistEscrowTransport(
   >()
   const messages = new Map<string, Set<(id: string, bytes: Uint8Array) => void>>()
   const peers = new Map<string, Set<(id: string, joined: boolean) => void>>()
+  const collisions = new Set<(room: string) => void>()
   const pins = new Set<string>()
   let mist: MistModule | undefined
   let lost = false
@@ -56,6 +59,13 @@ export function createMistEscrowTransport(
   }
   return {
     assertProvider,
+    excludeAppPeers(room) {
+      if (mist) mistRuntime(mist).retireEscrowPeers(room)
+    },
+    onRoomCollision(callback) {
+      collisions.add(callback)
+      return () => { collisions.delete(callback) }
+    },
     join(id) {
       const prior = rooms.get(id)
       if (prior) return prior.promise
@@ -83,13 +93,18 @@ export function createMistEscrowTransport(
             for (const cb of messages.get(id) ?? []) cb(from, payload)
           }
         })
-        await broker.acquire(id, room.owner)
+        await broker.acquireEscrow(id, room.owner, () => {
+          lost = true
+          for (const callback of collisions) callback(id)
+        })
         if (rooms.get(id) !== room) {
           broker.release(id, room.owner)
           return
         }
         room.ready = true
-        for (const peer of readPeers(api.get_neighbors_in_room(id))) {
+        const neighbors = readPeers(api.get_neighbors_in_room(id))
+        broker.rememberEscrowPeers(id, neighbors)
+        for (const peer of neighbors) {
           if (!provider || peer === provider) for (const cb of peers.get(id) ?? []) cb(peer, true)
         }
         for (const msg of room.queue.splice(0)) api.send_message_in_room(id, msg.to ?? '', msg.bytes, 0)

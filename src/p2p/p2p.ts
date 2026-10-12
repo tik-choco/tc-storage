@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
+import { folderSyncOwner, mistRuntime } from './mistRuntime.js'
 import { isEd25519DidKey } from '../crypto/didIdentity.js'
 import { describeError } from '../util/errors.js'
 import type { AppSettings } from '../storage/localSettings.js'
@@ -175,7 +176,7 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
       p2pWarn('local gossip post failed', { ...envelopeLogDetails(envelope), error: sendError })
     }
     const mist = mistRef.current
-    if (mist && joinedRoomsRef.current.has(envelope.roomId)) {
+    if (mist && joinedRoomsRef.current.has(envelope.roomId) && mistRuntime(mist).owns(envelope.roomId, folderSyncOwner)) {
       const roomStablePeers = stablePeersByRoomRef.current[envelope.roomId] ?? []
       p2pLog('sending envelope to mist peers', {
         ...envelopeLogDetails(envelope),
@@ -255,7 +256,7 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
       configureMistRoom(mist, { nodeId: settingsValue.nodeId }, (...events: unknown[]) => {
         if (connectionSeqRef.current !== connectionSeq || mistRef.current !== mist) return
         const transportRoom = events[3]
-        if (typeof transportRoom !== 'string' || !roomIdsRef.current.includes(transportRoom)) return
+        if (typeof transportRoom !== 'string' || !roomIdsRef.current.includes(transportRoom) || !mistRuntime(mist).owns(transportRoom, folderSyncOwner)) return
         const timedOutPeer = peerIdFromMistConnectionTimeout(events)
         if (timedOutPeer) {
           p2pWarn('mist peer connection timeout', { peerId: shortLogValue(timedOutPeer) })
@@ -267,11 +268,19 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
         if (envelope && envelope.roomId === transportRoom && envelope.from === events[1]) receiveEnvelope(envelope, 'mistlib')
       }, { forceReinit })
 
+      mistRuntime(mist).subscribeAppPeerPurge(folderSyncOwner, (roomId, peers) => {
+        if (connectionSeqRef.current !== connectionSeq || mistRef.current !== mist) return
+        dropPeersFromRoom(roomId, peers)
+        publishPeerState()
+      })
+
       const joinOutcomes = await Promise.allSettled(rooms.map((roomId) => joinMistRoom(mist, roomId, settingsValue.nodeId)))
       if (connectionSeqRef.current !== connectionSeq || mistRef.current !== mist) return
       rooms.forEach((roomId, index) => {
         const outcome = joinOutcomes[index]
-        if (outcome.status === 'fulfilled') {
+        if (outcome.status === 'fulfilled' && !roomIdsRef.current.includes(roomId)) {
+          leaveMistRoomId(mist, roomId)
+        } else if (outcome.status === 'fulfilled') {
           joinedRoomsRef.current.add(roomId)
           peersByRoomRef.current[roomId] = []
           stablePeersByRoomRef.current[roomId] = []
@@ -412,7 +421,9 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
     if (connectionSeqRef.current !== connectionSeq || mistRef.current !== mist) return
     added.forEach((roomId, index) => {
       const outcome = outcomes[index]
-      if (outcome.status === 'fulfilled') {
+      if (outcome.status === 'fulfilled' && !roomIdsRef.current.includes(roomId)) {
+        leaveMistRoomId(mist, roomId)
+      } else if (outcome.status === 'fulfilled') {
         joinedRoomsRef.current.add(roomId)
         peersByRoomRef.current[roomId] = []
         stablePeersByRoomRef.current[roomId] = []
@@ -429,7 +440,7 @@ export function useMistShare(settings: AppSettings, roomIds: string[], onEnvelop
   const applyRoomRemovals = useCallback((removed: string[]) => {
     const mist = mistRef.current
     for (const roomId of removed) {
-      if (mist && joinedRoomsRef.current.has(roomId)) leaveMistRoomId(mist, roomId)
+      if (mist) leaveMistRoomId(mist, roomId)
       joinedRoomsRef.current.delete(roomId)
       delete peersByRoomRef.current[roomId]
       delete stablePeersByRoomRef.current[roomId]

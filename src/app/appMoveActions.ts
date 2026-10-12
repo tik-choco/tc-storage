@@ -2,8 +2,8 @@ import type { BrowserDragItem, Notice } from './appTypes.js'
 import type { FileContentActions, MoveActions, MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
 import { nearestSharedAncestorFolder, shortLogValue, syncLog, syncWarn } from './appUtils.js'
-import { stampFilePatch, stampFolderPatch } from '../storage/crdt.js'
-import { addActivity, stripFileContent, touchSnapshot, type FileRecord, type FolderRecord, type StorageSnapshot } from '../storage/domain.js'
+import { rememberScopeTombstones, stampFilePatch, stampFolderPatch } from '../storage/crdt.js'
+import { addActivity, canApplyFileCid, fileContentIdentity, stripFileContent, touchSnapshot, type FileRecord, type FolderRecord, type StorageSnapshot } from '../storage/domain.js'
 import { describeError } from '../util/errors.js'
 import { generateFolderKey } from '../crypto/folderKeys.js'
 import type { AppSettings } from '../storage/localSettings.js'
@@ -21,12 +21,13 @@ interface MoveOptions {
   setSnapshot: SetState<StorageSnapshot>
   settings: AppSettings
   snapshotRef: MutableRef<StorageSnapshot>
+  saveEncryptedFile?: typeof saveEncryptedFileToMist
 }
 
 export function createMoveActions(options: MoveOptions): MoveActions {
   const {
     announceFolderChange, ensureFileContent, folderKeysRef, scheduleFolderSync, setBusy, setFileContentCache,
-    setFolderKeys, setNotice, setSnapshot, settings, snapshotRef,
+    setFolderKeys, setNotice, setSnapshot, settings, snapshotRef, saveEncryptedFile = saveEncryptedFileToMist,
   } = options
 
   function canMoveItemToFolder(item: BrowserDragItem, targetFolderId: string | null): boolean {
@@ -74,46 +75,54 @@ export function createMoveActions(options: MoveOptions): MoveActions {
     const now = new Date().toISOString()
     const removedAt = previousIsoInstant(now)
     const movedFile = stripFileContent(stampFilePatch(file, { folderId: targetFolderId, lastCid: undefined, deletedAt: undefined }, now, settings.nodeId))
-    setSnapshot((current) => touchSnapshot(addActivity({ ...current, files: current.files.map((item) => (item.id === file.id ? movedFile : item)) }, { actorNodeId: settings.nodeId, folderId: targetFolderId, fileId: file.id, action: 'file.move', detail: `${file.name} を ${targetFolder.name} に移動` }, now), settings.nodeId))
+    const exit = stripFileContent(stampFilePatch(file, { deletedAt: removedAt }, removedAt, settings.nodeId))
+    setSnapshot((current) => {
+      const withHistory = sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id
+        ? rememberScopeTombstones(current, sourceSharedRoot.id, [], [exit]) : current
+      return touchSnapshot(addActivity({ ...withHistory, files: current.files.map((item) => item.id === file.id ? movedFile : item) }, { actorNodeId: settings.nodeId, folderId: targetFolderId, fileId: file.id, action: 'file.move', detail: `${file.name} を ${targetFolder.name} に移動` }, now), settings.nodeId)
+    })
+    if (sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id) {
+      announceFolderChange(sourceSharedRoot, 'file-deleted', exit)
+      scheduleSharedFolderSync(sourceSharedRoot, 'local file move out')
+    }
+    if (targetSharedRoot) {
+      announceFolderChange(targetSharedRoot, 'file-upserted', movedFile)
+      scheduleSharedFolderSync(targetSharedRoot, 'local file move in')
+    }
     setNotice({ tone: 'success', text: `${file.name} を ${targetFolder.name} に移動しました。保存はバックグラウンドで続行します` })
-    void storeMovedFileInBackground({ file, movedFile, passphrase, removedAt, sourceSharedRoot, storageFolder, targetFolder, targetSharedRoot })
+    void storeMovedFileInBackground({ file, movedFile, passphrase, storageFolder, targetFolder, targetSharedRoot })
   }
 
   async function storeMovedFileInBackground(options: {
     file: FileRecord
     movedFile: FileRecord
     passphrase: string
-    removedAt: string
-    sourceSharedRoot: FolderRecord | undefined
     storageFolder: FolderRecord
     targetFolder: FolderRecord
     targetSharedRoot: FolderRecord | undefined
   }): Promise<void> {
-    const { file, movedFile, passphrase, removedAt, sourceSharedRoot, storageFolder, targetFolder, targetSharedRoot } = options
+    const { file, movedFile, passphrase, storageFolder, targetFolder, targetSharedRoot } = options
     setBusy(`move-file-${file.id}`)
     try {
       syncLog('background storage_add start for moved file', { fileId: file.id, fileName: file.name, targetFolderId: targetFolder.id })
       const fileWithContent = await ensureFileContent(file)
-      const movedFileWithContent = { ...fileWithContent, folderId: targetFolder.id }
-      const cid = await saveEncryptedFileToMist({ folder: storageFolder, file: movedFileWithContent, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId })
+      const movedFileWithContent = { ...movedFile, dataUrl: fileWithContent.dataUrl }
+      const cid = await saveEncryptedFile({ folder: storageFolder, file: movedFileWithContent, passphrase, originNode: settings.nodeId, runtimeNodeId: settings.nodeId })
       const storedAt = new Date().toISOString()
-      const storedMovedFile = stripFileContent(stampFilePatch(movedFile, { lastCid: cid }, storedAt, settings.nodeId))
-      if (fileWithContent.dataUrl) setFileContentCache((current) => ({ ...current, [file.id]: fileWithContent.dataUrl ?? '' }))
-      setSnapshot((current) => touchSnapshot({
-        ...current,
-        files: current.files.map((item) => (
-          item.id === file.id && !item.deletedAt && item.folderId === targetFolder.id && item.checksum === file.checksum && item.version === file.version
-            ? stampFilePatch(item, { lastCid: cid }, storedAt, settings.nodeId)
-            : item
-        )),
-      }, settings.nodeId))
-      if (sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id) {
-        announceFolderChange(sourceSharedRoot, 'file-deleted', stripFileContent(stampFilePatch(file, { deletedAt: removedAt }, removedAt, settings.nodeId)))
-        scheduleSharedFolderSync(sourceSharedRoot, 'local file move out')
-      }
-      if (targetSharedRoot) {
-        announceFolderChange(targetSharedRoot, 'file-upserted', storedMovedFile)
-        scheduleSharedFolderSync(targetSharedRoot, 'local file move in')
+      let storedMovedFile: FileRecord | undefined
+      setSnapshot((current) => {
+        const record = current.files.find((item) => item.id === file.id)
+        const root = record && (nearestSharedAncestorFolder(current, record.folderId) ?? current.folders.find((f) => f.id === record.folderId && !f.deletedAt))
+        if (!record || !canApplyFileCid(record, movedFile) || root?.id !== storageFolder.id || folderKeysRef.current[root.id] !== passphrase) return current
+        storedMovedFile = stripFileContent(stampFilePatch(record, { lastCid: cid }, storedAt, settings.nodeId))
+        return touchSnapshot({ ...current, files: current.files.map((item) => item.id === file.id ? storedMovedFile! : item) }, settings.nodeId)
+      })
+      if (!storedMovedFile) return
+      if (fileWithContent.dataUrl) setFileContentCache((current) => ({ ...current, [fileContentIdentity(storedMovedFile!)]: fileWithContent.dataUrl! }))
+      const currentRoot = nearestSharedAncestorFolder(snapshotRef.current, storedMovedFile.folderId)
+      if (targetSharedRoot && currentRoot?.id === targetSharedRoot.id && folderKeysRef.current[currentRoot.id] === passphrase) {
+        announceFolderChange(currentRoot, 'file-upserted', storedMovedFile)
+        scheduleSharedFolderSync(currentRoot, 'local file move in')
       }
       syncLog('background storage_add complete for moved file', { fileId: file.id, fileName: file.name, cid: shortLogValue(cid) })
     } catch (error) {
@@ -142,7 +151,22 @@ export function createMoveActions(options: MoveOptions): MoveActions {
         setFolderKeys((current) => ({ ...current, ...keyUpdates }))
       }
     }
-    setSnapshot((current) => touchSnapshot(addActivity({ ...current, folders: current.folders.map((item) => (item.id === folder.id ? movedFolder : item)) }, { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.move', detail: `${folder.name} を ${targetFolder?.name ?? 'My Drive'} に移動` }, now), settings.nodeId))
+    setSnapshot((current) => {
+      const ids = descendantFolderIds(current.folders, folder.id)
+      const withHistory = sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id
+        ? rememberScopeTombstones(current, sourceSharedRoot.id,
+          current.folders.filter((f) => ids.has(f.id)).map((f) => stampFolderPatch(f, { deletedAt: removedAt }, removedAt, settings.nodeId)),
+          current.files.filter((f) => ids.has(f.folderId)).map((f) => stampFilePatch(f, { deletedAt: removedAt }, removedAt, settings.nodeId)))
+        : current
+      return touchSnapshot(addActivity({ ...withHistory, folders: current.folders.map((item) => item.id === folder.id ? movedFolder
+        : targetSharedRoot && sourceSharedRoot?.id !== targetSharedRoot.id && ids.has(item.id) && !item.deletedAt
+          ? stampFolderPatch(item, { deletedAt: undefined }, now, settings.nodeId) : item),
+        // Re-entry supersedes the source exit for every live descendant, even
+        // when its immediate parent never changed. Genuine deletions stay deleted.
+        files: current.files.map((item) => targetSharedRoot && sourceSharedRoot?.id !== targetSharedRoot.id && ids.has(item.folderId) && !item.deletedAt
+          ? stampFilePatch(item, { deletedAt: undefined }, now, settings.nodeId) : item),
+      }, { actorNodeId: settings.nodeId, folderId: folder.id, action: 'folder.move', detail: `${folder.name} を ${targetFolder?.name ?? 'My Drive'} に移動` }, now), settings.nodeId)
+    })
     if (sourceSharedRoot && sourceSharedRoot.id !== targetSharedRoot?.id) {
       announceFolderChange(sourceSharedRoot, 'folder-deleted', undefined, stampFolderPatch(folder, { deletedAt: removedAt }, removedAt, settings.nodeId))
       scheduleSharedFolderSync(sourceSharedRoot, 'local folder move out')
