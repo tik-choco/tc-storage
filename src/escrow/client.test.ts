@@ -6,7 +6,7 @@ import { headHash } from './head'
 import type { EscrowHead } from './head'
 import { encodeEscrowMessage, parseEscrowMessage } from './protocol'
 import type { EscrowMessage } from './protocol'
-import { vector } from './vectors.fixture'
+import { vector, deleteVector } from './vectors.fixture'
 
 class FakeTransport implements EscrowTransport {
   joined = new Set<string>()
@@ -18,6 +18,7 @@ class FakeTransport implements EscrowTransport {
   advertise = true
   respond = true
   putMode: 'ack' | 'conflict' | 'error' = 'ack'
+  features?: string[]
   maxBlob = 32 * 1024 * 1024
   async join(room: string) { this.joined.add(room) }
   leave(room: string) { this.joined.delete(room) }
@@ -26,7 +27,7 @@ class FakeTransport implements EscrowTransport {
   emit(message: EscrowMessage, id = 'provider') {
     for (const cb of this.messages) cb(id, encodeEscrowMessage(message))
   }
-  provider(id = 'provider') { this.emit({ v: 1, type: 'escrow_provider', version: 1, maxBlob: this.maxBlob }, id) }
+  provider(id = 'provider') { this.emit({ v: 1, type: 'escrow_provider', version: 1, maxBlob: this.maxBlob, ...(this.features ? { features: this.features } : {}) }, id) }
   send(_room: string, to: string | null, bytes: Uint8Array) {
     const message = parseEscrowMessage(bytes)!
     this.sent.push({ to, message })
@@ -36,6 +37,11 @@ class FakeTransport implements EscrowTransport {
     if (message.type === 'escrow_hello') { if (this.advertise) this.provider(); return }
     if (!this.respond) return
     if (message.type === 'escrow_get') this.emit({ v: 1, type: 'escrow_head', id: message.id, slot: message.slot, head: this.head })
+    if (message.type === 'escrow_delete') {
+      if (this.putMode === 'conflict') this.emit({ v: 1, type: 'escrow_error', id: message.id, code: 'conflict', message: 'stale', head: this.head })
+      else if (this.putMode === 'error') this.emit({ v: 1, type: 'escrow_error', id: message.id, code: 'bad_signature', message: 'signature' })
+      else { this.head = null; this.emit({ v: 1, type: 'escrow_deleted', id: message.id, slot: message.slot }) }
+    }
     if (message.type === 'escrow_put') {
       if (this.putMode === 'conflict') this.emit({ v: 1, type: 'escrow_error', id: message.id, code: 'conflict', message: 'stale', head: this.head })
       else if (this.putMode === 'error') this.emit({ v: 1, type: 'escrow_error', id: message.id, code: 'quota', message: 'full' })
@@ -364,3 +370,111 @@ it('uses the newly fetched head when a provider advances during download retry',
     expect(await client.fetchLatest(vector.input.app, vector.input.roomId)).toEqual({ head: second.head, plaintext: utf8('latest') })
   } finally { client.dispose() }
 })
+
+describe('slot deletion', () => {
+  it('does not send delete to the chosen legacy provider, even if another supports it', async () => {
+    const transport = new FakeTransport(), client = new EscrowClient(transport, 'escrow')
+    try {
+      transport.head = fixture()
+      await client.getHead(vector.slot)
+      transport.features = ['delete']; transport.provider('z-supported')
+      expect(await client.deleteSlot(vector.input.app, vector.input.roomId, fixture())).toMatchObject({ type: 'unsupported' })
+      expect(transport.sent.some(s => s.message.type === 'escrow_delete')).toBe(false)
+    } finally { client.dispose() }
+  })
+  it('signs deletion, accepts matching replies, conflicts and errors', async () => {
+    const transport = new FakeTransport(); transport.features = ['delete']; transport.head = fixture()
+    const client = new EscrowClient(transport, 'escrow')
+    try {
+      await client.getHead(vector.slot)
+      expect(await client.deleteSlot(vector.input.app, vector.input.roomId, fixture())).toEqual({ type: 'deleted' })
+      const sent = transport.sent.find(s => s.message.type === 'escrow_delete')!.message
+      expect(sent).toEqual({ ...deleteVector.request, id: expect.any(String) })
+      expect(await client.getHead(vector.slot)).toBeNull()
+      transport.putMode = 'conflict'; transport.head = fixture()
+      expect(await client.deleteSlot(vector.input.app, vector.input.roomId, fixture())).toEqual({ type: 'conflict', head: fixture() })
+      transport.head = null
+      expect(await client.deleteSlot(vector.input.app, vector.input.roomId, fixture())).toEqual({ type: 'conflict', head: null })
+      transport.putMode = 'error'
+      expect(await client.deleteSlot(vector.input.app, vector.input.roomId, fixture())).toMatchObject({ type: 'error', code: 'bad_signature' })
+      expect(await client.deleteSlot('wrong-app', vector.input.roomId, fixture())).toMatchObject({ type: 'error', code: 'bad_sig' })
+    } finally { client.dispose() }
+  })
+  it('ignores wrong sender/id/slot/type and unverified conflicts before a matching deleted reply', async () => {
+    const transport = new FakeTransport(); transport.features = ['delete']; transport.respond = false
+    const client = new EscrowClient(transport, 'escrow')
+    try {
+      transport.respond = true; transport.head = fixture()
+      await client.getHead(vector.slot)
+      transport.respond = false
+      let settled = false
+      const pending = client.deleteSlot(vector.input.app, vector.input.roomId, fixture()).then(r => { settled = true; return r })
+      await vi.waitFor(() => expect(transport.sent.some(s => s.message.type === 'escrow_delete')).toBe(true))
+      const request = transport.sent.find(s => s.message.type === 'escrow_delete')!.message
+      if (request.type !== 'escrow_delete') throw new Error('not delete')
+      const reply = { v: 1 as const, type: 'escrow_deleted' as const, id: request.id, slot: request.slot }
+      transport.emit(reply, 'stranger')
+      transport.provider('other'); transport.emit(reply, 'other')
+      transport.emit({ ...reply, id: 'wrong' }); transport.emit({ ...reply, slot: '0'.repeat(32) })
+      transport.emit({ v: 1, type: 'escrow_ack', id: request.id, slot: request.slot, seq: 1, hash: vector.head_hash_hex })
+      transport.emit({ v: 1, type: 'escrow_error', id: request.id, code: 'conflict', message: '', head: { ...fixture(), seq: 2 } })
+      await Promise.resolve(); expect(settled).toBe(false)
+      transport.emit(reply); expect(await pending).toEqual({ type: 'deleted' })
+    } finally { client.dispose() }
+  })
+  it('returns timeout and closed errors, waits for the original provider and keeps provider feature copies isolated', async () => {
+    const transport = new FakeTransport(); transport.features = ['delete']; transport.respond = false
+    const client = new EscrowClient(transport, 'escrow', { putTimeoutMs: 15 })
+    try {
+      transport.respond = true; transport.head = fixture()
+      await client.getHead(vector.slot)
+      transport.respond = false
+      expect(await client.deleteSlot(vector.input.app, vector.input.roomId, fixture())).toMatchObject({ type: 'error', code: 'timeout' })
+      client.providers.get('provider')!.features!.length = 0
+      const pending = client.deleteSlot(vector.input.app, vector.input.roomId, fixture())
+      await vi.waitFor(() => expect(transport.sent.filter(s => s.message.type === 'escrow_delete')).toHaveLength(2), { interval: 1 })
+      transport.provider('z-other'); transport.respond = true
+      for (const cb of transport.peers) cb('provider', false)
+      // A different provider's absent-slot reply cannot complete this deletion.
+      const retry = transport.sent.at(-1)!.message
+      if (retry.type !== 'escrow_delete') throw new Error('not delete')
+      transport.emit({ v: 1, type: 'escrow_deleted', id: retry.id, slot: retry.slot }, 'z-other')
+      transport.provider()
+      expect(await pending).toEqual({ type: 'deleted' })
+      expect(transport.sent.filter(s => s.message.type === 'escrow_delete').every(s => s.to === 'provider')).toBe(true)
+      client.dispose()
+      expect(await client.deleteSlot(vector.input.app, vector.input.roomId, fixture())).toMatchObject({ type: 'error', code: 'closed' })
+    } finally { client.dispose() }
+  })
+})
+
+
+it('saves 5000 sequential checkpoint generations without deletion bookkeeping returning busy', async () => {
+  const transport = new FakeTransport(), client = new EscrowClient(transport, 'escrow')
+  const reply = transport.reply.bind(transport)
+  vi.spyOn(transport, 'reply').mockImplementation(async message => {
+    if (message.type === 'escrow_put') {
+      const previous = transport.head
+      if (message.head.parent !== (previous ? await headHash(previous) : null) || message.head.seq !== (previous?.seq ?? 0) + 1) {
+        transport.emit({ v: 1, type: 'escrow_error', id: message.id, code: 'conflict', message: 'CAS mismatch', head: previous })
+        return
+      }
+    }
+    await reply(message)
+  })
+  try {
+    let parent: string | null = null
+    for (let seq = 1; seq <= 5000; seq++) {
+      const result = await client.saveCheckpoint(vector.input.app, vector.input.roomId, utf8('checkpoint-' + seq), {
+        schema: 'test/1', parent, seq, comp: 'none',
+      })
+      expect(result).toMatchObject({ type: 'ack', seq })
+      if (result.type !== 'ack') throw new Error('Checkpoint not acknowledged: ' + JSON.stringify(result))
+      parent = result.hash
+    }
+    expect(transport.sent.filter(s => s.message.type === 'escrow_put')).toHaveLength(5000)
+    expect(transport.head?.seq).toBe(5000)
+    expect((Reflect.get(client, 'headProviders') as Map<string, unknown>).size).toBe(1024)
+    expect(await client.fetchLatest(vector.input.app, vector.input.roomId)).toMatchObject({ plaintext: utf8('checkpoint-5000') })
+  } finally { client.dispose() }
+}, 120000)

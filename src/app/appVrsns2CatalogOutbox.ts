@@ -50,7 +50,7 @@
 import type { MutableRef } from './appControllerTypes.js'
 import { sha256Hex } from '../crypto/crypto.js'
 import { bytesToBase64 } from '../crypto/cryptoEncoding.js'
-import { filesInFolder, type FileRecord, type StorageSnapshot } from '../storage/domain.js'
+import { fileContentIdentity, filesInFolder, type FileRecord, type StorageSnapshot } from '../storage/domain.js'
 import type { AppSettings } from '../storage/localSettings.js'
 import { assertMistStorageAvailable, ensureMistRuntimeInitialized, loadMistModule } from '../storage/mistStorage.js'
 import { publishShared } from '../storage/sharedBus.js'
@@ -213,7 +213,7 @@ async function defaultUnpinCid(cid: string, nodeId: string): Promise<void> {
 interface Vrsns2CatalogOutboxOptions {
   snapshotRef: MutableRef<StorageSnapshot>
   settingsRef: MutableRef<AppSettings>
-  /** Same cache the rest of the app keeps for previews (see useAppController's fileDataUrls): dataUrl by fileId. This module never fetches content on its own -- a file with nothing cached here is simply skipped this round (see the module header on why: `本文…取得を試みるのではなく単にスキップ`). */
+  /** Same cache the rest of the app keeps for previews (see useAppController's fileDataUrls): dataUrl by (fileId, checksum, size); legacy file-ID entries require byte verification. This module never fetches content on its own -- a file with nothing cached here is simply skipped this round (see the module header on why: `本文…取得を試みるのではなく単にスキップ`). */
   fileContentCacheRef: MutableRef<Record<string, string>>
   /** Overridable for tests; defaults to a real mistlib storage_add_pinned. */
   uploadCiphertext?: (name: string, ciphertext: Uint8Array, nodeId: string) => Promise<string>
@@ -256,11 +256,12 @@ export function createVrsns2CatalogOutboxActions(options: Vrsns2CatalogOutboxOpt
         items.push(toWireItem(file, cached))
         continue
       }
-      const dataUrl = file.dataUrl ?? fileContentCacheRef.current[file.id]
+      const dataUrl = fileContentCacheRef.current[fileContentIdentity(file)] ?? file.dataUrl ?? fileContentCacheRef.current[file.id]
       if (!dataUrl) continue // no plaintext locally right now -- skip, retry on the next publish
       try {
         const bytes = dataUrlToBytes(dataUrl)
         const checksum = await sha256Hex(bytes)
+        if (bytes.byteLength !== file.size || checksum !== file.checksum) continue
         const { ciphertext, key, iv } = await encryptItemBytes(bytes)
         const cid = await uploadCiphertext(`${file.id}.tc-vrsns2-catalog.enc`, ciphertext, nodeId)
         if (cached && cached.cid && cached.cid !== cid) {

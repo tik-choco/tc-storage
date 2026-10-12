@@ -234,6 +234,8 @@ it('projects freshly uploaded metadata without stamps and round-trips content an
   const uploaded = await readBrowserFile(browserFile, 'root', time, 'node-a')
   const optimistic = optimisticUploadedFiles(s.files, [uploaded], time, 'node-a')
   s.files = mergeUploadedFiles(s.files, optimistic.map(stripFileContent), time, 'node-a').map(stripFileContent)
+  // Simulate metadata persisted by older clients that dropped stamps on a second content strip.
+  s.files[0] = { ...s.files[0], fieldVersions: undefined }
   expect(s.files[0].fieldVersions).toBeUndefined()
   const original = structuredClone(s)
   const projected = projectFolder(s, 'root')

@@ -195,7 +195,7 @@ test('a new file with cached plaintext is encrypted, uploaded, and published wit
   const folder = tcSpaceFolder()
   const bytes = new TextEncoder().encode('hello tc-vrsns2')
   const checksum = await sha256Hex(bytes)
-  const file = fileRecord({ id: 'file-1', folderId: folder.id, checksum, updatedAt: '2026-08-05T00:00:00.000Z' })
+  const file = fileRecord({ id: 'file-1', folderId: folder.id, checksum, size: bytes.byteLength, updatedAt: '2026-08-05T00:00:00.000Z' })
   harness.setSnapshot((current) => ({ ...current, folders: [...current.folders, folder], files: [...current.files, file] }))
   harness.setDataUrl('file-1', await dataUrlFor(bytes))
 
@@ -221,7 +221,7 @@ test('an unchanged file is reused from cache on the next publish, without re-enc
   const folder = tcSpaceFolder()
   const bytes = new TextEncoder().encode('stable content')
   const checksum = await sha256Hex(bytes)
-  const file = fileRecord({ id: 'file-1', folderId: folder.id, checksum, updatedAt: '2026-08-05T00:00:00.000Z' })
+  const file = fileRecord({ id: 'file-1', folderId: folder.id, checksum, size: bytes.byteLength, updatedAt: '2026-08-05T00:00:00.000Z' })
   harness.setSnapshot((current) => ({ ...current, folders: [...current.folders, folder], files: [...current.files, file] }))
   harness.setDataUrl('file-1', await dataUrlFor(bytes))
 
@@ -244,7 +244,7 @@ test('a changed checksum re-encrypts, mints a new cid, and unpins the superseded
   const folder = tcSpaceFolder()
   const bytesV1 = new TextEncoder().encode('version one')
   const checksumV1 = await sha256Hex(bytesV1)
-  const file = fileRecord({ id: 'file-1', folderId: folder.id, checksum: checksumV1, updatedAt: '2026-08-05T00:00:00.000Z' })
+  const file = fileRecord({ id: 'file-1', folderId: folder.id, checksum: checksumV1, size: bytesV1.byteLength, updatedAt: '2026-08-05T00:00:00.000Z' })
   harness.setSnapshot((current) => ({ ...current, folders: [...current.folders, folder], files: [...current.files, file] }))
   harness.setDataUrl('file-1', await dataUrlFor(bytesV1))
   await harness.actions.publishCatalogOutbox()
@@ -255,7 +255,7 @@ test('a changed checksum re-encrypts, mints a new cid, and unpins the superseded
   const checksumV2 = await sha256Hex(bytesV2)
   harness.setSnapshot((current) => ({
     ...current,
-    files: current.files.map((entry) => (entry.id === 'file-1' ? { ...entry, checksum: checksumV2, updatedAt: '2026-08-05T00:05:00.000Z' } : entry)),
+    files: current.files.map((entry) => (entry.id === 'file-1' ? { ...entry, checksum: checksumV2, size: bytesV2.byteLength, updatedAt: '2026-08-05T00:05:00.000Z' } : entry)),
   }))
   harness.setDataUrl('file-1', await dataUrlFor(bytesV2))
   await harness.actions.publishCatalogOutbox()
@@ -277,7 +277,7 @@ test('a file that was itself imported from tc-vrsns2 is excluded (echo-loop guar
   const folder = tcSpaceFolder()
   const bytes = new TextEncoder().encode('came from tc-vrsns2')
   const checksum = await sha256Hex(bytes)
-  const file = fileRecord({ id: 'file-from-vrsns2', folderId: folder.id, checksum, updatedAt: '2026-08-05T00:00:00.000Z' })
+  const file = fileRecord({ id: 'file-from-vrsns2', folderId: folder.id, checksum, size: bytes.byteLength, updatedAt: '2026-08-05T00:00:00.000Z' })
   harness.setSnapshot((current) => ({ ...current, folders: [...current.folders, folder], files: [...current.files, file] }))
   harness.setDataUrl('file-from-vrsns2', await dataUrlFor(bytes))
 
@@ -302,7 +302,7 @@ test('a file with no cached plaintext is skipped this round and retried later, n
   // Once the content becomes available, the very next publish picks it up.
   const bytes = new TextEncoder().encode('now available')
   const checksum = await sha256Hex(bytes)
-  harness.setSnapshot((current) => ({ ...current, files: current.files.map((entry) => (entry.id === 'file-1' ? { ...entry, checksum } : entry)) }))
+  harness.setSnapshot((current) => ({ ...current, files: current.files.map((entry) => (entry.id === 'file-1' ? { ...entry, checksum, size: bytes.byteLength } : entry)) }))
   harness.setDataUrl('file-1', await dataUrlFor(bytes))
   await harness.actions.publishCatalogOutbox()
   assert.equal(publishedRecord()?.meta.items.length, 1)
@@ -335,8 +335,8 @@ test('an upload failure for one item never throws and does not block the others'
   const checksumOk = await sha256Hex(bytesOk)
   const bytesFail = new TextEncoder().encode('this one fails to upload')
   const checksumFail = await sha256Hex(bytesFail)
-  const fileOk = fileRecord({ id: 'file-ok', folderId: folder.id, checksum: checksumOk, updatedAt: '2026-08-05T00:00:01.000Z' })
-  const fileFails = fileRecord({ id: 'file-fails', folderId: folder.id, checksum: checksumFail, updatedAt: '2026-08-05T00:00:00.000Z' })
+  const fileOk = fileRecord({ id: 'file-ok', folderId: folder.id, checksum: checksumOk, size: bytesOk.byteLength, updatedAt: '2026-08-05T00:00:01.000Z' })
+  const fileFails = fileRecord({ id: 'file-fails', folderId: folder.id, checksum: checksumFail, size: bytesFail.byteLength, updatedAt: '2026-08-05T00:00:00.000Z' })
   harness.setSnapshot((current) => ({ ...current, folders: [...current.folders, folder], files: [...current.files, fileOk, fileFails] }))
   harness.setDataUrl('file-ok', await dataUrlFor(bytesOk))
   harness.setDataUrl('file-fails', await dataUrlFor(bytesFail))

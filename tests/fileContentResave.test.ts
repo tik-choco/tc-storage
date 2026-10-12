@@ -198,7 +198,7 @@ test('file content repair request re-saves cached content and announces the new 
     folderId: sharedRoot.id,
     from: 'node-b',
   })
-  await settle()
+  await settle(() => broadcasts.length === 1)
 
   const repairedFile = harness.snapshot().files.find((file) => file.id === childFileWithCid.id)
   assert.equal(repairedFile?.lastCid, 'cid-repaired')
@@ -274,7 +274,7 @@ function snapshotWithSharedChildFile(options: { rootLastCid?: boolean } = {}) {
     'node-a',
   )
   const childFolder = makeFolder({ id: 'folder-child', name: 'Child', parentId: sharedRoot.id, color: 'blue', roomId: 'tc-storage-main', now, nodeId: 'node-a' })
-  const childFile = makeFileFromDataUrl({ id: 'file-child', folderId: childFolder.id, name: 'child.txt', mimeType: 'text/plain', size: 5, dataUrl: 'data:text/plain;base64,aGVsbG8=', checksum: 'checksum-child', now, nodeId: 'node-a' })
+  const childFile = makeFileFromDataUrl({ id: 'file-child', folderId: childFolder.id, name: 'child.txt', mimeType: 'text/plain', size: 5, dataUrl: 'data:text/plain;base64,aGVsbG8=', checksum: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824', now, nodeId: 'node-a' })
   const childFileWithCid = stripFileContent(stampFilePatch(childFile, { lastCid: 'cid-child' }, now, 'node-a'))
   return { childFileWithCid, childFolder, sharedRoot, snapshot: { ...createInitialSnapshot('node-a'), folders: [sharedRoot, childFolder], files: [childFileWithCid], activity: [] } }
 }
@@ -293,6 +293,10 @@ function applyStateUpdate<T>(current: T, update: StateUpdate<T>): T {
   return typeof update === 'function' ? (update as (current: T) => T)(current) : update
 }
 
-async function settle(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0))
+async function settle(done: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1000
+  while (!done()) {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for repair')
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
 }

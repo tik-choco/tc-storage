@@ -2,7 +2,7 @@ import type { Notice } from './appTypes.js'
 import type { FileContentActions, FileContentFailure, FileContentFailureKind, FileContentPreloadQueue, MistShare, MutableRef, SetState } from './appControllerTypes.js'
 import { descendantFolderIds } from './appHelpers.js'
 import { stampFilePatch } from '../storage/crdt.js'
-import { activeFiles, activeFolders, stripFileContent, type FileRecord, type FolderBundle, type FolderRecord, type StorageSnapshot } from '../storage/domain.js'
+import { activeFiles, activeFolders, canApplyFileCid, fileContentIdentity, sameFileContent, stripFileContent, type FileRecord, type FolderBundle, type FolderRecord, type StorageSnapshot } from '../storage/domain.js'
 import { describeError } from '../util/errors.js'
 import { downloadBlob, downloadFile } from '../storage/fileIO.js'
 import { compareZipFiles, makeFolderZipLayout, safeDownloadName, zipFilePath } from '../folder/folderZip.js'
@@ -96,7 +96,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   function isFileStoredForFolder(file: FileRecord, folder: FolderRecord, passphrase: string): boolean {
     if (fileStoredForFolder(file, folder, passphrase)) return true
     if (!file.lastCid) return false
-    if (file.dataUrl || fileContentCacheRef.current[file.id]) return false
+    if (file.dataUrl || fileContentCacheRef.current[fileContentIdentity(file)] || fileContentCacheRef.current[file.id]) return false
     if (file.folderId === folder.id || folderKeysRef.current[file.folderId] === passphrase) return true
     return false
   }
@@ -105,7 +105,10 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     const cacheNext: Record<string, string> = {}
     const files: FileRecord[] = []
     for (const file of bundle.files) {
-      if (file.dataUrl) cacheNext[file.id] = file.dataUrl
+      if (file.dataUrl) {
+        if (!await verifyFileData(file, file.dataUrl)) throw new Error('File checksum mismatch')
+        cacheNext[fileContentIdentity(file)] = file.dataUrl
+      }
       if (file.deletedAt || file.lastCid || !file.dataUrl) {
         files.push(file)
         continue
@@ -119,16 +122,17 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     return { ...bundle, files }
   }
 
-  const escrowCacheKey = (file: FileRecord) => JSON.stringify([file.id, file.checksum, file.size])
-  const previewCached = (file: FileRecord) => file.dataUrl ?? fileContentCacheRef.current[optionsForEscrow(file) ? escrowCacheKey(file) : file.id]
+  const previewCached = (file: FileRecord) => fileContentCacheRef.current[fileContentIdentity(file)]
 
   async function ensureFileContent(file: FileRecord, options: { suppressRepairRequest?: boolean; trackProgress?: boolean } = {}): Promise<FileRecord> {
     const escrowContent = optionsForEscrow(file)
-    const loadKey = escrowContent ? escrowCacheKey(file) : file.id
-    const cached = file.dataUrl ?? fileContentCacheRef.current[file.id]
-    if (cached && (!escrowContent || await verifyEscrowData(file, cached))) {
-      if (escrowContent && !fileContentCacheRef.current[loadKey]) setFileContentCache((current) => ({ ...current, [loadKey]: cached }))
-      syncLog('file content cache hit', { fileId: file.id, fileName: file.name, hasRecordDataUrl: Boolean(file.dataUrl), hasMemoryCache: Boolean(fileContentCacheRef.current[file.id]) })
+    const loadKey = fileContentIdentity(file)
+    const cacheCandidates = [file.dataUrl, fileContentCacheRef.current[loadKey], fileContentCacheRef.current[file.id]]
+    for (const cached of cacheCandidates) {
+      if (!cached || !await verifyFileData(file, cached)) continue
+      assertCurrentContent(file)
+      setFileContentCache((current) => ({ ...current, [loadKey]: cached }))
+      syncLog('file content cache hit', { fileId: file.id, fileName: file.name, hasRecordDataUrl: Boolean(file.dataUrl), hasMemoryCache: Boolean(fileContentCacheRef.current[loadKey]) })
       return { ...file, dataUrl: cached }
     }
     const progressFileId = options.trackProgress ? startFileLoadProgress(file) : ''
@@ -137,10 +141,8 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       if (loading) {
         syncLog('file content load joined existing request', { fileId: file.id, fileName: file.name })
         const dataUrl = await loading
-        if (escrowContent) {
-          const current = snapshotRef.current.files.find((item) => item.id === file.id && !item.deletedAt)
-          if (!current || current.checksum !== file.checksum || current.size !== file.size || !await verifyEscrowData(file, dataUrl)) throw new Error('File changed or checksum mismatch during escrow download')
-        }
+        if (!await verifyFileData(file, dataUrl)) throw new Error('File checksum mismatch')
+        assertCurrentContent(file)
         if (progressFileId) finishFileLoadProgress(progressFileId)
         return { ...file, dataUrl }
       }
@@ -149,22 +151,20 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       syncLog('file content resolution planned', fileContentPlanDetails(file, candidates, folderBundleCandidate))
       if (candidates.length === 0 && !folderBundleCandidate && !escrowContent) throw new Error(`${file.name} のCIDまたは復号キーがありません`)
       const normal = candidates.length > 0
-        ? loadFileContentFromCandidates(file, candidates, escrowContent).catch(async (error) => {
+        ? loadFileContentFromCandidates(file, candidates).catch(async (error) => {
           if (!folderBundleCandidate) throw error
           syncWarn('file content candidates failed; trying parent folder bundle', { fileId: file.id, fileName: file.name, folderCid: shortLogValue(folderBundleCandidate.cid), error: describeError(error, 'unknown error') })
-          return loadFileContentFromFolderBundle(file, folderBundleCandidate.cid, folderBundleCandidate.passphrase, attemptedCandidateKeys(candidates), escrowContent)
+          return loadFileContentFromFolderBundle(file, folderBundleCandidate.cid, folderBundleCandidate.passphrase, attemptedCandidateKeys(candidates))
         })
-        : folderBundleCandidate ? loadFileContentFromFolderBundle(file, folderBundleCandidate.cid, folderBundleCandidate.passphrase, new Set(), escrowContent) : Promise.reject(new Error('Normal CID content unavailable'))
+        : folderBundleCandidate ? loadFileContentFromFolderBundle(file, folderBundleCandidate.cid, folderBundleCandidate.passphrase, new Set()) : Promise.reject(new Error('Normal CID content unavailable'))
       const promise = escrowContent ? normal.catch(() => loadEscrowContent!(file)) : normal
       fileContentLoadsRef.current[loadKey] = promise
       try {
         const dataUrl = await promise
+        if (!await verifyFileData(file, dataUrl)) throw new Error('File checksum mismatch')
+        assertCurrentContent(file)
         clearContentFailure(file)
-        if (escrowContent) {
-          const current = snapshotRef.current.files.find((item) => item.id === file.id && !item.deletedAt)
-          if (!current || current.checksum !== file.checksum || current.size !== file.size || !await verifyEscrowData(file, dataUrl)) throw new Error('File changed or checksum mismatch during escrow download')
-        }
-        setFileContentCache((current) => ({ ...current, [file.id]: dataUrl, ...(escrowContent ? { [loadKey]: dataUrl } : {}) }))
+        setFileContentCache((current) => ({ ...current, [loadKey]: dataUrl }))
         syncLog('file content cached for preview', { fileId: file.id, fileName: file.name, bytes: dataUrlByteLength(dataUrl) })
         if (progressFileId) finishFileLoadProgress(progressFileId)
         return { ...file, dataUrl }
@@ -180,14 +180,19 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     }
   }
 
+  function assertCurrentContent(file: FileRecord): void {
+    const current = snapshotRef.current.files.find((item) => item.id === file.id)
+    if (!current || current.deletedAt || !sameFileContent(current, file)) throw new Error('File changed during download')
+  }
+
   function optionsForEscrow(file: FileRecord): boolean { return Boolean(options.hasEscrowContent?.(file) && options.loadEscrowContent) }
 
-  async function verifyEscrowData(file: FileRecord, dataUrl: string): Promise<boolean> {
+  async function verifyFileData(file: FileRecord, dataUrl: string): Promise<boolean> {
     try { const bytes = dataUrlToBytes(dataUrl); return bytes.length === file.size && await sha256Hex(bytes) === file.checksum } catch { return false }
   }
 
   function preloadFileContent(file: FileRecord): void {
-    if (previewCached(file) || fileContentLoadsRef.current[optionsForEscrow(file) ? escrowCacheKey(file) : file.id] || !canResolveFileContent(file)) return
+    if (previewCached(file) || fileContentLoadsRef.current[fileContentIdentity(file)] || !canResolveFileContent(file)) return
     if (isContentFailureCoolingDown(file)) {
       syncLog('preview preload skipped: previous content failure cooling down', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
       return
@@ -235,7 +240,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   }
 
   function startPreviewPreload(file: FileRecord): Promise<void> {
-    if (previewCached(file) || fileContentLoadsRef.current[optionsForEscrow(file) ? escrowCacheKey(file) : file.id] || !canResolveFileContent(file)) return Promise.resolve()
+    if (previewCached(file) || fileContentLoadsRef.current[fileContentIdentity(file)] || !canResolveFileContent(file)) return Promise.resolve()
     if (isContentFailureCoolingDown(file)) {
       syncLog('preview preload skipped: previous content failure cooling down', { fileId: file.id, fileName: file.name, cid: shortLogValue(file.lastCid), shareCid: shortLogValue(file.lastShareCid) })
       return Promise.resolve()
@@ -257,7 +262,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     const folder = snapshotRef.current.folders.find((item) => item.id === file.folderId)
     const sharedRoot = nearestSharedAncestorFolder(snapshotRef.current, file.folderId)
     const sharedRootPassphrase = sharedRoot ? folderKeysRef.current[sharedRoot.id] : undefined
-    return Boolean(options.hasEscrowContent?.(file) || file.dataUrl || fileContentCacheRef.current[file.id] || (file.lastCid && folderPassphrase) ||
+    return Boolean(options.hasEscrowContent?.(file) || file.dataUrl || previewCached(file) || fileContentCacheRef.current[file.id] || (file.lastCid && folderPassphrase) ||
       (file.lastCid && sharedRootPassphrase) || ((file.lastShareCid ?? file.lastCid) && filePassphrase) ||
       (folder?.lastCid && folderPassphrase) || (sharedRoot?.lastCid && sharedRootPassphrase))
   }
@@ -326,7 +331,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     passphrase: string,
     request: Pick<ShareEnvelope, 'cid' | 'fileId' | 'fileName' | 'from'>,
   ): Promise<void> {
-    const cached = file.dataUrl ?? fileContentCacheRef.current[file.id]
+    const cached = file.dataUrl ?? fileContentCacheRef.current[fileContentIdentity(file)] ?? fileContentCacheRef.current[file.id]
     if (!cached && !canResolveFileContent(file)) {
       syncLog('file content repair request skipped: content not available locally', {
         requester: shortLogValue(request.from),
@@ -345,26 +350,24 @@ export function createFileContentActions(options: FileContentOptions): FileConte
         fileName: file.name,
         requestedCid: shortLogValue(request.cid),
       })
-      const fileWithContent = cached ? { ...file, dataUrl: cached } : await ensureFileContent(file, { suppressRepairRequest: true })
+      const fileWithContent = await ensureFileContent(file, { suppressRepairRequest: true })
       const cid = await saveEncryptedFile({ folder: sharedRoot, file: fileWithContent, passphrase, originNode: settingsRef.current.nodeId, runtimeNodeId: settingsRef.current.nodeId})
       const now = new Date().toISOString()
-      const repairedFile = stripFileContent(stampFilePatch(fileWithContent, { lastCid: cid }, now, settingsRef.current.nodeId))
-      rememberStoredFile(repairedFile, sharedRoot, passphrase)
-      setSnapshot((current) => ({
-        ...current,
-        files: current.files.map((item) => (item.id === file.id ? repairedFile : item)),
-      }))
-      networkRef?.current.broadcastShare({
-        type: 'folder-change',
-        clock: snapshotRef.current.clock + 1,
-        changeType: 'file-upserted',
-        folderId: sharedRoot.id,
-        folderName: sharedRoot.name,
-        fileId: repairedFile.id,
-        fileName: repairedFile.name,
-        file: repairedFile,
-        cid,
+      let repairedFile: FileRecord | undefined
+      setSnapshot((current) => {
+        const record = current.files.find((item) => item.id === file.id)
+        const root = record && nearestSharedAncestorFolder(current, record.folderId)
+        if (!record || !canApplyFileCid(record, file) || root?.id !== sharedRoot.id || folderKeysRef.current[root.id] !== passphrase) return current
+        repairedFile = stripFileContent(stampFilePatch(record, { lastCid: cid }, now, settingsRef.current.nodeId))
+        return { ...current, files: current.files.map((item) => item.id === file.id ? repairedFile! : item) }
       })
+      if (!repairedFile) return
+      const root = nearestSharedAncestorFolder(snapshotRef.current, repairedFile.folderId)
+      if (root?.id !== sharedRoot.id || folderKeysRef.current[root.id] !== passphrase) return
+      rememberStoredFile(repairedFile, root, passphrase)
+      networkRef?.current.broadcastShare({ type: 'folder-change', clock: snapshotRef.current.clock + 1,
+        changeType: 'file-upserted', folderId: root.id, folderName: root.name,
+        fileId: repairedFile.id, fileName: repairedFile.name, file: repairedFile, cid }, root.sharedRoomId)
       syncLog('file content repair storage_add complete', {
         requester: shortLogValue(request.from),
         folderId: sharedRoot.id,
@@ -394,12 +397,12 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     return activeFiles(snapshot).some((file) => (
       folderIds.has(file.folderId) &&
       shouldTrackFileStorageForFolder(snapshot, file, folder.id) &&
-      Boolean(file.dataUrl || fileContentCacheRef.current[file.id]) &&
+      Boolean(file.dataUrl || previewCached(file) || fileContentCacheRef.current[file.id]) &&
       !isFileStoredForFolder(file, folder, passphrase)
     ))
   }
 
-  async function loadFileContentFromCandidates(file: FileRecord, candidates: FileContentCandidate[], verifyContent: boolean): Promise<string> {
+  async function loadFileContentFromCandidates(file: FileRecord, candidates: FileContentCandidate[]): Promise<string> {
     let lastError: unknown
     for (const [index, candidate] of candidates.entries()) {
       try {
@@ -408,7 +411,8 @@ export function createFileContentActions(options: FileContentOptions): FileConte
         if (!bundle.file.dataUrl) throw new Error(`${file.name} の本文が共有データに含まれていません`)
         syncLog('storage_get complete for file content', { fileId: file.id, fileName: file.name, cid: shortLogValue(candidate.cid), source: candidate.source, candidateIndex: index + 1, candidateCount: candidates.length, bytes: dataUrlByteLength(bundle.file.dataUrl) })
         // A rejected body must never become a proof that publication can reuse.
-        if (verifyContent && !await verifyEscrowData(file, bundle.file.dataUrl)) throw new Error('File checksum mismatch')
+        if (!await verifyFileData(file, bundle.file.dataUrl)) throw new Error('File checksum mismatch')
+        assertCurrentContent(file)
         rememberResolvedFileCandidate(file, candidate)
         return bundle.file.dataUrl
       } catch (error) {
@@ -419,12 +423,14 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     throw lastError instanceof Error ? lastError : new Error(`${file.name} の本文を取得できませんでした`)
   }
 
-  async function loadFileContentFromFolderBundle(file: FileRecord, folderCid: string, passphrase: string, attemptedCandidates: Set<string>, verifyContent: boolean): Promise<string> {
+  async function loadFileContentFromFolderBundle(file: FileRecord, folderCid: string, passphrase: string, attemptedCandidates: Set<string>): Promise<string> {
     syncLog('storage_get start for parent folder content fallback', { fileId: file.id, fileName: file.name, folderCid: shortLogValue(folderCid) })
     const loadedBundle = await loadEncryptedFolder(folderCid, passphrase, storageRuntimeSettings())
     const candidateFile = loadedBundle.files.find((item) => item.id === file.id)
     // Validate inline bytes before materialization caches them or stores a legacy CID.
-    if (verifyContent && candidateFile?.dataUrl && !await verifyEscrowData(file, candidateFile.dataUrl)) throw new Error('File checksum mismatch')
+    if (candidateFile?.dataUrl && !await verifyFileData(file, candidateFile.dataUrl)) throw new Error('File checksum mismatch')
+    if (candidateFile && !sameFileContent(file, candidateFile)) throw new Error('File checksum mismatch')
+    assertCurrentContent(file)
     const bundle = await materializeFolderBundleFiles(loadedBundle, passphrase)
     const bundledFile = bundle.files.find((item) => item.id === file.id)
     if (!bundledFile) throw new Error(`${file.name} がフォルダー共有データに見つかりません`)
@@ -446,7 +452,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     if (bundledFile.lastCid) {
       const candidate = { cid: bundledFile.lastCid, passphrase, source: 'parent-folder-file' }
       if (attemptedCandidates.has(candidateKey(candidate))) throw new Error(`${file.name} の本文CIDは既に同じ復号キーで試行済みです`)
-      const dataUrl = await loadFileContentFromCandidates(file, [candidate], verifyContent)
+      const dataUrl = await loadFileContentFromCandidates(file, [candidate])
       rememberStoredFile({ ...bundledFile, lastCid: bundledFile.lastCid }, bundle.folder, passphrase)
       acceptBundledFileCid(file, bundledFile, bundle, 'parent-folder-file')
       return dataUrl
@@ -455,7 +461,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   }
 
   async function downloadStoredFile(file: FileRecord): Promise<void> {
-    const progressRequestId = startDownloadProgress(file, Boolean(file.dataUrl ?? fileContentCacheRef.current[file.id]))
+    const progressRequestId = startDownloadProgress(file, Boolean(file.dataUrl ?? fileContentCacheRef.current[fileContentIdentity(file)] ?? fileContentCacheRef.current[file.id]))
     try {
       const fileWithContent = await ensureFileContent(file, { trackProgress: true })
       downloadFile(fileWithContent)
@@ -596,7 +602,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
   function fileContentSignature(file: FileRecord): string {
     const folder = snapshotRef.current.folders.find((item) => item.id === file.folderId)
     const sharedRoot = nearestSharedAncestorFolder(snapshotRef.current, file.folderId)
-    return JSON.stringify([file.id, file.lastCid ?? '', file.lastShareCid ?? '', folder?.lastCid ?? '', sharedRoot?.lastCid ?? '', folderKeysRef.current[file.folderId] ? folderKeyHash(file.folderId, folderKeysRef.current[file.folderId]) : '', sharedRoot && folderKeysRef.current[sharedRoot.id] ? folderKeyHash(sharedRoot.id, folderKeysRef.current[sharedRoot.id]) : '', fileShareKeysRef.current[file.id] ? folderKeyHash(file.id, fileShareKeysRef.current[file.id]) : ''])
+    return JSON.stringify([file.id, file.checksum, file.size, file.lastCid ?? '', file.lastShareCid ?? '', folder?.lastCid ?? '', sharedRoot?.lastCid ?? '', folderKeysRef.current[file.folderId] ? folderKeyHash(file.folderId, folderKeysRef.current[file.folderId]) : '', sharedRoot && folderKeysRef.current[sharedRoot.id] ? folderKeyHash(sharedRoot.id, folderKeysRef.current[sharedRoot.id]) : '', fileShareKeysRef.current[file.id] ? folderKeyHash(file.id, fileShareKeysRef.current[file.id]) : ''])
   }
 
   function acceptBundledFileCid(file: FileRecord, bundledFile: FileRecord, bundle: FolderBundle, source: string): void {
@@ -604,7 +610,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
     syncLog('accepting parent folder file cid after content resolved', { fileId: file.id, fileName: file.name, previousCid: shortLogValue(file.lastCid), nextCid: shortLogValue(bundledFile.lastCid), source })
     setSnapshot((current) => ({
       ...current,
-      files: current.files.map((item) => (item.id === file.id ? stripFileContent(stampFilePatch(item, { lastCid: bundledFile.lastCid }, bundledFile.updatedAt, bundle.originNode)) : item)),
+      files: current.files.map((item) => (item.id === file.id && canApplyFileCid(item, file) ? stripFileContent(stampFilePatch(item, { lastCid: bundledFile.lastCid }, bundledFile.updatedAt, bundle.originNode)) : item)),
     }))
   }
 
@@ -622,7 +628,7 @@ export function createFileContentActions(options: FileContentOptions): FileConte
       checksum: file.checksum,
       currentCid: shortLogValue(file.lastCid),
       shareCid: shortLogValue(file.lastShareCid),
-      hasMemoryCache: Boolean(fileContentCacheRef.current[file.id]),
+      hasMemoryCache: Boolean(previewCached(file)),
       hasRecordDataUrl: Boolean(file.dataUrl),
       folderId: file.folderId,
       folderCid: shortLogValue(folder?.lastCid),

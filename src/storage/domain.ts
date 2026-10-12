@@ -57,6 +57,8 @@ export type StorageSnapshot = {
   folders: FolderRecord[]
   files: FileRecord[]
   activity: ActivityEntry[]
+  // Source-share history for items that now live elsewhere in the workspace.
+  scopeTombstones?: { scopeId: string; folders: FolderRecord[]; files: FileRecord[] }[]
   clock: number
   originNode: string
 }
@@ -227,10 +229,12 @@ export function compactSnapshotTombstones(
   retentionDays: number = tombstoneRetentionDays,
 ): StorageSnapshot {
   const cutoff = now - retentionDays * 24 * 60 * 60 * 1000
+  const protectedIds = escrowProtectedFolderIds(snapshot)
   return {
     ...snapshot,
-    folders: snapshot.folders.filter((folder) => !isStaleTombstone(folder.deletedAt, cutoff)),
-    files: snapshot.files.filter((file) => !isStaleTombstone(file.deletedAt, cutoff)),
+    folders: snapshot.folders.filter((folder) => protectedIds.has(folder.id) || !isStaleTombstone(folder.deletedAt, cutoff)),
+    files: snapshot.files.filter((file) => protectedIds.has(file.folderId) || !isStaleTombstone(file.deletedAt, cutoff)),
+    ...(snapshot.scopeTombstones && { scopeTombstones: snapshot.scopeTombstones.map((scope) => protectedIds.has(scope.scopeId) ? scope : { ...scope, folders: scope.folders.filter((f) => !isStaleTombstone(f.deletedAt, cutoff)), files: scope.files.filter((f) => !isStaleTombstone(f.deletedAt, cutoff)) }) }),
   }
 }
 
@@ -238,10 +242,12 @@ export function compactSnapshotTombstones(
 // Intended for a serialized copy when even trimmed activity cannot fit in remaining quota; callers
 // must keep using the untouched in-memory snapshot so sync/merge tombstones are not lost.
 export function dropAllTombstones(snapshot: StorageSnapshot): StorageSnapshot {
+  const protectedIds = escrowProtectedFolderIds(snapshot)
   return {
     ...snapshot,
-    folders: snapshot.folders.filter((folder) => !folder.deletedAt),
-    files: snapshot.files.filter((file) => !file.deletedAt),
+    folders: snapshot.folders.filter((folder) => protectedIds.has(folder.id) || !folder.deletedAt),
+    files: snapshot.files.filter((file) => protectedIds.has(file.folderId) || !file.deletedAt),
+    ...(snapshot.scopeTombstones && { scopeTombstones: snapshot.scopeTombstones.filter((scope) => protectedIds.has(scope.scopeId)) }),
   }
 }
 
@@ -252,15 +258,41 @@ function isStaleTombstone(deletedAt: string | undefined, cutoff: number): boolea
   return parsed < cutoff
 }
 
+export const fileContentIdentity = (file: Pick<FileRecord, 'id' | 'checksum' | 'size'>): string =>
+  JSON.stringify([file.id, file.checksum, file.size])
+
+export function sameFileContent(left: FileRecord, right: FileRecord): boolean {
+  return fileContentIdentity(left) === fileContentIdentity(right)
+}
+
+// CID publication must not attach an upload from a former placement or content revision.
+export function canApplyFileCid(current: FileRecord, uploaded: FileRecord): boolean {
+  return !current.deletedAt && !uploaded.deletedAt && sameFileContent(current, uploaded) &&
+    current.folderId === uploaded.folderId && current.version === uploaded.version
+}
+
+export function escrowProtectedFolderIds(snapshot: StorageSnapshot): Set<string> {
+  const ids = new Set(snapshot.folders.filter((f) => f.shareEnabled && f.escrow?.mode !== 'off').map((f) => f.id))
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const f of snapshot.folders) if (f.parentId && ids.has(f.parentId) && !ids.has(f.id)) {
+      ids.add(f.id)
+      changed = true
+    }
+  }
+  return ids
+}
+
 export function stripFileContent(file: FileRecord): FileRecord {
   const { dataUrl: _dataUrl, fieldVersions, ...rest } = file
-  if (!fieldVersions?.dataUrl) return rest
+  if (!fieldVersions?.dataUrl) return fieldVersions ? { ...rest, fieldVersions } : rest
   const { dataUrl: _dataUrlVersion, ...versions } = fieldVersions
   return { ...rest, fieldVersions: versions }
 }
 
 export function stripSnapshotFileContent(snapshot: StorageSnapshot): StorageSnapshot {
-  return { ...snapshot, files: snapshot.files.map(stripFileContent) }
+  return { ...snapshot, files: snapshot.files.map(stripFileContent), ...(snapshot.scopeTombstones && { scopeTombstones: snapshot.scopeTombstones.map((scope) => ({ ...scope, files: scope.files.map(stripFileContent) })) }) }
 }
 
 export function formatBytes(bytes: number): string {

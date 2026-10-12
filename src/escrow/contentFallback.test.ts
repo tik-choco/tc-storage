@@ -118,7 +118,7 @@ describe('ensureFileContent escrow fallback', () => {
     const f = await fixture()
     expect(f.actions.canResolveFileContent(f.metadata)).toBe(true)
     expect((await f.actions.ensureFileContent(f.metadata)).dataUrl).toBe(f.dataUrl)
-    expect(f.cache.current.file).toBe(f.dataUrl)
+    expect(f.cache.current[JSON.stringify([f.metadata.id, f.metadata.checksum, f.metadata.size])]).toBe(f.dataUrl)
   })
   it('falls back after normal CID retrieval fails and rejects stale cached bytes', async () => {
     const f = await fixture()

@@ -1,4 +1,4 @@
-import type { FolderCheckpoint } from '../folder/folderCheckpoint.js'
+import type { FolderCheckpoint, PendingUpload } from '../folder/folderCheckpoint.js'
 import { folderKeyHash } from '../crypto/folderKeyProof.js'
 export interface EscrowLocal {
   lastSeq: number
@@ -9,6 +9,8 @@ export interface EscrowLocal {
   verifiedHash?: string
   checkpoint?: FolderCheckpoint
   contentSources?: FolderCheckpoint[]
+  // Pack uploads started but not yet part of an ACKed manifest (reconciled by the next save).
+  pendingUploads?: PendingUpload[]
 }
 export const escrowStorageKey = (folder: string, key: string, room: string) =>
   'tc-storage:escrow:v1:' + JSON.stringify([folder, folderKeyHash(folder, key.trim()), room])
@@ -29,7 +31,7 @@ function db(): Promise<IDBDatabase> {
   }
   return database
 }
-async function storedDescriptors(id: string): Promise<Pick<EscrowLocal, 'checkpoint' | 'contentSources'> | undefined> {
+async function storedDescriptors(id: string): Promise<Pick<EscrowLocal, 'checkpoint' | 'contentSources' | 'pendingUploads'> | undefined> {
   const store = (await db()).transaction('descriptors', 'readonly').objectStore('descriptors')
   return new Promise((resolve, reject) => {
     const request = store.get(id)
@@ -76,14 +78,14 @@ export async function persistFolderEscrow(
   local: EscrowLocal,
 ): Promise<void> {
   const id = escrowStorageKey(folder, key, room)
-  const { checkpoint, contentSources, ...watermark } = local
+  const { checkpoint, contentSources, pendingUploads, ...watermark } = local
   const tx = (await db()).transaction('descriptors', 'readwrite')
   const completed = new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
     tx.onabort = () => reject(tx.error ?? new Error('Escrow descriptor persistence aborted'))
   })
-  tx.objectStore('descriptors').put({ checkpoint, contentSources }, id)
+  tx.objectStore('descriptors').put({ checkpoint, contentSources, pendingUploads }, id)
   await completed
   localStorage.setItem(id, JSON.stringify(watermark))
 }

@@ -106,6 +106,16 @@ export function FolderEscrowSettings(props: {
           {t.protected}: {view.protectedFiles}/{view.totalFiles}
         </small>
       ) : null}
+      {view && setting.mode !== 'off' ? (
+        <small>
+          {t.slotsInUse}: {view.slotsInUse} · {t.retiredCount}: {view.retiredCount}
+        </small>
+      ) : null}
+      {view?.omittedFiles ? (
+        <small role="alert">
+          {t.capacityOmitted}: {view.omittedFiles}
+        </small>
+      ) : null}
       {setting.mode !== 'off' ? <small>{t.hint}</small> : null}
     </div>
   )

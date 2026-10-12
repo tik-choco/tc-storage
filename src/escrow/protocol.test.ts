@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { utf8 } from './crypto'
 import { encodeEscrowMessage, ERROR_CODES, MAX_MESSAGE_BYTES, parseEscrowMessage } from './protocol'
 import type { EscrowMessage } from './protocol'
-import { vector } from './vectors.fixture'
+import { vector, deleteVector } from './vectors.fixture'
 const slot = vector.slot
 const head = { ...vector.head_signed }
 const messages: EscrowMessage[] = [
   { v: 1, type: 'escrow_hello' },
   { v: 1, type: 'escrow_provider', maxBlob: 32 * 1024 * 1024, version: 1 },
+  deleteVector.request,
+  { v: 1, type: 'escrow_deleted', id: '1', slot },
   { v: 1, type: 'escrow_get', id: '1', slot },
   { v: 1, type: 'escrow_head', id: '1', slot, head },
   { v: 1, type: 'escrow_head', id: '1', slot, head: null },
@@ -56,3 +58,13 @@ describe('escrow protocol', () => {
     ]) expect(parseEscrowMessage(input)).toBeNull()
   })
 })
+
+ it('preserves optional provider features and rejects malformed delete fields', () => {
+  const provider = { v: 1, type: 'escrow_provider', maxBlob: 100, version: 1, features: ['delete', 'future'] }
+  expect(parseEscrowMessage(encodeEscrowMessage(provider as EscrowMessage))).toEqual(provider)
+  for (const features of [null, 'delete', [1], [''], Array(33).fill('delete')])
+    expect(parseEscrowMessage({ ...provider, features })).toBeNull()
+  for (const patch of [{ seq: 0 }, { seq: 1.5 }, { seq: Number.MAX_SAFE_INTEGER + 1 },
+    { head: 'A'.repeat(64) }, { slot: 'bad' }, { sig: 'B'.repeat(86) }])
+    expect(parseEscrowMessage({ ...deleteVector.request, ...patch })).toBeNull()
+ })

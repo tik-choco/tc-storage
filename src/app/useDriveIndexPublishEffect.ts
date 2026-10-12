@@ -1,14 +1,13 @@
 import { useEffect } from 'preact/hooks'
 import type { MutableRef } from './appControllerTypes.js'
-import { buildDriveIndex, driveIndexTopic } from '../storage/driveIndex.js'
-import { publishShared } from '../storage/sharedBus.js'
+import { buildDriveIndex, driveIndexTopic, encodeDriveIndex } from '../storage/driveIndex.js'
+import { publishShared, readShared } from '../storage/sharedBus.js'
 import { assertMistStorageAvailable, ensureMistRuntimeInitialized, loadMistModule } from '../storage/mistStorage.js'
 import type { AppSettings } from '../storage/localSettings.js'
 import type { StorageSnapshot } from '../storage/domain.js'
 import { debugWarn } from '../util/logging.js'
 
 const publishDebounceMs = 1000
-const encoder = new TextEncoder()
 let lastPinnedDriveIndexCid = ''
 
 interface DriveIndexPublishEffectOptions {
@@ -25,7 +24,9 @@ interface DriveIndexPublishEffectOptions {
  * The index (which can grow without bound as the drive fills up) is
  * content-addressed via `storage_add` rather than inlined in `meta`, so this
  * key doesn't blow the shared localStorage quota; `meta` only carries a small
- * `{count, updatedAt}` summary. See
+ * `{format, indexKey, count, updatedAt}` metadata. The key is same-origin only;
+ * neither it nor the file passphrases may enter CID storage. Consumers decrypt
+ * the AES-GCM envelope before parsing the unchanged v1 index. See
  * docs/data-contracts/docs/SHARED_BUS.md for the full contract. */
 export function useDriveIndexPublishEffect(options: DriveIndexPublishEffectOptions): void {
   const { folderKeys, settingsRef, snapshot } = options
@@ -44,10 +45,11 @@ async function publishDriveIndex(snapshot: StorageSnapshot, folderKeys: Record<s
     assertMistStorageAvailable()
     const mist = await loadMistModule()
     ensureMistRuntimeInitialized(mist, { nodeId })
-    const bytes = encoder.encode(JSON.stringify(index))
-    const cid = await mist.storage_add_pinned('drive-index.json', bytes)
-    publishShared(driveIndexTopic, cid, { count: index.files.length, updatedAt: index.updatedAt })
-    const previousPinnedCid = lastPinnedDriveIndexCid
+    const { bytes, meta } = await encodeDriveIndex(index)
+    const cid = await mist.storage_add_pinned('drive-index.encrypted.json', bytes)
+    const previous = readShared(driveIndexTopic)
+    const previousPinnedCid = lastPinnedDriveIndexCid || (previous?.from === 'tc-storage' ? previous.cid : '')
+    publishShared(driveIndexTopic, cid, meta)
     if (previousPinnedCid && previousPinnedCid !== cid) {
       try {
         await mist.storage_unpin(previousPinnedCid)
